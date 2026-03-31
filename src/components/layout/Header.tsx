@@ -30,7 +30,7 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
 
       {/* Right: actions */}
       <div className="flex items-center gap-1">
-        {/* Search placeholder (like YashAdmin) */}
+        {/* Search */}
         <div className="mr-2 hidden items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground lg:flex">
           <Search className="h-4 w-4" />
           <span>Search here...</span>
@@ -62,7 +62,7 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
           )}
         </button>
 
-        {/* User avatar — matches YashAdmin style */}
+        {/* User avatar */}
         <div className="ml-2 flex items-center gap-2">
           <img
             src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Ccircle cx='18' cy='18' r='18' fill='%23452B90'/%3E%3Ctext x='18' y='24' font-family='Poppins,sans-serif' font-size='16' font-weight='600' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E"

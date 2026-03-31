@@ -157,7 +157,7 @@ export function DataTable<T extends Record<string, any>>({
         </Table>
       </div>
 
-      {/* Pagination — matches YashAdmin "Showing 1 to 5 of 10 entries" + page numbers */}
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
           <p className="text-[0.813rem] text-muted-foreground">
