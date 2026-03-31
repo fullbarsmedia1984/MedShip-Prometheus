@@ -19,16 +19,20 @@ interface EventLogTableProps {
 
 const statusVariants: Record<SyncStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   pending: 'secondary',
+  running: 'secondary',
   success: 'default',
   failed: 'destructive',
   retrying: 'outline',
+  dismissed: 'outline',
 }
 
 const statusLabels: Record<SyncStatus, string> = {
   pending: 'Pending',
+  running: 'Running',
   success: 'Success',
   failed: 'Failed',
   retrying: 'Retrying',
+  dismissed: 'Dismissed',
 }
 
 export function EventLogTable({ events, showAutomation = true }: EventLogTableProps) {
@@ -74,26 +78,26 @@ export function EventLogTable({ events, showAutomation = true }: EventLogTablePr
                 {AUTOMATION_INFO[event.automation]?.name || event.automation}
               </TableCell>
             )}
-            <TableCell className="capitalize">{event.sourceSystem}</TableCell>
-            <TableCell className="capitalize">{event.targetSystem}</TableCell>
+            <TableCell className="capitalize">{event.source_system}</TableCell>
+            <TableCell className="capitalize">{event.target_system}</TableCell>
             <TableCell>
               <Badge variant={statusVariants[event.status]}>
                 {statusLabels[event.status]}
               </Badge>
             </TableCell>
             <TableCell className="font-mono text-xs">
-              {event.sourceRecordId
-                ? event.sourceRecordId.substring(0, 15) + '...'
+              {event.source_record_id
+                ? event.source_record_id.substring(0, 15) + '...'
                 : '-'}
             </TableCell>
             <TableCell className="font-mono text-xs">
-              {event.targetRecordId || '-'}
+              {event.target_record_id || '-'}
             </TableCell>
             <TableCell>
-              {formatDuration(event.createdAt, event.completedAt)}
+              {formatDuration(event.created_at, event.completed_at ?? undefined)}
             </TableCell>
             <TableCell className="text-sm text-gray-500">
-              {formatTime(event.createdAt)}
+              {formatTime(event.created_at)}
             </TableCell>
           </TableRow>
         ))}

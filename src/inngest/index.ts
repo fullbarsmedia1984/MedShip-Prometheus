@@ -5,6 +5,7 @@ export {
   inventorySync,
   inventorySyncManual,
 } from './functions/inventory-sync'
+export { retryFailedSyncs } from './functions/retry-failed-syncs'
 export {
   qbInvoiceSync,
   qbInvoiceSyncManual,

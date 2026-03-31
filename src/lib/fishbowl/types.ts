@@ -1,90 +1,70 @@
-// Fishbowl API type definitions
+// =============================================================================
+// Fishbowl-Specific Types & Error Classes
+// =============================================================================
 
-export interface FBInventoryItem {
-  partId: number
-  partNumber: string
-  partDescription: string
-  qtyOnHand: number
-  qtyAllocated: number
-  qtyAvailable: number
-  uom: string
-  location?: string
-  avgCost?: number
-  lastCountDate?: string
-}
+// --- Custom Error Classes ---
 
-export interface FBSalesOrder {
-  soNum?: string
-  status: string
-  customerName: string
-  customerPO?: string
-  carrier?: string
-  dateScheduledFulfillment?: string
-  billTo: FBAddress
-  shipTo: FBAddress
-  items: FBSalesOrderItem[]
-  note?: string
-}
-
-export interface FBSalesOrderItem {
-  productNumber: string
-  description?: string
-  quantity: number
-  unitPrice: number
-  uom?: string
-  taxable?: boolean
-}
-
-export interface FBAddress {
-  name: string
-  address?: string
-  city?: string
-  state?: string
-  zip?: string
-  country?: string
-  phone?: string
-  email?: string
-}
-
-export interface FBShipment {
-  shipmentId: number
-  soNum: string
-  status: string
-  carrier: string
-  trackingNumber?: string
-  dateShipped?: string
-  dateDelivered?: string
-  items: FBShipmentItem[]
-}
-
-export interface FBShipmentItem {
-  partNumber: string
-  qtyShipped: number
-  uom: string
-}
-
-export interface FBCustomer {
-  customerId: number
-  name: string
-  accountNumber?: string
-  status: string
-  defaultShipTo?: FBAddress
-  defaultBillTo?: FBAddress
-}
-
-export interface FBApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: {
-    code: string
-    message: string
+export class FishbowlApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public endpoint: string,
+    public responseBody?: unknown
+  ) {
+    super(message);
+    this.name = 'FishbowlApiError';
   }
 }
 
-export interface FBConnectionConfig {
-  apiUrl: string
-  username: string
-  password: string
-  token?: string
-  tokenExpiresAt?: number
+export class FishbowlPartNotFoundError extends FishbowlApiError {
+  constructor(public partNumber: string) {
+    super(
+      `Part number "${partNumber}" not found in Fishbowl`,
+      404,
+      '/api/parts'
+    );
+    this.name = 'FishbowlPartNotFoundError';
+  }
+}
+
+export class FishbowlCustomerNotFoundError extends FishbowlApiError {
+  constructor(public customerName: string) {
+    super(
+      `Customer "${customerName}" not found in Fishbowl`,
+      404,
+      '/api/customers'
+    );
+    this.name = 'FishbowlCustomerNotFoundError';
+  }
+}
+
+export class FishbowlAuthError extends FishbowlApiError {
+  constructor(message: string = 'Fishbowl authentication failed') {
+    super(message, 401, '/api/login');
+    this.name = 'FishbowlAuthError';
+  }
+}
+
+// --- Re-exports for consumers that import from this file ---
+
+export type { FBInventoryItem, FBSalesOrderPayload, FBSalesOrderResult } from '@/types';
+
+// Backwards-compat alias — inngest functions import FBSalesOrder from here
+export type { FBSalesOrderPayload as FBSalesOrder } from '@/types';
+
+// --- API Response Types ---
+
+export interface FBPaginatedResponse<T> {
+  totalCount: number;
+  totalPages: number;
+  pageNumber: number;
+  pageSize: number;
+  results: T[];
+}
+
+export interface FBLoginResponse {
+  token: string;
+  userId?: number;
+  fullName?: string;
+  serverVersion?: string;
 }

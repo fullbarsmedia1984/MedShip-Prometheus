@@ -4,6 +4,7 @@ import {
   sfOpportunityClosed,
   inventorySync,
   inventorySyncManual,
+  retryFailedSyncs,
   qbInvoiceSync,
   qbInvoiceSyncManual,
   shipmentTrackingSync,
@@ -24,6 +25,9 @@ export const { GET, POST, PUT } = serve({
     // P2: Inventory Sync
     inventorySync,
     inventorySyncManual,
+
+    // Retry handler
+    retryFailedSyncs,
 
     // P3: QuickBooks Invoice Sync
     qbInvoiceSync,

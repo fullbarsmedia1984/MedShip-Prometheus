@@ -1,89 +1,115 @@
-import { getFishbowlClient } from './client'
-import type { FBSalesOrder, FBApiResponse } from './types'
+// =============================================================================
+// Fishbowl Sales Order Operations
+// =============================================================================
 
-interface CreateSOResult {
-  soNum: string
-  status: string
-}
+import type { FishbowlClient } from './client';
+import type { FBSalesOrderPayload, FBSalesOrderResult } from '@/types';
+import {
+  FishbowlApiError,
+  FishbowlPartNotFoundError,
+  FishbowlCustomerNotFoundError,
+} from './types';
 
 /**
- * Create a new Sales Order in Fishbowl
- * Called when SF Opportunity is closed-won (P1)
+ * Create a new Sales Order in Fishbowl.
+ * Throws typed errors for part-not-found and customer-not-found cases.
  */
 export async function createSalesOrder(
-  order: FBSalesOrder
-): Promise<FBApiResponse<CreateSOResult>> {
-  // TODO: Implement in Phase 1
-  const client = getFishbowlClient()
+  client: FishbowlClient,
+  payload: FBSalesOrderPayload
+): Promise<FBSalesOrderResult> {
+  try {
+    return await client.request<FBSalesOrderResult>(
+      'POST',
+      '/api/sales-orders',
+      payload
+    );
+  } catch (err) {
+    if (err instanceof FishbowlApiError) {
+      const msg =
+        typeof err.responseBody === 'string'
+          ? err.responseBody.toLowerCase()
+          : JSON.stringify(err.responseBody ?? '').toLowerCase();
 
-  // Map to Fishbowl API format
-  const payload = {
-    customerName: order.customerName,
-    customerPO: order.customerPO,
-    carrier: order.carrier,
-    dateScheduledFulfillment: order.dateScheduledFulfillment,
-    billTo: order.billTo,
-    shipTo: order.shipTo,
-    items: order.items.map((item) => ({
-      productNumber: item.productNumber,
-      description: item.description,
-      qty: item.quantity,
-      price: item.unitPrice,
-      uom: item.uom || 'Each',
-      taxable: item.taxable ?? false,
-    })),
-    note: order.note,
+      // Detect part-not-found errors
+      if (msg.includes('part') && (msg.includes('not found') || msg.includes('invalid'))) {
+        const match = msg.match(/part\s*(?:number)?\s*[":]*\s*([A-Z0-9-]+)/i);
+        throw new FishbowlPartNotFoundError(match?.[1] ?? 'unknown');
+      }
+
+      // Detect customer-not-found errors
+      if (msg.includes('customer') && msg.includes('not found')) {
+        throw new FishbowlCustomerNotFoundError(payload.customer.name);
+      }
+    }
+    throw err;
   }
-
-  return client.post<CreateSOResult>('/api/sales-orders', payload)
 }
 
 /**
- * Get Sales Order by SO number
+ * Look up a Sales Order by its SO number (e.g., "SO-10045").
+ * Returns the raw Fishbowl response or null if not found.
  */
-export async function getSalesOrder(
-  soNum: string
-): Promise<FBApiResponse<FBSalesOrder | null>> {
-  // TODO: Implement in Phase 1
-  const client = getFishbowlClient()
-  return client.get<FBSalesOrder | null>(`/api/sales-orders/${encodeURIComponent(soNum)}`)
+export async function getSalesOrderByNumber(
+  client: FishbowlClient,
+  soNumber: string
+): Promise<unknown | null> {
+  try {
+    return await client.request<unknown>(
+      'GET',
+      `/api/sales-orders?number=${encodeURIComponent(soNumber)}`
+    );
+  } catch (err) {
+    if (err instanceof FishbowlApiError && err.statusCode === 404) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 /**
- * Get Sales Orders by status
+ * Check if a customer exists in Fishbowl by name.
+ * Returns the customer object if found, null if not.
  */
-export async function getSalesOrdersByStatus(
-  status: string
-): Promise<FBApiResponse<FBSalesOrder[]>> {
-  // TODO: Implement as needed
-  const client = getFishbowlClient()
-  return client.get<FBSalesOrder[]>(`/api/sales-orders?status=${encodeURIComponent(status)}`)
+export async function findCustomerByName(
+  client: FishbowlClient,
+  customerName: string
+): Promise<{ id: number; name: string } | null> {
+  try {
+    interface CustomerSearchResult {
+      results: Array<{ id: number; name: string }>;
+    }
+    const data = await client.request<CustomerSearchResult>(
+      'GET',
+      `/api/customers?name=${encodeURIComponent(customerName)}`
+    );
+    return data.results[0] ?? null;
+  } catch (err) {
+    if (err instanceof FishbowlApiError && err.statusCode === 404) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 /**
- * Update Sales Order status
+ * Create a customer in Fishbowl.
+ * Used when a Salesforce Account doesn't exist in Fishbowl yet.
  */
-export async function updateSalesOrderStatus(
-  soNum: string,
-  status: string
-): Promise<FBApiResponse<{ success: boolean }>> {
-  // TODO: Implement as needed
-  const client = getFishbowlClient()
-  return client.put<{ success: boolean }>(`/api/sales-orders/${encodeURIComponent(soNum)}`, {
-    status,
-  })
-}
-
-/**
- * Cancel a Sales Order
- */
-export async function cancelSalesOrder(
-  soNum: string,
-  reason?: string
-): Promise<FBApiResponse<{ success: boolean }>> {
-  // TODO: Implement as needed
-  const client = getFishbowlClient()
-  return client.put<{ success: boolean }>(`/api/sales-orders/${encodeURIComponent(soNum)}/cancel`, {
-    reason,
-  })
+export async function createCustomer(
+  client: FishbowlClient,
+  data: {
+    name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+  }
+): Promise<{ id: number; name: string }> {
+  return client.request<{ id: number; name: string }>(
+    'POST',
+    '/api/customers',
+    data
+  );
 }

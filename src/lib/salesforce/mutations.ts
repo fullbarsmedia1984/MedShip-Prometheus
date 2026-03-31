@@ -1,111 +1,136 @@
-import { getSalesforceConnection } from './client'
-
-interface UpdateResult {
-  id: string
-  success: boolean
-  errors?: Array<{ message: string }>
-}
+import { SalesforceClient } from './client'
+import type { FulfillmentUpdate, SFProductUpdate, SFProduct } from './types'
 
 /**
- * Update Opportunity with Fishbowl SO number
+ * Update a single Opportunity with fulfillment data from Fishbowl.
+ * Sets Fishbowl_SO_Number__c, Fulfillment_Status__c, Fulfillment_Error__c, Last_Sync_Attempt__c.
  */
-export async function updateOpportunitySONumber(
+export async function updateOpportunityFulfillment(
+  client: SalesforceClient,
   opportunityId: string,
-  soNumber: string
-): Promise<UpdateResult> {
-  // TODO: Implement in Phase 1
-  const conn = await getSalesforceConnection()
+  data: FulfillmentUpdate
+): Promise<{ success: boolean; error?: string }> {
+  return client.withRetry(async (conn) => {
+    try {
+      const result = await conn.sobject('Opportunity').update({
+        Id: opportunityId,
+        Fishbowl_SO_Number__c: data.fishbowlSONumber ?? undefined,
+        Fulfillment_Status__c: data.fulfillmentStatus,
+        Fulfillment_Error__c: data.fulfillmentError ?? null,
+        Last_Sync_Attempt__c: new Date().toISOString(),
+      })
 
-  const result = await conn.sobject('Opportunity').update({
-    Id: opportunityId,
-    Fishbowl_SO_Number__c: soNumber,
+      if (!result.success) {
+        const msg = result.errors?.map((e) => e.message).join('; ') ?? 'Unknown SF error'
+        return { success: false, error: msg }
+      }
+
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }
+    }
   })
-
-  return {
-    id: opportunityId,
-    success: result.success,
-    errors: result.errors?.map((e) => ({ message: e.message })),
-  }
 }
 
-/**
- * Update Opportunity with tracking number
- */
-export async function updateOpportunityTracking(
-  opportunityId: string,
-  trackingNumber: string
-): Promise<UpdateResult> {
-  // TODO: Implement in Phase 4
-  const conn = await getSalesforceConnection()
-
-  const result = await conn.sobject('Opportunity').update({
-    Id: opportunityId,
-    Tracking_Number__c: trackingNumber,
-  })
-
-  return {
-    id: opportunityId,
-    success: result.success,
-    errors: result.errors?.map((e) => ({ message: e.message })),
-  }
-}
+const BATCH_SIZE = 200
 
 /**
- * Bulk update Product inventory levels
+ * Bulk update Product2 records with inventory levels from Fishbowl.
+ * Matches by ProductCode, processes in batches of 200, and returns detailed results.
  */
 export async function bulkUpdateProductInventory(
-  updates: Array<{
-    productId: string
-    qtyOnHand: number
-    qtyAvailable: number
-  }>
-): Promise<UpdateResult[]> {
-  // TODO: Implement in Phase 2
-  const conn = await getSalesforceConnection()
+  client: SalesforceClient,
+  products: SFProductUpdate[]
+): Promise<{
+  updated: number
+  failed: number
+  skipped: number
+  errors: Array<{ productCode: string; error: string }>
+}> {
+  const result = { updated: 0, failed: 0, skipped: 0, errors: [] as Array<{ productCode: string; error: string }> }
 
-  const records = updates.map((u) => ({
-    Id: u.productId,
-    Qty_On_Hand__c: u.qtyOnHand,
-    Qty_Available__c: u.qtyAvailable,
-    Last_Inventory_Sync__c: new Date().toISOString(),
-  }))
+  if (products.length === 0) return result
 
-  const results = await conn.sobject('Product2').update(records)
+  return client.withRetry(async (conn) => {
+    // Step 1: Look up Product2 IDs for all given ProductCodes
+    const allCodes = products.map((p) => p.productCode)
+    const codeToId = new Map<string, string>()
 
-  // Normalize results (could be single object or array)
-  const resultsArray = Array.isArray(results) ? results : [results]
+    // Query in batches to avoid overly long SOQL IN clauses
+    for (let i = 0; i < allCodes.length; i += BATCH_SIZE) {
+      const batch = allCodes.slice(i, i + BATCH_SIZE)
+      const escaped = batch.map((c) => `'${c.replace(/'/g, "\\'")}'`).join(',')
 
-  return resultsArray.map((r, i) => ({
-    id: updates[i].productId,
-    success: r.success,
-    errors: r.errors?.map((e) => ({ message: e.message })),
-  }))
-}
+      const found = await conn.query<SFProduct>(`
+        SELECT Id, ProductCode
+        FROM Product2
+        WHERE ProductCode IN (${escaped})
+      `)
 
-/**
- * Create a new Contact
- */
-export async function createContact(contact: {
-  firstName?: string
-  lastName: string
-  email?: string
-  phone?: string
-  accountId?: string
-}): Promise<UpdateResult> {
-  // TODO: Implement as needed
-  const conn = await getSalesforceConnection()
+      for (const rec of found.records) {
+        if (rec.ProductCode) {
+          codeToId.set(rec.ProductCode, rec.Id)
+        }
+      }
+    }
 
-  const result = await conn.sobject('Contact').create({
-    FirstName: contact.firstName,
-    LastName: contact.lastName,
-    Email: contact.email,
-    Phone: contact.phone,
-    AccountId: contact.accountId,
+    // Step 2: Build update records, skipping codes not found in SF
+    const updateRecords: Array<{
+      Id: string
+      Qty_On_Hand__c: number
+      Qty_Available__c: number
+      Last_Inventory_Sync__c: string
+    }> = []
+
+    const codeByIndex: string[] = [] // track which productCode maps to which update index
+
+    for (const product of products) {
+      const sfId = codeToId.get(product.productCode)
+      if (!sfId) {
+        result.skipped++
+        result.errors.push({
+          productCode: product.productCode,
+          error: `ProductCode not found in Salesforce — skipped`,
+        })
+        continue
+      }
+
+      updateRecords.push({
+        Id: sfId,
+        Qty_On_Hand__c: product.qtyOnHand,
+        Qty_Available__c: product.qtyAvailable,
+        Last_Inventory_Sync__c: new Date().toISOString(),
+      })
+      codeByIndex.push(product.productCode)
+    }
+
+    // Step 3: Update in batches of 200
+    for (let i = 0; i < updateRecords.length; i += BATCH_SIZE) {
+      const batch = updateRecords.slice(i, i + BATCH_SIZE)
+      const batchCodes = codeByIndex.slice(i, i + BATCH_SIZE)
+
+      const updateResults = await conn.sobject('Product2').update(batch)
+
+      // Normalize: jsforce returns a single object for 1-element arrays
+      const resultsArray = Array.isArray(updateResults)
+        ? updateResults
+        : [updateResults]
+
+      for (let j = 0; j < resultsArray.length; j++) {
+        const r = resultsArray[j]
+        if (r.success) {
+          result.updated++
+        } else {
+          result.failed++
+          const msg = r.errors?.map((e) => e.message).join('; ') ?? 'Unknown error'
+          result.errors.push({ productCode: batchCodes[j], error: msg })
+        }
+      }
+    }
+
+    return result
   })
-
-  return {
-    id: result.id || '',
-    success: result.success,
-    errors: result.errors?.map((e) => ({ message: e.message })),
-  }
 }

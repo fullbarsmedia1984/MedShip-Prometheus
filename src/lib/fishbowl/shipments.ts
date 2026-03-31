@@ -1,72 +1,33 @@
-import { getFishbowlClient } from './client'
-import type { FBShipment, FBApiResponse } from './types'
+// =============================================================================
+// Fishbowl Shipment Tracking — Phase 2 Stubs (P4)
+// =============================================================================
+
+import type { FishbowlClient } from './client';
 
 /**
- * Get shipments for a Sales Order
+ * Get shipments for a specific Sales Order.
+ * TODO: Implement in Phase 2 (P4: Shipment Tracking)
  */
-export async function getShipmentsBySO(
-  soNum: string
-): Promise<FBApiResponse<FBShipment[]>> {
-  // TODO: Implement in Phase 4
-  const client = getFishbowlClient()
-  return client.get<FBShipment[]>(`/api/shipments?soNum=${encodeURIComponent(soNum)}`)
+export async function getShipmentsBySalesOrder(
+  _client: FishbowlClient,
+  salesOrderNumber: string
+): Promise<unknown[]> {
+  console.log(
+    `[P4 STUB] getShipmentsBySalesOrder called for ${salesOrderNumber}`
+  );
+  return [];
 }
 
 /**
- * Get all recent shipments (last N days)
- * Used for tracking sync (P4)
+ * Get all shipments created/modified since a given timestamp.
+ * TODO: Implement in Phase 2 (P4: Shipment Tracking)
  */
 export async function getRecentShipments(
-  days: number = 7
-): Promise<FBApiResponse<FBShipment[]>> {
-  // TODO: Implement in Phase 4
-  const client = getFishbowlClient()
-  const sinceDate = new Date()
-  sinceDate.setDate(sinceDate.getDate() - days)
-  const isoDate = sinceDate.toISOString().split('T')[0]
-
-  return client.get<FBShipment[]>(`/api/shipments?dateShippedAfter=${isoDate}`)
-}
-
-/**
- * Get shipments with tracking numbers that haven't been synced to SF
- */
-export async function getUnSyncedShipments(): Promise<FBApiResponse<FBShipment[]>> {
-  // TODO: Implement in Phase 4
-  // This may need to be filtered on our side by checking against sync_events
-  const client = getFishbowlClient()
-  return client.get<FBShipment[]>('/api/shipments?status=shipped')
-}
-
-/**
- * Get shipment by tracking number
- */
-export async function getShipmentByTracking(
-  trackingNumber: string
-): Promise<FBApiResponse<FBShipment | null>> {
-  // TODO: Implement in Phase 4
-  const client = getFishbowlClient()
-  const result = await client.get<FBShipment[]>(
-    `/api/shipments?trackingNumber=${encodeURIComponent(trackingNumber)}`
-  )
-
-  if (!result.success) {
-    return { success: false, error: result.error }
-  }
-
-  return {
-    success: true,
-    data: result.data?.[0] || null,
-  }
-}
-
-/**
- * Get shipment by ID
- */
-export async function getShipmentById(
-  shipmentId: number
-): Promise<FBApiResponse<FBShipment | null>> {
-  // TODO: Implement in Phase 4
-  const client = getFishbowlClient()
-  return client.get<FBShipment | null>(`/api/shipments/${shipmentId}`)
+  _client: FishbowlClient,
+  since: Date
+): Promise<unknown[]> {
+  console.log(
+    `[P4 STUB] getRecentShipments called since ${since.toISOString()}`
+  );
+  return [];
 }

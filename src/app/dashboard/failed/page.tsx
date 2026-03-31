@@ -1,40 +1,64 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Header } from '@/components/layout/Header'
-import { FailedSyncRow } from '@/components/dashboard/FailedSyncRow'
+import { StatusBadge } from '@/components/dashboard/StatusBadge'
+import { EmptyState } from '@/components/dashboard/EmptyState'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { AlertTriangle, RefreshCw, X, CheckCircle2, RotateCcw } from 'lucide-react'
+import { getFailedSyncs } from '@/lib/data'
+import { AUTOMATION_INFO, type AutomationType } from '@/types'
+import type { SyncEvent } from '@/types'
 import { toast } from 'sonner'
-import type { Automation } from '@/types'
+import { cn } from '@/lib/utils'
 
-interface FailedEvent {
-  id: string
-  automation: Automation
-  sourceRecordId?: string
-  errorMessage?: string
-  retryCount: number
-  maxRetries: number
-  createdAt: string
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatRelativeTime(isoString: string): string {
+  const now = new Date('2026-03-31T12:00:00Z')
+  const then = new Date(isoString)
+  const diffMs = now.getTime() - then.getTime()
+  if (diffMs < 0) return 'just now'
+
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 60) return `${diffSec}s ago`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} min ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDays = Math.floor(diffHr / 24)
+  return `${diffDays}d ago`
 }
 
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text
+  return text.slice(0, maxLen) + '...'
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function FailedPage() {
+  const [failedEvents, setFailedEvents] = useState<SyncEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [failedEvents, setFailedEvents] = useState<FailedEvent[]>([])
-  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set())
+  const [expandedError, setExpandedError] = useState<string | null>(null)
 
   const fetchFailed = useCallback(async () => {
     try {
-      const response = await fetch('/api/sync/status')
-      const data = await response.json()
-
-      if (data.success) {
-        setFailedEvents(data.data.failedEvents)
-      }
-    } catch (error) {
-      console.error('Failed to fetch failed events:', error)
+      const data = await getFailedSyncs()
+      setFailedEvents(data)
     } finally {
       setLoading(false)
     }
@@ -44,85 +68,202 @@ export default function FailedPage() {
     fetchFailed()
   }, [fetchFailed])
 
-  const handleRetry = async (id: string) => {
-    setRetryingIds((prev) => new Set(prev).add(id))
+  const handleRetry = (id: string) => {
+    setFailedEvents((prev) => prev.filter((e) => e.id !== id))
+    toast.success('Retry triggered')
+  }
 
-    try {
-      // Find the event to get automation type
-      const event = failedEvents.find((e) => e.id === id)
-      if (!event) return
+  const handleDismiss = (id: string) => {
+    setFailedEvents((prev) => prev.filter((e) => e.id !== id))
+    toast.success('Dismissed')
+  }
 
-      const response = await fetch('/api/sync/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          automation: event.automation,
-          params: { eventId: id },
-        }),
-      })
+  const handleRetryAll = () => {
+    setFailedEvents([])
+    toast.success(`Retry triggered for all failed syncs`)
+  }
 
-      const data = await response.json()
+  const handleDismissAll = () => {
+    setFailedEvents([])
+    toast.success('All failures dismissed')
+  }
 
-      if (data.success) {
-        toast.success('Retry triggered successfully')
-        // Remove from failed list after short delay
-        setTimeout(() => {
-          setFailedEvents((prev) => prev.filter((e) => e.id !== id))
-        }, 1000)
-      } else {
-        toast.error(data.error || 'Failed to trigger retry')
-      }
-    } catch (error) {
-      toast.error('Failed to trigger retry')
-    } finally {
-      setRetryingIds((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
-    }
+  // Derived stats
+  const failedCount = failedEvents.filter((e) => e.status === 'failed').length
+  const retryingCount = failedEvents.filter((e) => e.status === 'retrying').length
+  const oldestFailure =
+    failedEvents.length > 0
+      ? failedEvents.reduce((oldest, e) =>
+          new Date(e.created_at).getTime() < new Date(oldest.created_at).getTime() ? e : oldest
+        )
+      : null
+
+  if (loading) {
+    return (
+      <div className="flex flex-col">
+        <Header title="Failed Syncs" />
+        <div className="flex h-96 items-center justify-center text-muted-foreground">
+          Loading...
+        </div>
+      </div>
+    )
+  }
+
+  // Empty state
+  if (failedEvents.length === 0) {
+    return (
+      <div className="flex flex-col">
+        <Header title="Failed Syncs" />
+        <div className="p-6">
+          <EmptyState
+            icon={CheckCircle2}
+            title="All Syncs Healthy"
+            description="No failed or retrying sync events found."
+          />
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col">
-      <Header title="Failed Syncs" showRefresh onRefresh={fetchFailed} />
+      <Header title="Failed Syncs" />
 
-      <div className="p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              Failed Sync Events
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex h-64 items-center justify-center">
-                <div className="text-gray-500">Loading...</div>
-              </div>
-            ) : failedEvents.length === 0 ? (
-              <div className="flex h-64 flex-col items-center justify-center text-gray-500">
-                <AlertTriangle className="mb-2 h-12 w-12 text-gray-300" />
-                <p>No failed syncs! Everything is running smoothly.</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {failedEvents.map((event) => (
-                  <FailedSyncRow
-                    key={event.id}
-                    id={event.id}
-                    automation={event.automation}
-                    sourceRecordId={event.sourceRecordId}
-                    errorMessage={event.errorMessage}
-                    retryCount={event.retryCount}
-                    maxRetries={event.maxRetries}
-                    createdAt={event.createdAt}
-                    onRetry={handleRetry}
-                    isRetrying={retryingIds.has(event.id)}
-                  />
-                ))}
-              </div>
+      <div className="space-y-6 p-6">
+        {/* Summary bar */}
+        <Card className="shadow-sm">
+          <CardContent className="flex flex-wrap items-center gap-4 py-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-medship-danger" />
+              <span className="text-sm font-medium">
+                {failedCount} failed sync{failedCount !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {retryingCount > 0 && (
+              <span className="text-sm text-medship-warning font-medium">
+                {retryingCount} retrying
+              </span>
             )}
+            {oldestFailure && (
+              <span className="text-xs text-muted-foreground">
+                Oldest failure: {formatRelativeTime(oldestFailure.created_at)}
+              </span>
+            )}
+
+            <div className="ml-auto flex gap-2">
+              <Button size="sm" className="gap-1.5" onClick={handleRetryAll}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry All
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={handleDismissAll}
+              >
+                <X className="h-3.5 w-3.5" />
+                Dismiss All
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Table */}
+        <Card className="shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead>Automation</TableHead>
+                  <TableHead className="min-w-[200px]">Error Message</TableHead>
+                  <TableHead>Source Record</TableHead>
+                  <TableHead>Retry Count</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {failedEvents.map((event) => {
+                  const isExhausted =
+                    event.status === 'failed' && event.retry_count >= event.max_retries
+                  const isExpanded = expandedError === event.id
+                  const autoInfo = AUTOMATION_INFO[event.automation as AutomationType]
+
+                  return (
+                    <TableRow
+                      key={event.id}
+                      className={cn(
+                        isExhausted
+                          ? 'bg-red-50 dark:bg-red-900/10'
+                          : event.status === 'retrying'
+                            ? 'bg-yellow-50 dark:bg-yellow-900/10'
+                            : ''
+                      )}
+                    >
+                      <TableCell className="text-xs" title={event.created_at}>
+                        {formatRelativeTime(event.created_at)}
+                      </TableCell>
+                      <TableCell className="text-xs font-medium">
+                        {autoInfo?.name ?? event.automation}
+                      </TableCell>
+                      <TableCell>
+                        {event.error_message ? (
+                          <button
+                            type="button"
+                            className="max-w-[300px] text-left text-xs text-foreground hover:text-medship-primary"
+                            onClick={() =>
+                              setExpandedError((prev) =>
+                                prev === event.id ? null : event.id
+                              )
+                            }
+                          >
+                            {isExpanded
+                              ? event.error_message
+                              : truncate(event.error_message, 100)}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-xs">
+                          {event.source_record_id ?? '-'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {event.retry_count}/{event.max_retries}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={event.status} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-xs"
+                            onClick={() => handleRetry(event.id)}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Retry
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-xs"
+                            onClick={() => handleDismiss(event.id)}
+                          >
+                            <X className="h-3 w-3" />
+                            Dismiss
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>

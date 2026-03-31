@@ -76,3 +76,31 @@ npm run type-check   # TypeScript compiler check
 ### QuickBooks
 - TBD: Desktop (Web Connector) vs Online (REST API) — waiting on Dan's confirmation
 - Phase 2 implementation
+
+## UI Design Reference
+The YashAdmin (Vite) template files are in `/design-reference/`. This is a purchased React dashboard template used as **visual design guidance only**.
+
+**Rules:**
+- Match YashAdmin's layout patterns, card styles, color palette, chart aesthetics, sidebar structure, and typography
+- **DO NOT import or use react-bootstrap components** — rebuild everything in Tailwind CSS + shadcn/ui
+- Study the template's JSX for structure and CSS for colors/spacing, then recreate with our stack
+- Extract hex colors from the template's CSS variables into `tailwind.config.ts` under a `medship` namespace
+
+**Design tokens to extract from YashAdmin:**
+- Primary color (used for sidebar, buttons, active states)
+- Success / Warning / Danger / Info colors
+- Card border-radius, box-shadow values
+- Sidebar width (expanded + collapsed)
+- Header height
+- Base font family and size scale
+- Table row height and stripe color
+
+## Dashboard Architecture
+The dashboard serves two audiences in one UI:
+1. **CEO (Dan Micic)**: Business metrics — revenue, orders, fulfillment rate, inventory health, sales activity
+2. **Operations**: Integration health — sync status, event logs, failed syncs, connection configs
+
+All pages initially render **seed data** from `src/lib/seed-data.ts`. The data access layer in `src/lib/data.ts` wraps all data fetching — every function will be swapped from seed data to Supabase queries as integrations go live.
+
+## Chart Library
+Use `recharts` for all charts. Do not introduce additional charting libraries.

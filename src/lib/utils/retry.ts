@@ -135,6 +135,22 @@ export function isRetryableError(error: unknown): boolean {
 }
 
 /**
+ * Calculate the next retry timestamp using the fixed schedule:
+ * attempt 1 = 1 min, attempt 2 = 5 min, attempt 3 = 15 min, attempt 4 = 1 hr
+ * After max retries (4), returns null (no more retries).
+ */
+export function calculateNextRetry(
+  currentRetryCount: number,
+  maxRetries: number = 4
+): Date | null {
+  if (currentRetryCount >= maxRetries) return null
+
+  const delayMinutes = [1, 5, 15, 60]
+  const delayMs = (delayMinutes[currentRetryCount] ?? 60) * 60 * 1000
+  return new Date(Date.now() + delayMs)
+}
+
+/**
  * Create retry options for API calls
  */
 export function apiRetryOptions(): RetryOptions {

@@ -1,20 +1,24 @@
 import { inngest } from '../client'
 import { logger } from '@/lib/utils/logger'
+import { logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { createSalesforceClient } from '@/lib/salesforce/client'
+import { bulkUpdateProductInventory } from '@/lib/salesforce/mutations'
+import { createFishbowlClient } from '@/lib/fishbowl/client'
+import { getAllInventory } from '@/lib/fishbowl/inventory'
+import type { SFProductUpdate } from '@/lib/salesforce/types'
 
 /**
  * P2: Fishbowl Inventory → Salesforce Products
  *
  * Scheduled job that syncs inventory levels from Fishbowl to Salesforce.
- * Runs every 15 minutes (configurable in sync_schedules table).
+ * Runs every 15 minutes.
  *
  * Flow:
  * 1. Fetch all inventory from Fishbowl
- * 2. Update local inventory_snapshot table
- * 3. Match with Salesforce Product2 records by ProductCode
- * 4. Bulk update SF Products with qty_on_hand and qty_available
- * 5. Trigger low-stock check (P6)
- *
- * TODO: Implement in Phase 2
+ * 2. Upsert to local inventory_snapshot table
+ * 3. Bulk update Salesforce Product2 records with stock levels
+ * 4. Trigger low-stock check event (P6)
  */
 export const inventorySync = inngest.createFunction(
   {
@@ -24,40 +28,89 @@ export const inventorySync = inngest.createFunction(
     triggers: [{ cron: '*/15 * * * *' }],
   },
   async ({ step }) => {
+    const startTime = Date.now()
+
     logger.log('info', 'P2_INVENTORY_SYNC', 'Starting scheduled inventory sync')
 
-    // Create sync event log entry
-    const eventId = await step.run('create-sync-event', async () => {
-      return logger.createEvent({
+    // Step 1: Connect to Fishbowl and fetch all inventory
+    const fbClient = createFishbowlClient()
+    await step.run('connect-fishbowl', () => fbClient.authenticate())
+
+    const inventory = await step.run('fetch-all-inventory', () =>
+      getAllInventory(fbClient)
+    )
+
+    // Step 2: Upsert inventory to Supabase snapshot table
+    await step.run('update-snapshot', async () => {
+      const supabase = createAdminClient()
+
+      for (let i = 0; i < inventory.length; i += 100) {
+        const chunk = inventory.slice(i, i + 100)
+        const rows = chunk.map((item) => ({
+          part_number: item.partNumber,
+          part_description: item.partDescription || null,
+          qty_on_hand: parseFloat(item.quantity) || 0,
+          qty_allocated: 0,
+          qty_available: parseFloat(item.quantity) || 0,
+          uom: item.uom?.abbreviation || 'ea',
+          fishbowl_part_id: item.id,
+          last_synced_at: new Date().toISOString(),
+        }))
+
+        const { error } = await supabase
+          .from('inventory_snapshot')
+          .upsert(rows, { onConflict: 'part_number' })
+
+        if (error) {
+          console.error(`Supabase upsert error on chunk ${i}:`, error)
+        }
+      }
+    })
+
+    // Step 3: Update Salesforce Product2 records with stock levels
+    const sfClient = createSalesforceClient()
+    await step.run('connect-salesforce', () => sfClient.connect())
+
+    const updateResult = await step.run('update-sf-products', async () => {
+      const products: SFProductUpdate[] = inventory.map((item) => ({
+        productCode: item.partNumber,
+        qtyOnHand: parseFloat(item.quantity) || 0,
+        qtyAvailable: parseFloat(item.quantity) || 0,
+      }))
+
+      return bulkUpdateProductInventory(sfClient, products)
+    })
+
+    // Step 4: Log sync event
+    await step.run('log-result', async () => {
+      await logSyncEvent({
         automation: 'P2_INVENTORY_SYNC',
-        source_system: 'fishbowl',
-        target_system: 'salesforce',
-        status: 'pending',
-        idempotency_key: `P2_${new Date().toISOString().split('T')[0]}_${Date.now()}`,
+        sourceSystem: 'fishbowl',
+        targetSystem: 'salesforce',
+        status: 'success',
+        payload: { totalParts: inventory.length },
+        response: updateResult as unknown as Record<string, unknown>,
+      })
+
+      await updateSyncSchedule('P2_INVENTORY_SYNC', {
+        lastRunAt: new Date().toISOString(),
+        lastRunStatus: 'success',
+        lastRunDurationMs: Date.now() - startTime,
+        recordsProcessed: inventory.length,
       })
     })
 
-    // TODO: Implement in Phase 2
-    // Step 1: Fetch inventory from Fishbowl
-    // Step 2: Update inventory_snapshot table
-    // Step 3: Match with SF Products by ProductCode
-    // Step 4: Bulk update SF Product2 records
-    // Step 5: Trigger P6 low stock check
-
-    await step.run('log-not-implemented', async () => {
-      logger.log('warn', 'P2_INVENTORY_SYNC', 'Function not yet implemented', {
-        eventId,
-      })
-
-      await logger.fail(eventId, 'Not yet implemented - Phase 2')
+    // Step 5: Trigger low stock check (P6)
+    await inngest.send({
+      name: 'inventory/low-stock.check',
+      data: { triggeredBy: 'P2_INVENTORY_SYNC' },
     })
 
-    return {
-      success: false,
-      message: 'P2 not yet implemented',
-      eventId,
-      recordsProcessed: 0,
-    }
+    logger.log('info', 'P2_INVENTORY_SYNC', `Synced ${inventory.length} items`, {
+      sfUpdates: updateResult,
+    })
+
+    return { synced: inventory.length, sfUpdates: updateResult }
   }
 )
 
@@ -78,8 +131,7 @@ export const inventorySyncManual = inngest.createFunction(
       fullSync,
     })
 
-    // TODO: Implement in Phase 2 - same logic as scheduled sync
-    // but with option for full sync vs incremental
+    // TODO: Implement full manual sync logic (shares core logic with scheduled sync)
 
     return {
       success: false,

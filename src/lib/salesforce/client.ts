@@ -1,102 +1,159 @@
 import jsforce, { Connection } from 'jsforce'
-import type { SFConnectionConfig } from './types'
+import type { SFConnectionConfig, ISalesforceClient } from './types'
 
-// Singleton connection instance
-let connection: Connection | null = null
-let tokenExpiresAt: number = 0
+const INVALID_SESSION_ERROR = 'INVALID_SESSION_ID'
 
-/**
- * Get or create a Salesforce connection with OAuth2 token management
- * Handles automatic token refresh when expired
- */
-export async function getSalesforceConnection(): Promise<Connection> {
-  const now = Date.now()
+function loadConfig(): SFConnectionConfig {
+  const loginUrl = process.env.SF_LOGIN_URL || 'https://login.salesforce.com'
+  const clientId = process.env.SF_CLIENT_ID
+  const clientSecret = process.env.SF_CLIENT_SECRET
+  const username = process.env.SF_USERNAME
+  const password = process.env.SF_PASSWORD
+  const securityToken = process.env.SF_SECURITY_TOKEN
 
-  // Return existing connection if token is still valid (with 5 min buffer)
-  if (connection && tokenExpiresAt > now + 5 * 60 * 1000) {
-    return connection
+  if (!username) {
+    throw new Error(
+      'Missing required environment variable: SF_USERNAME. ' +
+        'Set it to your Salesforce username (e.g. user@company.com).'
+    )
+  }
+  if (!password) {
+    throw new Error(
+      'Missing required environment variable: SF_PASSWORD. ' +
+        'Set it to your Salesforce password.'
+    )
+  }
+  if (!securityToken) {
+    throw new Error(
+      'Missing required environment variable: SF_SECURITY_TOKEN. ' +
+        'Get it from Salesforce → Settings → Reset My Security Token.'
+    )
   }
 
-  // Create new connection
-  const config = getConfig()
-
-  connection = new jsforce.Connection({
-    loginUrl: config.loginUrl,
-    oauth2: {
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
-      loginUrl: config.loginUrl,
-    },
-  })
-
-  // Login with username/password flow
-  // TODO: Implement in Phase 1 - Add OAuth2 web flow for production
-  await connection.login(
-    config.username,
-    config.password + config.securityToken
-  )
-
-  // Set token expiry (Salesforce tokens typically last 2 hours)
-  tokenExpiresAt = now + 2 * 60 * 60 * 1000
-
-  return connection
+  return {
+    loginUrl,
+    clientId: clientId || undefined,
+    clientSecret: clientSecret || undefined,
+    username,
+    password,
+    securityToken,
+  }
 }
 
-/**
- * Force refresh the Salesforce connection
- * Call this if you get an authentication error
- */
-export async function refreshSalesforceConnection(): Promise<Connection> {
-  connection = null
-  tokenExpiresAt = 0
-  return getSalesforceConnection()
-}
+export class SalesforceClient implements ISalesforceClient {
+  private connection: Connection | null = null
+  private connected = false
+  private config: SFConnectionConfig
 
-/**
- * Get Salesforce configuration from environment variables
- */
-function getConfig(): SFConnectionConfig {
-  const config: SFConnectionConfig = {
-    loginUrl: process.env.SF_LOGIN_URL || 'https://login.salesforce.com',
-    clientId: process.env.SF_CLIENT_ID || '',
-    clientSecret: process.env.SF_CLIENT_SECRET || '',
-    username: process.env.SF_USERNAME || '',
-    password: process.env.SF_PASSWORD || '',
-    securityToken: process.env.SF_SECURITY_TOKEN || '',
+  constructor() {
+    this.config = loadConfig()
   }
 
-  // Validate required fields
-  const required = ['clientId', 'clientSecret', 'username', 'password'] as const
-  for (const field of required) {
-    if (!config[field]) {
-      throw new Error(`Missing Salesforce configuration: SF_${field.toUpperCase()}`)
+  async connect(): Promise<void> {
+    const oauthOptions =
+      this.config.clientId && this.config.clientSecret
+        ? {
+            clientId: this.config.clientId,
+            clientSecret: this.config.clientSecret,
+            loginUrl: this.config.loginUrl,
+          }
+        : undefined
+
+    this.connection = new jsforce.Connection({
+      loginUrl: this.config.loginUrl,
+      ...(oauthOptions ? { oauth2: oauthOptions } : {}),
+    })
+
+    await this.connection.login(
+      this.config.username,
+      this.config.password + this.config.securityToken
+    )
+
+    this.connected = true
+  }
+
+  getConnection(): Connection {
+    if (!this.connection || !this.connected) {
+      throw new Error(
+        'Salesforce client is not connected. Call connect() first.'
+      )
+    }
+    return this.connection
+  }
+
+  isConnected(): boolean {
+    return this.connected && this.connection !== null
+  }
+
+  async testConnection(): Promise<{
+    success: boolean
+    error?: string
+    orgId?: string
+  }> {
+    try {
+      if (!this.isConnected()) {
+        await this.connect()
+      }
+      const conn = this.getConnection()
+      const result = await conn.query<{ Id: string }>(
+        'SELECT Id FROM Organization LIMIT 1'
+      )
+      return {
+        success: true,
+        orgId: result.records[0]?.Id,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }
     }
   }
 
-  return config
+  async disconnect(): Promise<void> {
+    if (this.connection) {
+      try {
+        await this.connection.logout()
+      } catch {
+        // Ignore logout errors — connection may already be invalid
+      }
+      this.connection = null
+      this.connected = false
+    }
+  }
+
+  /**
+   * Execute a callback with automatic INVALID_SESSION retry.
+   * If the callback throws an INVALID_SESSION error, reconnects and retries once.
+   */
+  async withRetry<T>(fn: (conn: Connection) => Promise<T>): Promise<T> {
+    const conn = this.getConnection()
+    try {
+      return await fn(conn)
+    } catch (error: unknown) {
+      if (isInvalidSessionError(error)) {
+        await this.connect()
+        return fn(this.getConnection())
+      }
+      throw error
+    }
+  }
+}
+
+function isInvalidSessionError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return (
+      error.message.includes(INVALID_SESSION_ERROR) ||
+      error.name === INVALID_SESSION_ERROR
+    )
+  }
+  return false
 }
 
 /**
- * Test Salesforce connection
- * Returns true if connection is successful
+ * Factory function — creates a new SalesforceClient per request.
+ * Do NOT use a singleton; Next.js serverless functions need isolated instances.
  */
-export async function testSalesforceConnection(): Promise<{
-  success: boolean
-  instanceUrl?: string
-  error?: string
-}> {
-  try {
-    const conn = await getSalesforceConnection()
-    // Test with a simple query
-    await conn.query('SELECT Id FROM Organization LIMIT 1')
-    return {
-      success: true,
-      instanceUrl: conn.instanceUrl,
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }
-  }
+export function createSalesforceClient(): SalesforceClient {
+  return new SalesforceClient()
 }

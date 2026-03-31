@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { testSalesforceConnection } from '@/lib/salesforce/client'
+import { createSalesforceClient } from '@/lib/salesforce/client'
 import { testFishbowlConnection } from '@/lib/fishbowl/client'
 import { testQuickBooksConnection } from '@/lib/quickbooks/client'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -64,8 +64,10 @@ export async function GET(): Promise<NextResponse<HealthResponse>> {
 
   // Check Salesforce
   try {
-    if (process.env.SF_CLIENT_ID) {
-      const sfResult = await testSalesforceConnection()
+    if (process.env.SF_USERNAME) {
+      const sfClient = createSalesforceClient()
+      const sfResult = await sfClient.testConnection()
+      await sfClient.disconnect()
       connections.salesforce = {
         status: sfResult.success ? 'connected' : 'error',
         message: sfResult.error,

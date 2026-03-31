@@ -1,8 +1,6 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -13,175 +11,303 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/dashboard/StatusBadge'
+import { EmptyState } from '@/components/dashboard/EmptyState'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { createClient } from '@/lib/supabase/client'
-import type { FieldMapping, Automation } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Map, Plus, Save, Trash2, Edit3 } from 'lucide-react'
+import { getFieldMappings } from '@/lib/data'
 import { AUTOMATION_INFO } from '@/types'
+import type { FieldMapping, AutomationType } from '@/types'
+import { toast } from 'sonner'
+
+const MAPPING_AUTOMATIONS: AutomationType[] = [
+  'P1_OPP_TO_SO',
+  'P2_INVENTORY_SYNC',
+  'P4_SHIPMENT_TRACKING',
+]
 
 export default function MappingsPage() {
   const [loading, setLoading] = useState(true)
   const [mappings, setMappings] = useState<FieldMapping[]>([])
-  const [selectedAutomation, setSelectedAutomation] = useState<string>('all')
-
-  const supabase = createClient()
+  const [selectedTab, setSelectedTab] = useState<string>('P1_OPP_TO_SO')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValues, setEditValues] = useState<Partial<FieldMapping>>({})
 
   const fetchMappings = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('field_mappings')
-        .select('*')
-        .order('automation')
-        .order('source_field')
-
-      if (error) throw error
-
-      // Convert snake_case to camelCase
-      const formatted: FieldMapping[] = (data || []).map((m) => ({
-        id: m.id,
-        automation: m.automation,
-        sourceField: m.source_field,
-        targetField: m.target_field,
-        transform: m.transform,
-        isRequired: m.is_required,
-        defaultValue: m.default_value,
-        notes: m.notes,
-      }))
-
-      setMappings(formatted)
+      const data = await getFieldMappings()
+      setMappings(data)
     } catch (error) {
       console.error('Failed to fetch mappings:', error)
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchMappings()
   }, [fetchMappings])
 
-  const automations = Object.keys(AUTOMATION_INFO) as Automation[]
+  const filteredMappings = mappings.filter((m) => m.automation === selectedTab)
 
-  const filteredMappings =
-    selectedAutomation === 'all'
-      ? mappings
-      : mappings.filter((m) => m.automation === selectedAutomation)
+  const handleEdit = (mapping: FieldMapping) => {
+    setEditingId(mapping.id)
+    setEditValues({
+      source_field: mapping.source_field,
+      target_field: mapping.target_field,
+      transform: mapping.transform,
+      default_value: mapping.default_value,
+      notes: mapping.notes,
+    })
+  }
 
-  const groupedMappings = filteredMappings.reduce(
-    (acc, mapping) => {
-      if (!acc[mapping.automation]) {
-        acc[mapping.automation] = []
-      }
-      acc[mapping.automation].push(mapping)
-      return acc
-    },
-    {} as Record<string, FieldMapping[]>
-  )
+  const handleSave = () => {
+    if (!editingId) return
+    setMappings((prev) =>
+      prev.map((m) =>
+        m.id === editingId
+          ? { ...m, ...editValues, updated_at: new Date().toISOString() }
+          : m
+      )
+    )
+    setEditingId(null)
+    setEditValues({})
+    toast.success('Mapping updated')
+  }
+
+  const handleCancel = () => {
+    setEditingId(null)
+    setEditValues({})
+  }
+
+  const handleDelete = (id: string) => {
+    setMappings((prev) => prev.filter((m) => m.id !== id))
+    toast.success('Mapping deleted')
+  }
+
+  const handleAdd = () => {
+    const newId = `FM-NEW-${Date.now()}`
+    const newMapping: FieldMapping = {
+      id: newId,
+      automation: selectedTab as AutomationType,
+      source_field: '',
+      target_field: '',
+      transform: null,
+      is_required: false,
+      default_value: null,
+      notes: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    setMappings((prev) => [...prev, newMapping])
+    setEditingId(newId)
+    setEditValues({
+      source_field: '',
+      target_field: '',
+      transform: null,
+      default_value: null,
+      notes: null,
+    })
+  }
 
   return (
     <div className="flex flex-col">
-      <Header title="Field Mappings" showRefresh onRefresh={fetchMappings} />
+      <Header title="Field Mappings" />
 
       <div className="p-6">
         <Card>
           <CardHeader>
-            <CardTitle>Field Mapping Configuration</CardTitle>
-            <p className="text-sm text-gray-500">
-              Configure how fields are mapped between Salesforce, Fishbowl, and
-              QuickBooks.
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Map className="h-5 w-5 text-medship-primary" />
+                  Field Mapping Configuration
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Configure how fields are mapped between Salesforce, Fishbowl, and QuickBooks.
+                </p>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <Tabs
-              value={selectedAutomation}
-              onValueChange={setSelectedAutomation}
-              className="space-y-4"
-            >
-              <TabsList className="flex-wrap">
-                <TabsTrigger value="all">All</TabsTrigger>
-                {automations.map((automation) => (
-                  <TabsTrigger key={automation} value={automation}>
-                    {AUTOMATION_INFO[automation].name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+            {loading ? (
+              <div className="flex h-64 items-center justify-center">
+                <div className="text-muted-foreground">Loading...</div>
+              </div>
+            ) : (
+              <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+                <TabsList>
+                  {MAPPING_AUTOMATIONS.map((automation) => (
+                    <TabsTrigger key={automation} value={automation}>
+                      {AUTOMATION_INFO[automation].name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-              {loading ? (
-                <div className="flex h-64 items-center justify-center">
-                  <div className="text-gray-500">Loading...</div>
-                </div>
-              ) : mappings.length === 0 ? (
-                <div className="flex h-64 flex-col items-center justify-center text-gray-500">
-                  <p>No field mappings configured yet.</p>
-                  <p className="text-sm">
-                    Add mappings via the Supabase dashboard or API.
-                  </p>
-                </div>
-              ) : (
-                <TabsContent value={selectedAutomation}>
-                  {Object.entries(groupedMappings).map(
-                    ([automation, mappingList]) => (
-                      <div key={automation} className="mb-8">
-                        <h3 className="mb-3 text-lg font-medium">
-                          {AUTOMATION_INFO[automation as Automation]?.name ||
-                            automation}
-                        </h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Source Field</TableHead>
-                              <TableHead>Target Field</TableHead>
-                              <TableHead>Transform</TableHead>
-                              <TableHead>Required</TableHead>
-                              <TableHead>Default</TableHead>
-                              <TableHead>Notes</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {mappingList.map((mapping) => (
-                              <TableRow key={mapping.id}>
-                                <TableCell className="font-mono text-sm">
-                                  {mapping.sourceField}
-                                </TableCell>
-                                <TableCell className="font-mono text-sm">
-                                  {mapping.targetField}
-                                </TableCell>
-                                <TableCell>
-                                  {mapping.transform ? (
-                                    <code className="rounded bg-gray-100 px-1 text-xs">
-                                      {mapping.transform}
-                                    </code>
-                                  ) : (
-                                    <span className="text-gray-400">-</span>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      mapping.isRequired
-                                        ? 'destructive'
-                                        : 'secondary'
-                                    }
-                                  >
-                                    {mapping.isRequired ? 'Yes' : 'No'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="max-w-[150px] truncate text-sm">
-                                  {mapping.defaultValue || '-'}
-                                </TableCell>
-                                <TableCell className="max-w-[200px] truncate text-sm text-gray-500">
-                                  {mapping.notes || '-'}
-                                </TableCell>
+                {MAPPING_AUTOMATIONS.map((automation) => (
+                  <TabsContent key={automation} value={automation} className="mt-4">
+                    {filteredMappings.length === 0 ? (
+                      <EmptyState
+                        icon={Map}
+                        title="No mappings configured"
+                        description="Add field mappings for this automation."
+                        action={
+                          <Button onClick={handleAdd} size="sm">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Mapping
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <>
+                        <div className="mb-4 flex justify-end">
+                          <Button onClick={handleAdd} size="sm" variant="outline">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Mapping
+                          </Button>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Source Field</TableHead>
+                                <TableHead>Target Field</TableHead>
+                                <TableHead>Transform</TableHead>
+                                <TableHead>Required</TableHead>
+                                <TableHead>Default Value</TableHead>
+                                <TableHead>Notes</TableHead>
+                                <TableHead className="w-24">Actions</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )
-                  )}
-                </TabsContent>
-              )}
-            </Tabs>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredMappings.map((mapping) => (
+                                <TableRow key={mapping.id}>
+                                  {editingId === mapping.id ? (
+                                    <>
+                                      <TableCell>
+                                        <Input
+                                          value={editValues.source_field ?? ''}
+                                          onChange={(e) =>
+                                            setEditValues((prev) => ({ ...prev, source_field: e.target.value }))
+                                          }
+                                          className="h-8 text-sm"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          value={editValues.target_field ?? ''}
+                                          onChange={(e) =>
+                                            setEditValues((prev) => ({ ...prev, target_field: e.target.value }))
+                                          }
+                                          className="h-8 text-sm"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          value={editValues.transform ?? ''}
+                                          onChange={(e) =>
+                                            setEditValues((prev) => ({ ...prev, transform: e.target.value || null }))
+                                          }
+                                          className="h-8 text-sm"
+                                          placeholder="-"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <StatusBadge status={mapping.is_required ? 'Yes' : 'No'} />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          value={editValues.default_value ?? ''}
+                                          onChange={(e) =>
+                                            setEditValues((prev) => ({ ...prev, default_value: e.target.value || null }))
+                                          }
+                                          className="h-8 text-sm"
+                                          placeholder="-"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          value={editValues.notes ?? ''}
+                                          onChange={(e) =>
+                                            setEditValues((prev) => ({ ...prev, notes: e.target.value || null }))
+                                          }
+                                          className="h-8 text-sm"
+                                          placeholder="-"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex gap-1">
+                                          <Button size="xs" onClick={handleSave}>
+                                            <Save className="h-3 w-3" />
+                                          </Button>
+                                          <Button size="xs" variant="ghost" onClick={handleCancel}>
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <TableCell className="font-mono text-sm">
+                                        {mapping.source_field}
+                                      </TableCell>
+                                      <TableCell className="font-mono text-sm">
+                                        {mapping.target_field}
+                                      </TableCell>
+                                      <TableCell>
+                                        {mapping.transform ? (
+                                          <code className="rounded bg-muted px-1 text-xs">
+                                            {mapping.transform}
+                                          </code>
+                                        ) : (
+                                          <span className="text-muted-foreground">-</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        <StatusBadge
+                                          status={mapping.is_required ? 'required' : 'optional'}
+                                        />
+                                      </TableCell>
+                                      <TableCell className="max-w-[150px] truncate text-sm">
+                                        {mapping.default_value || '-'}
+                                      </TableCell>
+                                      <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
+                                        {mapping.notes || '-'}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex gap-1">
+                                          <Button
+                                            size="xs"
+                                            variant="ghost"
+                                            onClick={() => handleEdit(mapping)}
+                                          >
+                                            <Edit3 className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            size="xs"
+                                            variant="ghost"
+                                            className="text-medship-danger hover:text-medship-danger"
+                                            onClick={() => handleDelete(mapping.id)}
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </>
+                                  )}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </>
+                    )}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
           </CardContent>
         </Card>
       </div>

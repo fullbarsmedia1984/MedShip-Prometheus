@@ -1,79 +1,101 @@
-import { getFishbowlClient } from './client'
-import type { FBInventoryItem, FBApiResponse } from './types'
+// =============================================================================
+// Fishbowl Inventory Operations
+// =============================================================================
+
+import type { FishbowlClient } from './client';
+import type { FBInventoryItem } from '@/types';
+import type { FBPaginatedResponse } from './types';
+
+const PAGE_SIZE = 100;
 
 /**
- * Get all inventory items from Fishbowl
- * Used for full inventory sync (P2)
+ * Fetch ALL inventory from Fishbowl, paginating through every page.
+ * Returns a flat array of every part with inventory data.
  */
-export async function getAllInventory(): Promise<FBApiResponse<FBInventoryItem[]>> {
-  // TODO: Implement in Phase 2
-  const client = getFishbowlClient()
-  return client.get<FBInventoryItem[]>('/api/parts/inventory')
+export async function getAllInventory(
+  client: FishbowlClient
+): Promise<FBInventoryItem[]> {
+  const allItems: FBInventoryItem[] = [];
+  let pageNumber = 1;
+  let totalPages = 1; // will be updated after first response
+
+  while (pageNumber <= totalPages) {
+    const page = await client.request<FBPaginatedResponse<FBInventoryItem>>(
+      'GET',
+      `/api/parts/inventory?pageNumber=${pageNumber}&pageSize=${PAGE_SIZE}`
+    );
+
+    totalPages = page.totalPages;
+    allItems.push(...page.results);
+
+    console.log(
+      `Fetched page ${pageNumber} of ${totalPages} (${allItems.length} records so far)`
+    );
+
+    pageNumber++;
+  }
+
+  return allItems;
 }
 
 /**
- * Get inventory for specific part numbers
- */
-export async function getInventoryByPartNumbers(
-  partNumbers: string[]
-): Promise<FBApiResponse<FBInventoryItem[]>> {
-  // TODO: Implement in Phase 2
-  const client = getFishbowlClient()
-
-  // Fishbowl may support batch lookup or require individual calls
-  // This is a placeholder - actual implementation depends on Fishbowl API
-  const params = new URLSearchParams()
-  partNumbers.forEach((pn) => params.append('partNumber', pn))
-
-  return client.get<FBInventoryItem[]>(`/api/parts/inventory?${params.toString()}`)
-}
-
-/**
- * Get inventory for a single part number
+ * Fetch inventory for a single part by part number.
+ * Returns null if not found.
  */
 export async function getInventoryByPartNumber(
+  client: FishbowlClient,
   partNumber: string
-): Promise<FBApiResponse<FBInventoryItem | null>> {
-  // TODO: Implement in Phase 2
-  const client = getFishbowlClient()
-  const result = await client.get<FBInventoryItem[]>(
-    `/api/parts/inventory?partNumber=${encodeURIComponent(partNumber)}`
-  )
+): Promise<FBInventoryItem | null> {
+  const response = await client.request<FBPaginatedResponse<FBInventoryItem>>(
+    'GET',
+    `/api/parts/inventory?number=${encodeURIComponent(partNumber)}`
+  );
 
-  if (!result.success) {
-    return { success: false, error: result.error }
-  }
-
-  return {
-    success: true,
-    data: result.data?.[0] || null,
-  }
+  return response.results[0] ?? null;
 }
 
 /**
- * Get inventory items below reorder point
- * Used for low stock alerts (P6)
+ * Fetch inventory for multiple specific part numbers.
+ * More efficient than getAllInventory when you only need a few parts.
  */
-export async function getLowStockItems(
-  reorderThreshold?: number
-): Promise<FBApiResponse<FBInventoryItem[]>> {
-  // TODO: Implement in Phase 6
-  const client = getFishbowlClient()
+export async function getInventoryByPartNumbers(
+  client: FishbowlClient,
+  partNumbers: string[]
+): Promise<FBInventoryItem[]> {
+  const results: FBInventoryItem[] = [];
 
-  // This may need to be filtered client-side depending on Fishbowl API capabilities
-  const result = await client.get<FBInventoryItem[]>('/api/parts/inventory')
-
-  if (!result.success || !result.data) {
-    return result
-  }
-
-  // Filter for low stock if threshold provided
-  if (reorderThreshold !== undefined) {
-    return {
-      success: true,
-      data: result.data.filter((item) => item.qtyAvailable <= reorderThreshold),
+  // Fishbowl doesn't support batch part lookup — fetch one at a time
+  for (const partNumber of partNumbers) {
+    const item = await getInventoryByPartNumber(client, partNumber);
+    if (item) {
+      results.push(item);
     }
   }
 
-  return result
+  return results;
+}
+
+/**
+ * Validate that a list of part numbers exist in Fishbowl.
+ * Used by P1 before creating a sales order — checks all SKUs exist.
+ */
+export async function validatePartNumbers(
+  client: FishbowlClient,
+  partNumbers: string[]
+): Promise<{ valid: string[]; invalid: string[] }> {
+  const found = await getInventoryByPartNumbers(client, partNumbers);
+  const foundSet = new Set(found.map((item) => item.partNumber));
+
+  const valid: string[] = [];
+  const invalid: string[] = [];
+
+  for (const pn of partNumbers) {
+    if (foundSet.has(pn)) {
+      valid.push(pn);
+    } else {
+      invalid.push(pn);
+    }
+  }
+
+  return { valid, invalid };
 }

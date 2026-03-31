@@ -1,188 +1,233 @@
-import type { FBConnectionConfig, FBApiResponse } from './types'
+// =============================================================================
+// Fishbowl REST API Client
+// Handles authentication, token refresh, 401 retry, and request lifecycle.
+// =============================================================================
 
-// Singleton token storage
-let authToken: string | null = null
-let tokenExpiresAt: number = 0
+import type { IFishbowlClient } from '@/types';
+import { FishbowlApiError, FishbowlAuthError } from './types';
+import type { FBLoginResponse } from './types';
 
-/**
- * Fishbowl REST API client
- * Handles authentication and base URL configuration
- */
-class FishbowlClient {
-  private baseUrl: string
-  private username: string
-  private password: string
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export class FishbowlClient implements IFishbowlClient {
+  private token: string | null = null;
+  private baseUrl: string;
+  private username: string;
+  private password: string;
+  private serverVersion: string | null = null;
 
   constructor() {
-    const config = this.getConfig()
-    this.baseUrl = config.apiUrl.replace(/\/$/, '') // Remove trailing slash
-    this.username = config.username
-    this.password = config.password
+    const apiUrl = process.env.FISHBOWL_API_URL;
+    if (!apiUrl) {
+      throw new Error(
+        'Missing FISHBOWL_API_URL environment variable. ' +
+          'Set it to your Fishbowl server address (e.g., http://192.168.1.100:28192).'
+      );
+    }
+    this.baseUrl = apiUrl.replace(/\/+$/, '');
+    this.username = process.env.FISHBOWL_USERNAME ?? '';
+    this.password = process.env.FISHBOWL_PASSWORD ?? '';
   }
 
-  private getConfig(): FBConnectionConfig {
-    const config: FBConnectionConfig = {
-      apiUrl: process.env.FISHBOWL_API_URL || '',
-      username: process.env.FISHBOWL_USERNAME || '',
-      password: process.env.FISHBOWL_PASSWORD || '',
+  // ---------------------------------------------------------------------------
+  // Authentication
+  // ---------------------------------------------------------------------------
+
+  async authenticate(): Promise<void> {
+    const url = `${this.baseUrl}/api/login`;
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: this.username,
+          password: this.password,
+          appName: 'MedShip Prometheus',
+          appDescription: 'Integration Hub',
+          appId: 1234,
+        }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      throw this.wrapNetworkError(err, url);
     }
-
-    if (!config.apiUrl) {
-      throw new Error('Missing Fishbowl configuration: FISHBOWL_API_URL')
-    }
-
-    return config
-  }
-
-  /**
-   * Authenticate with Fishbowl and get bearer token
-   */
-  private async authenticate(): Promise<string> {
-    // TODO: Implement in Phase 1 - actual Fishbowl auth endpoint
-    const response = await fetch(`${this.baseUrl}/api/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        username: this.username,
-        password: this.password,
-      }),
-    })
 
     if (!response.ok) {
-      throw new Error(`Fishbowl authentication failed: ${response.statusText}`)
+      const body = await this.safeReadBody(response);
+      throw new FishbowlAuthError(
+        `Fishbowl login failed (${response.status}): ${body}`
+      );
     }
 
-    const data = await response.json()
-    authToken = data.token as string
-    // Token typically valid for 24 hours
-    tokenExpiresAt = Date.now() + 24 * 60 * 60 * 1000
-
-    return authToken
+    const data: FBLoginResponse = await response.json();
+    if (!data.token) {
+      throw new FishbowlAuthError(
+        'Fishbowl login response did not include a token'
+      );
+    }
+    this.token = data.token;
+    this.serverVersion = data.serverVersion ?? null;
   }
 
-  /**
-   * Get valid auth token, refreshing if needed
-   */
-  private async getToken(): Promise<string> {
-    const now = Date.now()
+  isAuthenticated(): boolean {
+    return this.token !== null;
+  }
 
-    // Refresh if token is expired or expiring in 5 minutes
-    if (!authToken || tokenExpiresAt < now + 5 * 60 * 1000) {
-      await this.authenticate()
+  // ---------------------------------------------------------------------------
+  // Generic request with 401 auto-retry
+  // ---------------------------------------------------------------------------
+
+  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    if (!this.token) {
+      await this.authenticate();
     }
 
-    return authToken!
+    const result = await this.executeRequest<T>(method, path, body);
+
+    // If we got a 401, re-authenticate once and retry
+    if (result._unauthorized) {
+      this.token = null;
+      await this.authenticate();
+      const retry = await this.executeRequest<T>(method, path, body);
+      if (retry._unauthorized) {
+        throw new FishbowlAuthError(
+          'Fishbowl returned 401 after re-authentication'
+        );
+      }
+      return retry.data as T;
+    }
+
+    return result.data as T;
   }
 
-  /**
-   * Make authenticated request to Fishbowl API
-   */
-  async request<T>(
+  private async executeRequest<T>(
     method: string,
-    endpoint: string,
+    path: string,
     body?: unknown
-  ): Promise<FBApiResponse<T>> {
+  ): Promise<{ data?: T; _unauthorized?: boolean }> {
+    const url = `${this.baseUrl}${path}`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.token}`,
+    };
+
+    let response: Response;
     try {
-      const token = await this.getToken()
-      const url = `${this.baseUrl}${endpoint}`
-
-      const response = await fetch(url, {
+      response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      })
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      throw this.wrapNetworkError(err, url);
+    }
 
-      if (!response.ok) {
-        // Handle token expiry
-        if (response.status === 401) {
-          authToken = null
-          tokenExpiresAt = 0
-          // Retry once with fresh token
-          return this.request(method, endpoint, body)
-        }
+    if (response.status === 401) {
+      return { _unauthorized: true };
+    }
 
-        const errorText = await response.text()
-        return {
-          success: false,
-          error: {
-            code: response.status.toString(),
-            message: errorText || response.statusText,
-          },
-        }
-      }
+    if (!response.ok) {
+      const responseBody = await this.safeReadBody(response);
+      throw new FishbowlApiError(
+        `Fishbowl API error ${response.status} on ${method} ${path}: ${responseBody}`,
+        response.status,
+        path,
+        responseBody
+      );
+    }
 
-      const data = await response.json()
-      return {
-        success: true,
-        data: data as T,
-      }
-    } catch (error) {
+    const data: T = await response.json();
+    return { data };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Connection test — authenticates + fetches page 1 of inventory
+  // ---------------------------------------------------------------------------
+
+  async testConnection(): Promise<{
+    success: boolean;
+    error?: string;
+    version?: string;
+  }> {
+    try {
+      await this.authenticate();
+      // Verify full round-trip with a real data call
+      await this.request('GET', '/api/parts/inventory?pageNumber=1&pageSize=1');
+      return { success: true, version: this.serverVersion ?? undefined };
+    } catch (err) {
       return {
         success: false,
-        error: {
-          code: 'NETWORK_ERROR',
-          message: error instanceof Error ? error.message : 'Unknown error',
-        },
-      }
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   }
 
-  /**
-   * GET request helper
-   */
-  async get<T>(endpoint: string): Promise<FBApiResponse<T>> {
-    return this.request<T>('GET', endpoint)
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  private wrapNetworkError(err: unknown, url: string): Error {
+    if (err instanceof Error) {
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        return new FishbowlApiError(
+          `Request to Fishbowl timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${url}`,
+          0,
+          url
+        );
+      }
+      if (
+        err.message.includes('ECONNREFUSED') ||
+        err.message.includes('fetch failed')
+      ) {
+        return new FishbowlApiError(
+          `Could not connect to Fishbowl at ${url}. ` +
+            'Ensure the server is running and accessible from this network.',
+          0,
+          url
+        );
+      }
+      return new FishbowlApiError(err.message, 0, url);
+    }
+    return new FishbowlApiError(String(err), 0, url);
   }
 
-  /**
-   * POST request helper
-   */
-  async post<T>(endpoint: string, body: unknown): Promise<FBApiResponse<T>> {
-    return this.request<T>('POST', endpoint, body)
-  }
-
-  /**
-   * PUT request helper
-   */
-  async put<T>(endpoint: string, body: unknown): Promise<FBApiResponse<T>> {
-    return this.request<T>('PUT', endpoint, body)
+  private async safeReadBody(response: Response): Promise<string> {
+    try {
+      return await response.text();
+    } catch {
+      return response.statusText;
+    }
   }
 }
 
-// Export singleton instance
-let clientInstance: FishbowlClient | null = null
+// =============================================================================
+// Factory function (spec requirement)
+// =============================================================================
 
+export function createFishbowlClient(): FishbowlClient {
+  return new FishbowlClient();
+}
+
+// Backwards-compat alias used by inngest functions
 export function getFishbowlClient(): FishbowlClient {
-  if (!clientInstance) {
-    clientInstance = new FishbowlClient()
-  }
-  return clientInstance
+  return createFishbowlClient();
 }
 
-/**
- * Test Fishbowl connection
- */
+// Backwards-compat export used by /api/health
 export async function testFishbowlConnection(): Promise<{
-  success: boolean
-  error?: string
+  success: boolean;
+  error?: string;
 }> {
   try {
-    const client = getFishbowlClient()
-    // Test with a simple inventory query
-    const result = await client.get('/api/parts/inventory?limit=1')
-    return {
-      success: result.success,
-      error: result.error?.message,
-    }
-  } catch (error) {
+    const client = createFishbowlClient();
+    return await client.testConnection();
+  } catch (err) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }

@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export type SyncStatus = 'pending' | 'success' | 'failed' | 'retrying'
+export type SyncStatus = 'pending' | 'running' | 'success' | 'failed' | 'retrying' | 'dismissed'
 export type Automation =
   | 'P1_OPP_TO_SO'
   | 'P2_INVENTORY_SYNC'
@@ -239,3 +239,129 @@ class Logger {
 
 // Export singleton instance
 export const logger = new Logger()
+
+// --- Standalone function exports for Inngest functions ---
+
+/**
+ * Create a new sync event log entry.
+ * Returns the created event ID.
+ */
+export async function logSyncEvent(input: {
+  automation: Automation;
+  sourceSystem: SystemName;
+  targetSystem: SystemName;
+  sourceRecordId?: string;
+  targetRecordId?: string;
+  status: SyncStatus;
+  payload?: Record<string, unknown>;
+  response?: Record<string, unknown>;
+  errorMessage?: string;
+  idempotencyKey?: string;
+}): Promise<string> {
+  try {
+    return await logger.createEvent({
+      automation: input.automation,
+      source_system: input.sourceSystem,
+      target_system: input.targetSystem,
+      source_record_id: input.sourceRecordId,
+      target_record_id: input.targetRecordId,
+      status: input.status,
+      payload: input.payload,
+      response: input.response,
+      error_message: input.errorMessage,
+      idempotency_key: input.idempotencyKey,
+    })
+  } catch (error) {
+    console.error('logSyncEvent failed, returning placeholder ID:', error)
+    return `fallback-${Date.now()}`
+  }
+}
+
+/**
+ * Update an existing sync event (e.g., mark as success after completion).
+ */
+export async function updateSyncEvent(
+  eventId: string,
+  updates: {
+    status?: SyncStatus;
+    targetRecordId?: string;
+    response?: Record<string, unknown>;
+    errorMessage?: string;
+    completedAt?: string;
+    retryCount?: number;
+    nextRetryAt?: string | null;
+  }
+): Promise<void> {
+  try {
+    await logger.updateEvent(eventId, {
+      status: updates.status,
+      target_record_id: updates.targetRecordId,
+      response: updates.response,
+      error_message: updates.errorMessage,
+      completed_at: updates.completedAt,
+      retry_count: updates.retryCount,
+      next_retry_at: updates.nextRetryAt ?? undefined,
+    })
+  } catch (error) {
+    console.error('updateSyncEvent failed:', error)
+  }
+}
+
+/**
+ * Check if a sync event with this idempotency key already succeeded.
+ * Used by P1 to prevent duplicate SO creation.
+ */
+export async function hasSuccessfulSync(idempotencyKey: string): Promise<boolean> {
+  try {
+    const existing = await logger.checkIdempotency(idempotencyKey)
+    return existing?.status === 'success'
+  } catch (error) {
+    console.error('hasSuccessfulSync check failed:', error)
+    return false
+  }
+}
+
+/**
+ * Get failed events that are ready for retry.
+ * (status = 'retrying', next_retry_at <= now)
+ */
+export async function getRetryableEvents(): Promise<SyncEvent[]> {
+  try {
+    return await logger.getRetryableEvents()
+  } catch (error) {
+    console.error('getRetryableEvents failed:', error)
+    return []
+  }
+}
+
+/**
+ * Update sync schedule after a run completes.
+ */
+export async function updateSyncSchedule(
+  automation: string,
+  data: {
+    lastRunAt: string;
+    lastRunStatus: string;
+    lastRunDurationMs: number;
+    recordsProcessed: number;
+  }
+): Promise<void> {
+  try {
+    const supabase = createAdminClient()
+    const { error } = await supabase
+      .from('sync_schedules')
+      .update({
+        last_run_at: data.lastRunAt,
+        last_run_status: data.lastRunStatus,
+        last_run_duration_ms: data.lastRunDurationMs,
+        records_processed: data.recordsProcessed,
+      })
+      .eq('automation', automation)
+
+    if (error) {
+      console.error('updateSyncSchedule failed:', error)
+    }
+  } catch (error) {
+    console.error('updateSyncSchedule failed:', error)
+  }
+}

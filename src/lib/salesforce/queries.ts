@@ -1,134 +1,134 @@
-import { getSalesforceConnection } from './client'
-import type {
-  SFOpportunity,
-  SFAccount,
-  SFOpportunityLineItem,
-  SFProduct,
-  SFQueryResult,
-} from './types'
+import { SalesforceClient } from './client'
+import type { SFOpportunity, SFProduct } from './types'
+
+const INVALID_FIELD_ERROR = 'INVALID_FIELD'
 
 /**
- * Get a single Opportunity by ID with related Account
+ * Get opportunities that closed won but haven't been synced to Fishbowl yet.
+ * Polls for records modified in the last 5 minutes with no Fishbowl SO number.
+ */
+export async function getUnsyncedClosedOpportunities(
+  client: SalesforceClient
+): Promise<SFOpportunity[]> {
+  return client.withRetry(async (conn) => {
+    try {
+      const result = await conn.query<SFOpportunity>(`
+        SELECT Id, Name, AccountId, Account.Name,
+          Account.ShippingStreet, Account.ShippingCity,
+          Account.ShippingState, Account.ShippingPostalCode,
+          Account.ShippingCountry,
+          CloseDate, Amount, Fishbowl_SO_Number__c,
+          Fulfillment_Status__c,
+          (SELECT Id, Product2.ProductCode, Product2.Name,
+                  Quantity, UnitPrice, TotalPrice
+           FROM OpportunityLineItems)
+        FROM Opportunity
+        WHERE StageName = 'Closed Won'
+          AND Fishbowl_SO_Number__c = null
+          AND LastModifiedDate >= LAST_N_MINUTES:5
+        ORDER BY CloseDate ASC
+      `)
+
+      return result.records
+    } catch (error) {
+      throwIfInvalidField(error)
+      throw error
+    }
+  })
+}
+
+/**
+ * Get a single opportunity with full details (used for retry scenarios).
  */
 export async function getOpportunityById(
+  client: SalesforceClient,
   opportunityId: string
 ): Promise<SFOpportunity | null> {
-  // TODO: Implement in Phase 1
-  const conn = await getSalesforceConnection()
+  return client.withRetry(async (conn) => {
+    try {
+      // Use parameterized retrieve for single-record fetch by ID
+      const result = await conn.query<SFOpportunity>(`
+        SELECT Id, Name, AccountId, Account.Name,
+          Account.ShippingStreet, Account.ShippingCity,
+          Account.ShippingState, Account.ShippingPostalCode,
+          Account.ShippingCountry,
+          CloseDate, Amount, StageName,
+          Fishbowl_SO_Number__c, Fulfillment_Status__c,
+          Fulfillment_Error__c, Last_Sync_Attempt__c,
+          (SELECT Id, Product2.ProductCode, Product2.Name,
+                  Quantity, UnitPrice, TotalPrice
+           FROM OpportunityLineItems)
+        FROM Opportunity
+        WHERE Id = '${escapeSoql(opportunityId)}'
+        LIMIT 1
+      `)
 
-  const result = await conn.query<SFOpportunity>(`
-    SELECT
-      Id, Name, AccountId, Amount, StageName, CloseDate,
-      IsClosed, IsWon, Description,
-      Fishbowl_SO_Number__c, Tracking_Number__c
-    FROM Opportunity
-    WHERE Id = '${opportunityId}'
-    LIMIT 1
-  `)
-
-  return result.records[0] || null
+      return result.records[0] ?? null
+    } catch (error) {
+      throwIfInvalidField(error)
+      throw error
+    }
+  })
 }
 
 /**
- * Get Opportunity Line Items for an Opportunity
+ * Get SF Product2 records matching the given product codes.
+ * Used by P2 inventory sync to know which products to update.
  */
-export async function getOpportunityLineItems(
-  opportunityId: string
-): Promise<SFOpportunityLineItem[]> {
-  // TODO: Implement in Phase 1
-  const conn = await getSalesforceConnection()
+export async function getProductsByCode(
+  client: SalesforceClient,
+  productCodes: string[]
+): Promise<Array<{ Id: string; ProductCode: string; Name: string }>> {
+  if (productCodes.length === 0) return []
 
-  const result = await conn.query<SFOpportunityLineItem>(`
-    SELECT
-      Id, OpportunityId, Product2Id, Quantity, UnitPrice, TotalPrice,
-      Product2.Id, Product2.Name, Product2.ProductCode
-    FROM OpportunityLineItem
-    WHERE OpportunityId = '${opportunityId}'
-  `)
+  return client.withRetry(async (conn) => {
+    // Build an IN clause with escaped values
+    const escaped = productCodes.map((c) => `'${escapeSoql(c)}'`).join(',')
 
-  return result.records
+    const result = await conn.query<SFProduct>(`
+      SELECT Id, ProductCode, Name
+      FROM Product2
+      WHERE ProductCode IN (${escaped})
+    `)
+
+    return result.records.map((r) => ({
+      Id: r.Id,
+      ProductCode: r.ProductCode!,
+      Name: r.Name,
+    }))
+  })
+}
+
+// --- Helpers ---
+
+/**
+ * Escape single quotes in SOQL values to prevent injection.
+ */
+function escapeSoql(value: string): string {
+  return value.replace(/'/g, "\\'")
 }
 
 /**
- * Get Account by ID with shipping/billing addresses
+ * If the error indicates a missing custom field, throw a descriptive error
+ * telling the user which fields to create in Salesforce Setup.
  */
-export async function getAccountById(accountId: string): Promise<SFAccount | null> {
-  // TODO: Implement in Phase 1
-  const conn = await getSalesforceConnection()
-
-  const result = await conn.query<SFAccount>(`
-    SELECT
-      Id, Name, Phone,
-      ShippingStreet, ShippingCity, ShippingState, ShippingPostalCode, ShippingCountry,
-      BillingStreet, BillingCity, BillingState, BillingPostalCode, BillingCountry
-    FROM Account
-    WHERE Id = '${accountId}'
-    LIMIT 1
-  `)
-
-  return result.records[0] || null
-}
-
-/**
- * Get recently closed-won Opportunities
- * Used for manual sync or catching missed webhooks
- */
-export async function getRecentClosedWonOpportunities(
-  sinceDate: Date
-): Promise<SFOpportunity[]> {
-  // TODO: Implement in Phase 1
-  const conn = await getSalesforceConnection()
-  const isoDate = sinceDate.toISOString()
-
-  const result = await conn.query<SFOpportunity>(`
-    SELECT
-      Id, Name, AccountId, Amount, StageName, CloseDate,
-      IsClosed, IsWon, Description, Fishbowl_SO_Number__c
-    FROM Opportunity
-    WHERE IsWon = true
-      AND CloseDate >= ${isoDate.split('T')[0]}
-      AND Fishbowl_SO_Number__c = null
-    ORDER BY CloseDate DESC
-    LIMIT 100
-  `)
-
-  return result.records
-}
-
-/**
- * Get all active Products for inventory sync
- */
-export async function getActiveProducts(): Promise<SFProduct[]> {
-  // TODO: Implement in Phase 2
-  const conn = await getSalesforceConnection()
-
-  const result = await conn.query<SFProduct>(`
-    SELECT
-      Id, Name, ProductCode, Description, IsActive,
-      Qty_On_Hand__c, Qty_Available__c, Last_Inventory_Sync__c
-    FROM Product2
-    WHERE IsActive = true
-    ORDER BY ProductCode
-  `)
-
-  return result.records
-}
-
-/**
- * Search Products by ProductCode (part number)
- */
-export async function getProductByCode(productCode: string): Promise<SFProduct | null> {
-  // TODO: Implement in Phase 2
-  const conn = await getSalesforceConnection()
-
-  const result = await conn.query<SFProduct>(`
-    SELECT
-      Id, Name, ProductCode, Description, IsActive,
-      Qty_On_Hand__c, Qty_Available__c
-    FROM Product2
-    WHERE ProductCode = '${productCode}'
-    LIMIT 1
-  `)
-
-  return result.records[0] || null
+function throwIfInvalidField(error: unknown): void {
+  if (
+    error instanceof Error &&
+    error.message.includes(INVALID_FIELD_ERROR)
+  ) {
+    throw new Error(
+      `Salesforce custom field(s) not found. Please ensure the following custom fields ` +
+        `exist on the Opportunity object in Salesforce Setup:\n` +
+        `  - Fishbowl_SO_Number__c (Text)\n` +
+        `  - Fulfillment_Status__c (Picklist or Text)\n` +
+        `  - Fulfillment_Error__c (Long Text Area)\n` +
+        `  - Last_Sync_Attempt__c (Date/Time)\n` +
+        `And on the Product2 object:\n` +
+        `  - Qty_On_Hand__c (Number)\n` +
+        `  - Qty_Available__c (Number)\n` +
+        `  - Last_Inventory_Sync__c (Date/Time)\n\n` +
+        `Original error: ${error.message}`
+    )
+  }
 }
