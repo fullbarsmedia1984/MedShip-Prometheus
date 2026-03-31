@@ -136,25 +136,15 @@ export async function GET(): Promise<NextResponse<HealthResponse>> {
     }
   }
 
-  // Determine overall health status
+  // Determine overall health status (informational only — never causes non-200)
   const connectionStatuses = Object.values(connections)
   const hasError = connectionStatuses.some((c) => c.status === 'error')
   const hasDisconnected = connectionStatuses.some(
     (c) => c.status === 'disconnected'
   )
 
-  // Critical systems: Supabase and at least one of SF/Fishbowl
-  const criticalOk =
-    connections.supabase.status === 'connected' &&
-    (connections.salesforce.status === 'connected' ||
-      connections.salesforce.status === 'not_configured') &&
-    (connections.fishbowl.status === 'connected' ||
-      connections.fishbowl.status === 'not_configured')
-
   let status: HealthResponse['status'] = 'healthy'
-  if (!criticalOk || hasError) {
-    status = 'unhealthy'
-  } else if (hasDisconnected) {
+  if (hasError || hasDisconnected) {
     status = 'degraded'
   }
 
@@ -165,8 +155,7 @@ export async function GET(): Promise<NextResponse<HealthResponse>> {
     connections,
   }
 
-  // Return 503 if unhealthy (for Railway health checks)
-  const httpStatus = status === 'unhealthy' ? 503 : 200
-
-  return NextResponse.json(response, { status: httpStatus })
+  // Always return 200 — external service status is informational only.
+  // Railway uses this endpoint for deploy health checks.
+  return NextResponse.json(response, { status: 200 })
 }
