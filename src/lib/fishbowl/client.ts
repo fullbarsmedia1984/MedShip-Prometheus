@@ -34,7 +34,7 @@ export class FishbowlClient implements IFishbowlClient {
   // ---------------------------------------------------------------------------
 
   async authenticate(): Promise<void> {
-    const url = `${this.baseUrl}/api/login`;
+    const url = `${this.baseUrl}/api/session`;
 
     let response: Response;
     try {
@@ -44,9 +44,6 @@ export class FishbowlClient implements IFishbowlClient {
         body: JSON.stringify({
           username: this.username,
           password: this.password,
-          appName: 'MedShip Prometheus',
-          appDescription: 'Integration Hub',
-          appId: 1234,
         }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
