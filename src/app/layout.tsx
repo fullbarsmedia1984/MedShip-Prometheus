@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Poppins, Geist_Mono } from 'next/font/google'
 import { Providers } from '@/components/providers'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import './globals.css'
 
 const poppins = Poppins({

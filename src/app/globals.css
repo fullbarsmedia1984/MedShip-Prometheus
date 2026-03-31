@@ -157,3 +157,14 @@
     font-weight: 500;
   }
 }
+
+/* Mapbox popup override — match YashAdmin card aesthetic */
+.medship-map-popup .mapboxgl-popup-content {
+  border-radius: 0.625rem;
+  padding: 12px 14px;
+  box-shadow: 0 0 2.5rem 0 rgba(82, 63, 105, 0.1);
+  border: 1px solid #e6e6e6;
+}
+.medship-map-popup .mapboxgl-popup-tip {
+  border-top-color: #e6e6e6;
+}

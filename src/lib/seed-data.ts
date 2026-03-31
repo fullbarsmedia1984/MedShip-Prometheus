@@ -144,44 +144,75 @@ export interface Customer {
   type: 'University' | 'Community College' | 'Hospital Training' | 'For-Profit'
   city: string
   state: string
+  latitude: number
+  longitude: number
+  region: 'Northeast' | 'Southeast' | 'Midwest' | 'Southwest' | 'West'
+  totalRevenue: number
+  totalOrders: number
+  lastOrderDate: string
+  assignedRep: string
+  customerStatus: 'active' | 'inactive' | 'prospect'
 }
 
 export const seedCustomers: Customer[] = [
-  { id: 'CUST-001', name: 'Rush University College of Nursing', type: 'University', city: 'Chicago', state: 'IL' },
-  { id: 'CUST-002', name: 'University of Illinois Chicago College of Nursing', type: 'University', city: 'Chicago', state: 'IL' },
-  { id: 'CUST-003', name: 'Loyola University Chicago Marcella Niehoff School of Nursing', type: 'University', city: 'Maywood', state: 'IL' },
-  { id: 'CUST-004', name: 'NYU Rory Meyers College of Nursing', type: 'University', city: 'New York', state: 'NY' },
-  { id: 'CUST-005', name: 'Johns Hopkins School of Nursing', type: 'University', city: 'Baltimore', state: 'MD' },
-  { id: 'CUST-006', name: 'University of Pennsylvania School of Nursing', type: 'University', city: 'Philadelphia', state: 'PA' },
-  { id: 'CUST-007', name: 'Emory University Nell Hodgson Woodruff School of Nursing', type: 'University', city: 'Atlanta', state: 'GA' },
-  { id: 'CUST-008', name: 'Duke University School of Nursing', type: 'University', city: 'Durham', state: 'NC' },
-  { id: 'CUST-009', name: 'University of Michigan School of Nursing', type: 'University', city: 'Ann Arbor', state: 'MI' },
-  { id: 'CUST-010', name: 'UCLA School of Nursing', type: 'University', city: 'Los Angeles', state: 'CA' },
-  { id: 'CUST-011', name: 'Vanderbilt University School of Nursing', type: 'University', city: 'Nashville', state: 'TN' },
-  { id: 'CUST-012', name: 'University of Washington School of Nursing', type: 'University', city: 'Seattle', state: 'WA' },
-  { id: 'CUST-013', name: 'Case Western Reserve Frances Payne Bolton School of Nursing', type: 'University', city: 'Cleveland', state: 'OH' },
-  { id: 'CUST-014', name: 'University of Pittsburgh School of Nursing', type: 'University', city: 'Pittsburgh', state: 'PA' },
-  { id: 'CUST-015', name: 'Columbia University School of Nursing', type: 'University', city: 'New York', state: 'NY' },
-  // Community Colleges
-  { id: 'CUST-016', name: 'College of DuPage Nursing Program', type: 'Community College', city: 'Glen Ellyn', state: 'IL' },
-  { id: 'CUST-017', name: 'Harper College Nursing Program', type: 'Community College', city: 'Palatine', state: 'IL' },
-  { id: 'CUST-018', name: 'Moraine Valley Community College', type: 'Community College', city: 'Palos Hills', state: 'IL' },
-  { id: 'CUST-019', name: 'Oakton College Nursing Program', type: 'Community College', city: 'Des Plaines', state: 'IL' },
-  { id: 'CUST-020', name: 'College of Lake County Nursing', type: 'Community College', city: 'Grayslake', state: 'IL' },
-  { id: 'CUST-021', name: 'Triton College Nursing Program', type: 'Community College', city: 'River Grove', state: 'IL' },
-  { id: 'CUST-022', name: 'Miami Dade College Nursing', type: 'Community College', city: 'Miami', state: 'FL' },
-  { id: 'CUST-023', name: 'Houston Community College Nursing', type: 'Community College', city: 'Houston', state: 'TX' },
-  // Hospital Training Programs
-  { id: 'CUST-024', name: 'Northwestern Memorial Hospital Education', type: 'Hospital Training', city: 'Chicago', state: 'IL' },
-  { id: 'CUST-025', name: 'Advocate Aurora Health Training Center', type: 'Hospital Training', city: 'Downers Grove', state: 'IL' },
-  { id: 'CUST-026', name: 'Mayo Clinic Simulation Center', type: 'Hospital Training', city: 'Rochester', state: 'MN' },
-  { id: 'CUST-027', name: 'Cleveland Clinic Education Institute', type: 'Hospital Training', city: 'Cleveland', state: 'OH' },
-  { id: 'CUST-028', name: 'Massachusetts General Hospital Sim Center', type: 'Hospital Training', city: 'Boston', state: 'MA' },
-  // For-Profit
-  { id: 'CUST-029', name: 'Chamberlain University College of Nursing', type: 'For-Profit', city: 'Addison', state: 'IL' },
-  { id: 'CUST-030', name: 'Herzing University Nursing Program', type: 'For-Profit', city: 'Milwaukee', state: 'WI' },
-  { id: 'CUST-031', name: 'Rasmussen University School of Nursing', type: 'For-Profit', city: 'Bloomington', state: 'MN' },
-  { id: 'CUST-032', name: 'ECPI University Nursing', type: 'For-Profit', city: 'Virginia Beach', state: 'VA' },
+  // --- Universities ---
+  { id: 'CUST-001', name: 'Rush University College of Nursing', type: 'University', city: 'Chicago', state: 'IL', latitude: 41.8745, longitude: -87.6692, region: 'Midwest', totalRevenue: 284600, totalOrders: 18, lastOrderDate: '2026-03-28', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-002', name: 'University of Illinois Chicago College of Nursing', type: 'University', city: 'Chicago', state: 'IL', latitude: 41.8694, longitude: -87.6498, region: 'Midwest', totalRevenue: 198400, totalOrders: 14, lastOrderDate: '2026-03-22', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-003', name: 'Loyola University Chicago Marcella Niehoff School of Nursing', type: 'University', city: 'Maywood', state: 'IL', latitude: 41.8621, longitude: -87.8364, region: 'Midwest', totalRevenue: 156200, totalOrders: 11, lastOrderDate: '2026-03-15', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-004', name: 'NYU Rory Meyers College of Nursing', type: 'University', city: 'New York', state: 'NY', latitude: 40.7391, longitude: -73.9826, region: 'Northeast', totalRevenue: 312800, totalOrders: 16, lastOrderDate: '2026-03-25', assignedRep: 'James Thornton', customerStatus: 'active' },
+  { id: 'CUST-005', name: 'Johns Hopkins School of Nursing', type: 'University', city: 'Baltimore', state: 'MD', latitude: 39.2979, longitude: -76.5927, region: 'Northeast', totalRevenue: 268500, totalOrders: 15, lastOrderDate: '2026-03-20', assignedRep: 'James Thornton', customerStatus: 'active' },
+  { id: 'CUST-006', name: 'University of Pennsylvania School of Nursing', type: 'University', city: 'Philadelphia', state: 'PA', latitude: 39.9503, longitude: -75.1937, region: 'Northeast', totalRevenue: 224100, totalOrders: 13, lastOrderDate: '2026-03-18', assignedRep: 'James Thornton', customerStatus: 'active' },
+  { id: 'CUST-007', name: 'Emory University Nell Hodgson Woodruff School of Nursing', type: 'University', city: 'Atlanta', state: 'GA', latitude: 33.7925, longitude: -84.3232, region: 'Southeast', totalRevenue: 186400, totalOrders: 12, lastOrderDate: '2026-03-26', assignedRep: 'Maria Gonzalez', customerStatus: 'active' },
+  { id: 'CUST-008', name: 'Duke University School of Nursing', type: 'University', city: 'Durham', state: 'NC', latitude: 36.0014, longitude: -78.9382, region: 'Southeast', totalRevenue: 172300, totalOrders: 10, lastOrderDate: '2026-03-12', assignedRep: 'Maria Gonzalez', customerStatus: 'active' },
+  { id: 'CUST-009', name: 'University of Michigan School of Nursing', type: 'University', city: 'Ann Arbor', state: 'MI', latitude: 42.2808, longitude: -83.7430, region: 'Midwest', totalRevenue: 205800, totalOrders: 13, lastOrderDate: '2026-03-29', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-010', name: 'UCLA School of Nursing', type: 'University', city: 'Los Angeles', state: 'CA', latitude: 34.0689, longitude: -118.4452, region: 'West', totalRevenue: 142600, totalOrders: 8, lastOrderDate: '2026-02-14', assignedRep: 'David Kim', customerStatus: 'active' },
+  { id: 'CUST-011', name: 'Vanderbilt University School of Nursing', type: 'University', city: 'Nashville', state: 'TN', latitude: 36.1419, longitude: -86.8024, region: 'Southeast', totalRevenue: 148900, totalOrders: 9, lastOrderDate: '2026-03-08', assignedRep: 'Maria Gonzalez', customerStatus: 'active' },
+  { id: 'CUST-012', name: 'University of Washington School of Nursing', type: 'University', city: 'Seattle', state: 'WA', latitude: 47.6533, longitude: -122.3076, region: 'West', totalRevenue: 118200, totalOrders: 7, lastOrderDate: '2026-01-22', assignedRep: 'David Kim', customerStatus: 'active' },
+  { id: 'CUST-013', name: 'Case Western Reserve Frances Payne Bolton School of Nursing', type: 'University', city: 'Cleveland', state: 'OH', latitude: 41.5085, longitude: -81.6085, region: 'Midwest', totalRevenue: 134500, totalOrders: 9, lastOrderDate: '2026-03-10', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-014', name: 'University of Pittsburgh School of Nursing', type: 'University', city: 'Pittsburgh', state: 'PA', latitude: 40.4432, longitude: -79.9593, region: 'Northeast', totalRevenue: 98600, totalOrders: 6, lastOrderDate: '2026-02-28', assignedRep: 'James Thornton', customerStatus: 'active' },
+  { id: 'CUST-015', name: 'Columbia University School of Nursing', type: 'University', city: 'New York', state: 'NY', latitude: 40.8422, longitude: -73.9418, region: 'Northeast', totalRevenue: 245200, totalOrders: 14, lastOrderDate: '2026-03-27', assignedRep: 'James Thornton', customerStatus: 'active' },
+  // --- Community Colleges ---
+  { id: 'CUST-016', name: 'College of DuPage Nursing Program', type: 'Community College', city: 'Glen Ellyn', state: 'IL', latitude: 41.8578, longitude: -88.0686, region: 'Midwest', totalRevenue: 42800, totalOrders: 8, lastOrderDate: '2026-03-05', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-017', name: 'Harper College Nursing Program', type: 'Community College', city: 'Palatine', state: 'IL', latitude: 42.1028, longitude: -88.0562, region: 'Midwest', totalRevenue: 36200, totalOrders: 7, lastOrderDate: '2026-02-18', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-018', name: 'Moraine Valley Community College', type: 'Community College', city: 'Palos Hills', state: 'IL', latitude: 41.7089, longitude: -87.8189, region: 'Midwest', totalRevenue: 28400, totalOrders: 5, lastOrderDate: '2026-01-15', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-019', name: 'Oakton College Nursing Program', type: 'Community College', city: 'Des Plaines', state: 'IL', latitude: 42.0382, longitude: -87.8771, region: 'Midwest', totalRevenue: 18600, totalOrders: 3, lastOrderDate: '2025-09-20', assignedRep: 'Sarah Mitchell', customerStatus: 'inactive' },
+  { id: 'CUST-020', name: 'College of Lake County Nursing', type: 'Community College', city: 'Grayslake', state: 'IL', latitude: 42.3417, longitude: -88.0415, region: 'Midwest', totalRevenue: 22100, totalOrders: 4, lastOrderDate: '2025-08-12', assignedRep: 'Sarah Mitchell', customerStatus: 'inactive' },
+  { id: 'CUST-021', name: 'Triton College Nursing Program', type: 'Community College', city: 'River Grove', state: 'IL', latitude: 41.9203, longitude: -87.8384, region: 'Midwest', totalRevenue: 14800, totalOrders: 3, lastOrderDate: '2025-07-30', assignedRep: 'Sarah Mitchell', customerStatus: 'inactive' },
+  { id: 'CUST-022', name: 'Miami Dade College Nursing', type: 'Community College', city: 'Miami', state: 'FL', latitude: 25.7589, longitude: -80.3737, region: 'Southeast', totalRevenue: 52400, totalOrders: 6, lastOrderDate: '2026-03-14', assignedRep: 'Maria Gonzalez', customerStatus: 'active' },
+  { id: 'CUST-023', name: 'Houston Community College Nursing', type: 'Community College', city: 'Houston', state: 'TX', latitude: 29.7183, longitude: -95.3444, region: 'Southwest', totalRevenue: 38600, totalOrders: 5, lastOrderDate: '2026-02-20', assignedRep: 'Lisa Chen', customerStatus: 'active' },
+  // --- Hospital Training Programs ---
+  { id: 'CUST-024', name: 'Northwestern Memorial Hospital Education', type: 'Hospital Training', city: 'Chicago', state: 'IL', latitude: 41.8962, longitude: -87.6214, region: 'Midwest', totalRevenue: 318200, totalOrders: 20, lastOrderDate: '2026-03-30', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-025', name: 'Advocate Aurora Health Training Center', type: 'Hospital Training', city: 'Downers Grove', state: 'IL', latitude: 41.7945, longitude: -88.0106, region: 'Midwest', totalRevenue: 142800, totalOrders: 10, lastOrderDate: '2026-03-18', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-026', name: 'Mayo Clinic Simulation Center', type: 'Hospital Training', city: 'Rochester', state: 'MN', latitude: 44.0225, longitude: -92.4668, region: 'Midwest', totalRevenue: 256400, totalOrders: 12, lastOrderDate: '2026-03-22', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-027', name: 'Cleveland Clinic Education Institute', type: 'Hospital Training', city: 'Cleveland', state: 'OH', latitude: 41.5015, longitude: -81.6219, region: 'Midwest', totalRevenue: 168900, totalOrders: 11, lastOrderDate: '2026-02-25', assignedRep: 'Sarah Mitchell', customerStatus: 'active' },
+  { id: 'CUST-028', name: 'Massachusetts General Hospital Sim Center', type: 'Hospital Training', city: 'Boston', state: 'MA', latitude: 42.3626, longitude: -71.0688, region: 'Northeast', totalRevenue: 198700, totalOrders: 12, lastOrderDate: '2026-03-19', assignedRep: 'James Thornton', customerStatus: 'active' },
+  // --- For-Profit ---
+  { id: 'CUST-029', name: 'Chamberlain University College of Nursing', type: 'For-Profit', city: 'Addison', state: 'IL', latitude: 41.9328, longitude: -87.9892, region: 'Midwest', totalRevenue: 86400, totalOrders: 8, lastOrderDate: '2026-03-11', assignedRep: 'Lisa Chen', customerStatus: 'active' },
+  { id: 'CUST-030', name: 'Herzing University Nursing Program', type: 'For-Profit', city: 'Milwaukee', state: 'WI', latitude: 43.0451, longitude: -87.9065, region: 'Midwest', totalRevenue: 48200, totalOrders: 5, lastOrderDate: '2026-02-08', assignedRep: 'Lisa Chen', customerStatus: 'active' },
+  { id: 'CUST-031', name: 'Rasmussen University School of Nursing', type: 'For-Profit', city: 'Bloomington', state: 'MN', latitude: 44.8408, longitude: -93.2983, region: 'Midwest', totalRevenue: 0, totalOrders: 0, lastOrderDate: '', assignedRep: 'Lisa Chen', customerStatus: 'prospect' },
+  { id: 'CUST-032', name: 'ECPI University Nursing', type: 'For-Profit', city: 'Virginia Beach', state: 'VA', latitude: 36.8529, longitude: -75.9780, region: 'Southeast', totalRevenue: 0, totalOrders: 0, lastOrderDate: '', assignedRep: 'Maria Gonzalez', customerStatus: 'prospect' },
+]
+
+// =============================================================================
+// Region Summaries
+// =============================================================================
+
+export interface SeedRegionSummary {
+  region: string
+  customerCount: number
+  activeCustomers: number
+  totalRevenue: number
+  avgOrderValue: number
+  topRep: string
+  growth: number
+}
+
+export const seedRegionSummaries: SeedRegionSummary[] = [
+  { region: 'Midwest', customerCount: 18, activeCustomers: 15, totalRevenue: 1863200, avgOrderValue: 12450, topRep: 'Sarah Mitchell', growth: 18.4 },
+  { region: 'Northeast', customerCount: 7, activeCustomers: 7, totalRevenue: 1347900, avgOrderValue: 14820, topRep: 'James Thornton', growth: 12.1 },
+  { region: 'Southeast', customerCount: 5, activeCustomers: 4, totalRevenue: 560000, avgOrderValue: 10180, topRep: 'Maria Gonzalez', growth: 8.6 },
+  { region: 'West', customerCount: 2, activeCustomers: 2, totalRevenue: 260800, avgOrderValue: 11200, topRep: 'David Kim', growth: -3.2 },
+  { region: 'Southwest', customerCount: 1, activeCustomers: 1, totalRevenue: 38600, avgOrderValue: 7720, topRep: 'Lisa Chen', growth: 24.5 },
 ]
 
 // =============================================================================

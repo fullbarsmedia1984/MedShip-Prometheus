@@ -7,6 +7,7 @@ import { SyncStatusCard } from '@/components/dashboard/SyncStatusCard'
 import { SalesLeaderboard } from '@/components/dashboard/SalesLeaderboard'
 import { SalesActivityFeed } from '@/components/dashboard/SalesActivityFeed'
 import { PipelineSnapshot } from '@/components/dashboard/PipelineSnapshot'
+import { ClientMapPreview } from '@/components/dashboard/ClientMapPreview'
 import { RevenueChart } from '@/components/charts/RevenueChart'
 import { CategoryPieChart } from '@/components/charts/CategoryPieChart'
 import { Header } from '@/components/layout/Header'
@@ -40,9 +41,11 @@ import {
   getSalesActivity,
   getPipelineSnapshot,
   getSalesKpis,
+  getCustomersWithLocations,
+  getRegionSummaries,
 } from '@/lib/data'
 import type { RevenueMetrics, SalesKpis } from '@/lib/data'
-import type { MonthlyRevenue, CategorySales, Order, Product, IntegrationStatusData, SeedSalesRep, SeedSalesActivity, SeedPipelineStage } from '@/lib/seed-data'
+import type { MonthlyRevenue, CategorySales, Order, Product, IntegrationStatusData, SeedSalesRep, SeedSalesActivity, SeedPipelineStage, Customer, SeedRegionSummary } from '@/lib/seed-data'
 import type { AutomationType } from '@/types'
 
 function formatDate(dateStr: string): string {
@@ -66,6 +69,8 @@ export default function DashboardPage() {
   const [leaderboard, setLeaderboard] = useState<SeedSalesRep[]>([])
   const [activities, setActivities] = useState<SeedSalesActivity[]>([])
   const [pipeline, setPipeline] = useState<SeedPipelineStage[]>([])
+  const [mapCustomers, setMapCustomers] = useState<Customer[]>([])
+  const [regionSummaries, setRegionSummaries] = useState<SeedRegionSummary[]>([])
 
   useEffect(() => {
     async function loadData() {
@@ -81,6 +86,8 @@ export default function DashboardPage() {
           leaderboardData,
           activitiesData,
           pipelineData,
+          customersData,
+          regionsData,
         ] = await Promise.all([
           getRevenueMetrics(),
           getSalesKpis(),
@@ -92,6 +99,8 @@ export default function DashboardPage() {
           getSalesLeaderboard(),
           getSalesActivity(10),
           getPipelineSnapshot(),
+          getCustomersWithLocations(),
+          getRegionSummaries(),
         ])
 
         setMetrics(metricsData)
@@ -104,6 +113,8 @@ export default function DashboardPage() {
         setLeaderboard(leaderboardData)
         setActivities(activitiesData)
         setPipeline(pipelineData)
+        setMapCustomers(customersData)
+        setRegionSummaries(regionsData)
       } catch (error) {
         console.error('Failed to load dashboard data:', error)
       } finally {
@@ -196,7 +207,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 4 — Sales Activity Feed + Pipeline Snapshot */}
+        {/* Row 4 — Client Map Preview */}
+        <ClientMapPreview customers={mapCustomers} regionSummaries={regionSummaries} />
+
+        {/* Row 5 — Sales Activity Feed + Pipeline Snapshot */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-7">
             <SalesActivityFeed activities={activities} reps={leaderboard} />

@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Package,
   BarChart3,
+  MapPin,
   RefreshCw,
   List,
   AlertTriangle,
@@ -25,6 +26,7 @@ const mainNav = [
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
+  { name: 'Territory', href: '/dashboard/territory', icon: MapPin },
 ]
 
 const opsNav = [

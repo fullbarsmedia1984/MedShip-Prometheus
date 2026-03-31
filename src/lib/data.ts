@@ -20,6 +20,7 @@ import {
   seedQuotes,
   seedMonthlyRepRevenue,
   seedPipelineByRep,
+  seedRegionSummaries,
 } from '@/lib/seed-data'
 import type {
   Product,
@@ -35,6 +36,7 @@ import type {
   SeedQuote,
   SeedMonthlyRepRevenue,
   SeedPipelineByRep,
+  SeedRegionSummary,
 } from '@/lib/seed-data'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
 
@@ -451,5 +453,41 @@ export async function getSalesKpis(): Promise<SalesKpis> {
     dealsClosedMTD: reps.reduce((s, r) => s + r.dealsClosed, 0),
     avgDaysToClose: Math.round(reps.reduce((s, r) => s + r.avgDaysToClose, 0) / reps.length),
     pipelineValue: reps.reduce((s, r) => s + r.pipelineValue, 0),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Territory / Geographic
+// ---------------------------------------------------------------------------
+
+export async function getCustomersWithLocations(): Promise<Customer[]> {
+  return seedCustomers
+}
+
+export async function getRegionSummaries(): Promise<SeedRegionSummary[]> {
+  return seedRegionSummaries
+}
+
+export async function getCustomersByRegion(region: string): Promise<Customer[]> {
+  return seedCustomers.filter((c) => c.region === region)
+}
+
+export interface ClientMapStats {
+  totalClients: number
+  activeClients: number
+  statesCovered: number
+  avgRevenuePerClient: number
+}
+
+export async function getClientMapStats(): Promise<ClientMapStats> {
+  const customers = seedCustomers
+  const active = customers.filter((c) => c.customerStatus === 'active')
+  const states = new Set(customers.map((c) => c.state))
+  const totalRevenue = active.reduce((s, c) => s + c.totalRevenue, 0)
+  return {
+    totalClients: customers.length,
+    activeClients: active.length,
+    statesCovered: states.size,
+    avgRevenuePerClient: active.length > 0 ? Math.round(totalRevenue / active.length) : 0,
   }
 }
