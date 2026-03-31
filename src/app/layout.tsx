@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { Poppins, Geist_Mono } from 'next/font/google'
-import { ThemeProvider } from 'next-themes'
-import { Toaster } from '@/components/ui/sonner'
+import { Providers } from '@/components/providers'
 import './globals.css'
 
 const poppins = Poppins({
@@ -32,10 +31,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col font-sans">
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        <Providers>
           {children}
-          <Toaster position="top-right" />
-        </ThemeProvider>
+        </Providers>
       </body>
     </html>
   )
