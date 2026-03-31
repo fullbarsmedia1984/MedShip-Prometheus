@@ -22,6 +22,7 @@ import {
   Clock,
   TrendingUp,
   Award,
+  Phone,
   ArrowUpDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -31,9 +32,17 @@ import {
   getMonthlyRepRevenue,
   getPipelineByRep,
   getQuotes,
+  getProfileCalls,
+  getProfileCallMetrics,
+  getWeeklyCallVolume,
+  getCallOutcomeBreakdown,
 } from '@/lib/data'
 import type { SalesKpis } from '@/lib/data'
-import type { SeedSalesRep, SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote } from '@/lib/seed-data'
+import type { SeedSalesRep, SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
+import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
+import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
+import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
+import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
 
 type SortKey = 'revenueMTD' | 'revenueQTD' | 'revenueYTD' | 'dealsClosed' | 'dealsLost' | 'winRate' | 'quotesSent' | 'avgDealSize' | 'avgDaysToClose' | 'pipelineValue'
 
@@ -49,24 +58,36 @@ export default function SalesPage() {
   const [monthlyRevenue, setMonthlyRevenue] = useState<SeedMonthlyRepRevenue[]>([])
   const [pipelineByRep, setPipelineByRep] = useState<SeedPipelineByRep[]>([])
   const [quotes, setQuotes] = useState<SeedQuote[]>([])
+  const [profileCalls, setProfileCalls] = useState<SeedProfileCall[]>([])
+  const [weeklyVolume, setWeeklyVolume] = useState<SeedWeeklyCallVolume[]>([])
+  const [outcomeBreakdown, setOutcomeBreakdown] = useState<Array<{ outcome: string; count: number; percentage: number; color: string }>>([])
+  const [profileMetrics, setProfileMetrics] = useState<{ totalMTD: number; totalLastMonth: number; conversionRate: number; avgDuration: number; byRep: Array<{ repName: string; calls: number; converted: number; conversionRate: number; avgDuration: number }> } | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('revenueMTD')
   const [sortAsc, setSortAsc] = useState(false)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [kpisData, repsData, revenueData, pipelineData, quotesData] = await Promise.all([
+        const [kpisData, repsData, revenueData, pipelineData, quotesData, callsData, volumeData, outcomesData, metricsData] = await Promise.all([
           getSalesKpis(),
           getEnhancedSalesReps(),
           getMonthlyRepRevenue(),
           getPipelineByRep(),
           getQuotes({ pageSize: 40 }),
+          getProfileCalls({ pageSize: 50 }),
+          getWeeklyCallVolume(),
+          getCallOutcomeBreakdown(),
+          getProfileCallMetrics(),
         ])
         setKpis(kpisData)
         setReps(repsData)
         setMonthlyRevenue(revenueData)
         setPipelineByRep(pipelineData)
         setQuotes(quotesData.data)
+        setProfileCalls(callsData.data)
+        setWeeklyVolume(volumeData)
+        setOutcomeBreakdown(outcomesData)
+        setProfileMetrics(metricsData)
       } catch (error) {
         console.error('Failed to load sales data:', error)
       } finally {
@@ -163,13 +184,14 @@ export default function SalesPage() {
             iconColor="text-medship-danger"
           />
           <KpiCard
-            title="Avg Days to Close"
-            value={`${kpis.avgDaysToClose} days`}
-            change={-3.2}
+            title="Profile Calls (MTD)"
+            value={profileMetrics?.totalMTD ?? 0}
+            change={profileMetrics && profileMetrics.totalLastMonth > 0
+              ? Math.round(((profileMetrics.totalMTD - profileMetrics.totalLastMonth) / profileMetrics.totalLastMonth) * 1000) / 10
+              : 0}
             changeLabel="vs last month"
-            icon={Clock}
-            iconColor="text-medship-warning"
-            invertChange
+            icon={Phone}
+            iconColor="text-medship-success"
           />
         </div>
 
@@ -237,11 +259,28 @@ export default function SalesPage() {
           </CardContent>
         </Card>
 
+        {/* Profile Call Leaderboard */}
+        {profileMetrics && (
+          <ProfileCallLeaderboard reps={reps} metrics={profileMetrics} />
+        )}
+
         {/* Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <RevenueByRepChart data={monthlyRevenue} />
           <PipelineByRepChart data={pipelineByRep} />
         </div>
+
+        {/* Profile Call Activity Section */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-7">
+            <WeeklyCallVolumeChart data={weeklyVolume} reps={reps} />
+          </div>
+          <div className="lg:col-span-5">
+            <CallOutcomeChart data={outcomeBreakdown} />
+          </div>
+        </div>
+
+        <ProfileCallTable calls={profileCalls} reps={reps} />
 
         {/* Quote Activity */}
         <Card>
