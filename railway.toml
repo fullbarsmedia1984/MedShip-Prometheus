@@ -3,6 +3,8 @@ builder = "nixpacks"
 
 [build.env]
 NIXPACKS_NODE_VERSION = "20"
+NIXPACKS_NO_CACHE = "1"
+NODE_ENV = "production"
 
 [deploy]
 startCommand = "next start -p ${PORT:-3000}"
