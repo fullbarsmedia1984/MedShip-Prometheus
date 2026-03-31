@@ -1,0 +1,6 @@
+{
+  "$schema": "https://inngest.com/schemas/inngest.json",
+  "name": "medship-prometheus",
+  "eventKey": "${INNGEST_EVENT_KEY}",
+  "signingKey": "${INNGEST_SIGNING_KEY}"
+}
