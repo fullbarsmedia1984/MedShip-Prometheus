@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  Save,
 } from 'lucide-react'
 import { getConnectionConfigs } from '@/lib/data'
 import type { ConnectionConfig } from '@/types'
@@ -79,6 +80,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [connections, setConnections] = useState<ConnectionConfig[]>([])
   const [testing, setTesting] = useState<string | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [formValues, setFormValues] = useState<Record<string, Record<string, string>>>({})
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
   const [resetConfirm, setResetConfirm] = useState('')
 
@@ -99,14 +102,85 @@ export default function SettingsPage() {
 
   const testConnection = async (systemName: string) => {
     setTesting(systemName)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    const conn = connections.find((c) => c.system_name === systemName)
-    if (conn?.is_active) {
-      toast.success(`${systemName} connection successful`)
-    } else {
-      toast.error(`${systemName} connection failed`)
+    try {
+      const res = await fetch(`/api/health/${systemName}`)
+      const data = await res.json()
+      if (data.connected) {
+        toast.success(`${systemName} connection successful`, {
+          description: data.orgId
+            ? `Org ID: ${data.orgId}`
+            : `Responded at ${new Date(data.timestamp).toLocaleTimeString()}`,
+        })
+      } else {
+        const errorMsg = data.error || 'Unable to connect'
+        if (errorMsg.includes('fetch failed')) {
+          toast.error(`${systemName} — network error`, {
+            description: 'Could not reach the service. Check that credentials are set in .env.local and restart the server.',
+          })
+        } else {
+          toast.error(`${systemName} connection failed`, {
+            description: errorMsg,
+          })
+        }
+      }
+    } catch {
+      toast.error(`${systemName} connection test failed`, {
+        description: 'Could not reach the health endpoint',
+      })
     }
     setTesting(null)
+  }
+
+  const saveCredentials = async (systemName: string) => {
+    setSaving(systemName)
+    const values = formValues[systemName]
+    if (!values || Object.values(values).every((v) => !v.trim())) {
+      toast.error('No credentials to save', {
+        description: 'Enter at least one field before saving',
+      })
+      setSaving(null)
+      return
+    }
+
+    try {
+      const res = await fetch('/api/settings/connections', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system: systemName, config: values }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`${systemName} credentials saved`, {
+          description: `${data.fieldsUpdated} field(s) saved. Click "Test Connection" to verify.`,
+        })
+      } else {
+        const detail = data.detail || data.error || 'Unknown error'
+        if (detail.includes('fetch failed')) {
+          toast.error(`Cannot connect to database`, {
+            description: 'Supabase is unreachable from the server. Credentials must be set in .env.local for now.',
+          })
+        } else {
+          toast.error(`Failed to save ${systemName} credentials`, {
+            description: detail,
+          })
+        }
+      }
+    } catch {
+      toast.error(`Failed to save ${systemName} credentials`, {
+        description: 'Could not reach the settings API',
+      })
+    }
+    setSaving(null)
+  }
+
+  const updateField = (systemName: string, fieldName: string, value: string) => {
+    setFormValues((prev) => ({
+      ...prev,
+      [systemName]: {
+        ...prev[systemName],
+        [fieldName]: value,
+      },
+    }))
   }
 
   const togglePasswordVisibility = (fieldKey: string) => {
@@ -186,21 +260,36 @@ export default function SettingsPage() {
                           }
                         />
                         {!isPhase2 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => testConnection(system.key)}
-                            disabled={testing === system.key}
-                          >
-                            <RefreshCw
-                              className={cn(
-                                'mr-1 h-4 w-4',
-                                testing === system.key && 'animate-spin'
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => saveCredentials(system.key)}
+                              disabled={saving === system.key}
+                            >
+                              {saving === system.key ? (
+                                <RefreshCw className="mr-1 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Save className="mr-1 h-4 w-4" />
                               )}
-                            />
-                            <span className="hidden sm:inline">Test Connection</span>
-                            <span className="sm:hidden">Test</span>
-                          </Button>
+                              Save
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => testConnection(system.key)}
+                              disabled={testing === system.key}
+                            >
+                              <RefreshCw
+                                className={cn(
+                                  'mr-1 h-4 w-4',
+                                  testing === system.key && 'animate-spin'
+                                )}
+                              />
+                              <span className="hidden sm:inline">Test Connection</span>
+                              <span className="sm:hidden">Test</span>
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -223,6 +312,8 @@ export default function SettingsPage() {
                                 placeholder={field.placeholder}
                                 disabled={isPhase2}
                                 className="pr-10"
+                                value={formValues[system.key]?.[field.name] ?? ''}
+                                onChange={(e) => updateField(system.key, field.name, e.target.value)}
                               />
                               {isPassword && !isPhase2 && (
                                 <button

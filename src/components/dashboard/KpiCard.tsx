@@ -56,7 +56,7 @@ export function KpiCard({
   return (
     <div className="overflow-hidden rounded-[0.625rem] border border-[#E6E6E6] bg-card shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)] dark:border-[rgba(255,255,255,0.1)] dark:shadow-none">
       <div className="flex items-center gap-4 px-5 py-5">
-        {/* Icon — YashAdmin's widget-stat media: 5.3125rem round container */}
+        {/* Icon */}
         <div
           className={cn(
             'flex h-[3.75rem] w-[3.75rem] shrink-0 items-center justify-center rounded-full',

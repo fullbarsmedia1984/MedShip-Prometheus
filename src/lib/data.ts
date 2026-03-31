@@ -21,6 +21,8 @@ import {
   seedMonthlyRepRevenue,
   seedPipelineByRep,
   seedRegionSummaries,
+  seedProfileCalls,
+  seedWeeklyCallVolume,
 } from '@/lib/seed-data'
 import type {
   Product,
@@ -37,6 +39,8 @@ import type {
   SeedMonthlyRepRevenue,
   SeedPipelineByRep,
   SeedRegionSummary,
+  SeedProfileCall,
+  SeedWeeklyCallVolume,
 } from '@/lib/seed-data'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
 
@@ -490,4 +494,137 @@ export async function getClientMapStats(): Promise<ClientMapStats> {
     statesCovered: states.size,
     avgRevenuePerClient: active.length > 0 ? Math.round(totalRevenue / active.length) : 0,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Profile Calls
+// ---------------------------------------------------------------------------
+
+export interface ProfileCallFilters {
+  repId?: string
+  startDate?: string
+  endDate?: string
+  outcome?: string
+  convertedOnly?: boolean
+  search?: string
+  limit?: number
+  page?: number
+  pageSize?: number
+}
+
+// TODO: Replace with SF query via getProfileCalls()
+export async function getProfileCalls(filters: ProfileCallFilters = {}): Promise<PaginatedResult<SeedProfileCall>> {
+  let items = [...seedProfileCalls]
+
+  if (filters.repId && filters.repId !== 'all') {
+    items = items.filter((c) => c.repId === filters.repId)
+  }
+  if (filters.startDate) {
+    items = items.filter((c) => c.activityDate >= filters.startDate!)
+  }
+  if (filters.endDate) {
+    items = items.filter((c) => c.activityDate <= filters.endDate!)
+  }
+  if (filters.outcome && filters.outcome !== 'all') {
+    items = items.filter((c) => c.callOutcome === filters.outcome)
+  }
+  if (filters.convertedOnly) {
+    items = items.filter((c) => c.convertedToOpp)
+  }
+  if (filters.search) {
+    const q = filters.search.toLowerCase()
+    items = items.filter(
+      (c) =>
+        c.accountName.toLowerCase().includes(q) ||
+        c.contactName.toLowerCase().includes(q)
+    )
+  }
+
+  items.sort((a, b) => b.activityDate.localeCompare(a.activityDate))
+  return paginate(items, filters.page, filters.pageSize)
+}
+
+// TODO: Replace with SF query via getProfileCallMetrics()
+export async function getProfileCallMetrics(): Promise<{
+  totalMTD: number
+  totalLastMonth: number
+  conversionRate: number
+  avgDuration: number
+  byRep: Array<{
+    repName: string
+    calls: number
+    converted: number
+    conversionRate: number
+    avgDuration: number
+  }>
+}> {
+  const calls = seedProfileCalls
+  const now = new Date('2026-03-31')
+  const mtdCalls = calls.filter((c) => c.activityDate >= '2026-03-01')
+  const lastMonthCalls = calls.filter((c) => c.activityDate >= '2026-02-01' && c.activityDate < '2026-03-01')
+  const converted = mtdCalls.filter((c) => c.convertedToOpp)
+  const withDuration = mtdCalls.filter((c) => c.callDurationMinutes > 0)
+
+  const byRepMap = new Map<string, { calls: number; converted: number; totalDuration: number }>()
+  for (const call of mtdCalls) {
+    const existing = byRepMap.get(call.repName) ?? { calls: 0, converted: 0, totalDuration: 0 }
+    existing.calls++
+    if (call.convertedToOpp) existing.converted++
+    existing.totalDuration += call.callDurationMinutes
+    byRepMap.set(call.repName, existing)
+  }
+
+  return {
+    totalMTD: mtdCalls.length,
+    totalLastMonth: lastMonthCalls.length,
+    conversionRate: mtdCalls.length > 0 ? Math.round((converted.length / mtdCalls.length) * 1000) / 10 : 0,
+    avgDuration: withDuration.length > 0 ? Math.round(withDuration.reduce((s, c) => s + c.callDurationMinutes, 0) / withDuration.length) : 0,
+    byRep: Array.from(byRepMap.entries()).map(([repName, data]) => ({
+      repName,
+      calls: data.calls,
+      converted: data.converted,
+      conversionRate: data.calls > 0 ? Math.round((data.converted / data.calls) * 1000) / 10 : 0,
+      avgDuration: data.calls > 0 ? Math.round(data.totalDuration / data.calls) : 0,
+    })),
+  }
+}
+
+// TODO: Replace with SF query via getProfileCalls()
+export async function getWeeklyCallVolume(): Promise<SeedWeeklyCallVolume[]> {
+  return seedWeeklyCallVolume
+}
+
+// TODO: Replace with SF query via getProfileCalls()
+export async function getCallOutcomeBreakdown(): Promise<Array<{
+  outcome: string
+  count: number
+  percentage: number
+  color: string
+}>> {
+  const calls = seedProfileCalls.filter((c) => c.activityDate >= '2026-03-01')
+  const total = calls.length
+
+  const outcomeColors: Record<string, string> = {
+    'Interested - Next Steps': '#3A9B94',
+    'Scheduled Demo': '#452B90',
+    'Quote Requested': '#22C55E',
+    'Needs Follow-Up': '#F8B940',
+    'Not Interested': '#FF5E5E',
+    'No Answer': '#94A3B8',
+    'Left Voicemail': '#CBD5E1',
+  }
+
+  const counts = new Map<string, number>()
+  for (const call of calls) {
+    counts.set(call.callOutcome, (counts.get(call.callOutcome) ?? 0) + 1)
+  }
+
+  return Array.from(counts.entries())
+    .map(([outcome, count]) => ({
+      outcome,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 1000) / 10 : 0,
+      color: outcomeColors[outcome] ?? '#94A3B8',
+    }))
+    .sort((a, b) => b.count - a.count)
 }

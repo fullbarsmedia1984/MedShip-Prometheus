@@ -771,6 +771,8 @@ export interface SeedSalesRep {
   dealsClosed: number
   dealsLost: number
   quotesSent: number
+  profileCalls: number
+  profileCallsChange: number
   avgDealSize: number
   avgDaysToClose: number
   pipelineValue: number
@@ -782,31 +784,31 @@ export const seedEnhancedSalesReps: SeedSalesRep[] = [
   {
     id: 'REP-001', name: 'Sarah Mitchell', email: 'sarah.mitchell@medshipllc.com', region: 'Midwest',
     color: '#452B90', revenueMTD: 167420, revenueQTD: 412800, revenueYTD: 1284500,
-    dealsClosed: 14, dealsLost: 3, quotesSent: 28, avgDealSize: 11958, avgDaysToClose: 18,
+    dealsClosed: 14, dealsLost: 3, quotesSent: 28, profileCalls: 26, profileCallsChange: 30.0, avgDealSize: 11958, avgDaysToClose: 18,
     pipelineValue: 245000, winRate: 82.4, activityScore: 'hot',
   },
   {
     id: 'REP-002', name: 'James Thornton', email: 'james.thornton@medshipllc.com', region: 'Northeast',
     color: '#3A9B94', revenueMTD: 89200, revenueQTD: 248600, revenueYTD: 876300,
-    dealsClosed: 9, dealsLost: 4, quotesSent: 19, avgDealSize: 9911, avgDaysToClose: 22,
+    dealsClosed: 9, dealsLost: 4, quotesSent: 19, profileCalls: 15, profileCallsChange: 15.4, avgDealSize: 9911, avgDaysToClose: 22,
     pipelineValue: 178000, winRate: 69.2, activityScore: 'active',
   },
   {
     id: 'REP-003', name: 'Maria Gonzalez', email: 'maria.gonzalez@medshipllc.com', region: 'Southeast',
     color: '#F8B940', revenueMTD: 72850, revenueQTD: 198400, revenueYTD: 724100,
-    dealsClosed: 7, dealsLost: 5, quotesSent: 16, avgDealSize: 10407, avgDaysToClose: 25,
+    dealsClosed: 7, dealsLost: 5, quotesSent: 16, profileCalls: 14, profileCallsChange: 16.7, avgDealSize: 10407, avgDaysToClose: 25,
     pipelineValue: 132000, winRate: 58.3, activityScore: 'active',
   },
   {
     id: 'REP-004', name: 'David Kim', email: 'david.kim@medshipllc.com', region: 'West',
     color: '#58BAD7', revenueMTD: 31400, revenueQTD: 85200, revenueYTD: 312600,
-    dealsClosed: 3, dealsLost: 8, quotesSent: 9, avgDealSize: 10467, avgDaysToClose: 34,
+    dealsClosed: 3, dealsLost: 8, quotesSent: 9, profileCalls: 7, profileCallsChange: -30.0, avgDealSize: 10467, avgDaysToClose: 34,
     pipelineValue: 64000, winRate: 27.3, activityScore: 'cold',
   },
   {
     id: 'REP-005', name: 'Lisa Chen', email: 'lisa.chen@medshipllc.com', region: 'South Central',
     color: '#FF9F00', revenueMTD: 42600, revenueQTD: 42600, revenueYTD: 42600,
-    dealsClosed: 4, dealsLost: 1, quotesSent: 22, avgDealSize: 10650, avgDaysToClose: 15,
+    dealsClosed: 4, dealsLost: 1, quotesSent: 22, profileCalls: 11, profileCallsChange: 0, avgDealSize: 10650, avgDaysToClose: 15,
     pipelineValue: 198000, winRate: 80.0, activityScore: 'hot',
   },
 ]
@@ -839,23 +841,35 @@ export interface SeedSalesActivity {
   id: string
   repId: string
   repName: string
-  type: 'deal_closed' | 'quote_sent' | 'opportunity_created' | 'deal_lost'
+  type: 'deal_closed' | 'quote_sent' | 'opportunity_created' | 'deal_lost' | 'profile_call'
   customerName: string
   amount: number
   description: string
   timestamp: string
+  contactName?: string
+  callOutcome?: string
+  productsDiscussed?: string[]
 }
 
 export const seedSalesActivities: SeedSalesActivity[] = [
   { id: 'ACT-001', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'deal_closed', customerName: 'Rush University College of Nursing', amount: 72000, description: 'Closed deal with Rush University College of Nursing for $72,000', timestamp: '2026-03-31T10:45:00Z' },
+  { id: 'ACT-P01', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'profile_call', customerName: 'Mayo Clinic Simulation Center', amount: 0, description: 'Completed profile call with Dr. Patricia Hammond at Mayo Clinic Simulation Center', timestamp: '2026-03-31T10:30:00Z', contactName: 'Dr. Patricia Hammond', callOutcome: 'Quote Requested', productsDiscussed: ['Pyxis MedStation', 'Simulation Manikins'] },
   { id: 'ACT-002', repId: 'REP-005', repName: 'Lisa Chen', type: 'quote_sent', customerName: 'Houston Community College Nursing', amount: 18500, description: 'Sent quote to Houston Community College Nursing for $18,500', timestamp: '2026-03-31T10:20:00Z' },
+  { id: 'ACT-P02', repId: 'REP-005', repName: 'Lisa Chen', type: 'profile_call', customerName: 'Rasmussen University School of Nursing', amount: 0, description: 'Completed profile call with Dean Robert Chen at Rasmussen University', timestamp: '2026-03-31T09:45:00Z', contactName: 'Dean Robert Chen', callOutcome: 'Interested - Next Steps', productsDiscussed: ['Skills Lab Kits', 'IV Trainers'] },
   { id: 'ACT-003', repId: 'REP-002', repName: 'James Thornton', type: 'opportunity_created', customerName: 'Columbia University School of Nursing', amount: 45000, description: 'Created new opportunity: Columbia University SimLab Expansion', timestamp: '2026-03-31T09:30:00Z' },
+  { id: 'ACT-P03', repId: 'REP-002', repName: 'James Thornton', type: 'profile_call', customerName: 'Johns Hopkins School of Nursing', amount: 0, description: 'Completed profile call with Prof. Linda Martinez at Johns Hopkins', timestamp: '2026-03-31T09:00:00Z', contactName: 'Prof. Linda Martinez', callOutcome: 'Scheduled Demo', productsDiscussed: ['Simulation Manikins', 'Hospital Beds'] },
   { id: 'ACT-004', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'quote_sent', customerName: 'University of Michigan School of Nursing', amount: 28000, description: 'Sent quote to University of Michigan School of Nursing for $28,000', timestamp: '2026-03-31T08:15:00Z' },
+  { id: 'ACT-P04', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'profile_call', customerName: 'Duke University School of Nursing', amount: 0, description: 'Completed profile call with Dr. Angela Foster at Duke University', timestamp: '2026-03-31T08:00:00Z', contactName: 'Dr. Angela Foster', callOutcome: 'Needs Follow-Up', productsDiscussed: ['Pyxis MedStation'] },
   { id: 'ACT-005', repId: 'REP-004', repName: 'David Kim', type: 'deal_lost', customerName: 'UCLA School of Nursing', amount: 38000, description: 'Lost deal: UCLA School of Nursing — went with competitor pricing', timestamp: '2026-03-31T07:50:00Z' },
+  { id: 'ACT-P05', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'profile_call', customerName: 'Advocate Aurora Health Training Center', amount: 0, description: 'Completed profile call with Karen Williams at Advocate Aurora', timestamp: '2026-03-30T17:00:00Z', contactName: 'Karen Williams', callOutcome: 'Interested - Next Steps', productsDiscussed: ['Simulation Manikins', 'Vital Signs Monitors', 'Consumables'] },
   { id: 'ACT-006', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'deal_closed', customerName: 'Emory University Nell Hodgson Woodruff School of Nursing', amount: 32000, description: 'Closed deal with Emory University for $32,000', timestamp: '2026-03-30T16:30:00Z' },
+  { id: 'ACT-P06', repId: 'REP-004', repName: 'David Kim', type: 'profile_call', customerName: 'UCLA School of Nursing', amount: 0, description: 'Completed profile call with Prof. Steven Park at UCLA', timestamp: '2026-03-30T16:00:00Z', contactName: 'Prof. Steven Park', callOutcome: 'Left Voicemail', productsDiscussed: ['Hospital Beds'] },
   { id: 'ACT-007', repId: 'REP-005', repName: 'Lisa Chen', type: 'opportunity_created', customerName: 'Rasmussen University School of Nursing', amount: 22000, description: 'Created new opportunity: Rasmussen Nursing Kit Bulk Order', timestamp: '2026-03-30T15:45:00Z' },
+  { id: 'ACT-P07', repId: 'REP-005', repName: 'Lisa Chen', type: 'profile_call', customerName: 'Chamberlain University College of Nursing', amount: 0, description: 'Completed profile call with Dr. Michelle Torres at Chamberlain', timestamp: '2026-03-30T15:15:00Z', contactName: 'Dr. Michelle Torres', callOutcome: 'Interested - Next Steps', productsDiscussed: ['Skills Lab Kits', 'Consumables'] },
   { id: 'ACT-008', repId: 'REP-002', repName: 'James Thornton', type: 'deal_closed', customerName: 'NYU Rory Meyers College of Nursing', amount: 48000, description: 'Closed deal with NYU Rory Meyers for $48,000', timestamp: '2026-03-30T14:20:00Z' },
+  { id: 'ACT-P08', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'profile_call', customerName: 'University of Illinois Chicago College of Nursing', amount: 0, description: 'Completed profile call with Dr. James Okafor at UIC', timestamp: '2026-03-30T14:00:00Z', contactName: 'Dr. James Okafor', callOutcome: 'Quote Requested', productsDiscussed: ['Pyxis MedStation', 'Hospital Beds'] },
   { id: 'ACT-009', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'quote_sent', customerName: 'Northwestern Memorial Hospital Education', amount: 65000, description: 'Sent quote to Northwestern Memorial for $65,000', timestamp: '2026-03-30T13:00:00Z' },
+  { id: 'ACT-P09', repId: 'REP-002', repName: 'James Thornton', type: 'profile_call', customerName: 'Massachusetts General Hospital Sim Center', amount: 0, description: 'Completed profile call with Dr. Nancy Sullivan at Mass General', timestamp: '2026-03-30T12:30:00Z', contactName: 'Dr. Nancy Sullivan', callOutcome: 'Needs Follow-Up', productsDiscussed: ['Simulation Manikins'] },
   { id: 'ACT-010', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'quote_sent', customerName: 'Duke University School of Nursing', amount: 28500, description: 'Sent quote to Duke University for $28,500', timestamp: '2026-03-30T11:45:00Z' },
   { id: 'ACT-011', repId: 'REP-004', repName: 'David Kim', type: 'deal_lost', customerName: 'University of Washington School of Nursing', amount: 22000, description: 'Lost deal: UW Nursing — budget frozen for Q1', timestamp: '2026-03-30T10:30:00Z' },
   { id: 'ACT-012', repId: 'REP-005', repName: 'Lisa Chen', type: 'deal_closed', customerName: 'ECPI University Nursing', amount: 15200, description: 'Closed deal with ECPI University for $15,200', timestamp: '2026-03-30T09:15:00Z' },
@@ -1008,4 +1022,315 @@ export const seedConnectionConfigs: ConnectionConfig[] = [
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-03-15T14:00:00Z',
   },
+]
+
+// =============================================================================
+// 17. Profile Call Data
+// =============================================================================
+
+export type ProfileCallType = 'Initial Discovery' | 'Follow-Up' | 'Product Demo' | 'Needs Assessment' | 'Budget Discussion' | 'Contract Review'
+export type ProfileCallOutcome = 'Interested - Next Steps' | 'Needs Follow-Up' | 'Not Interested' | 'No Answer' | 'Left Voicemail' | 'Scheduled Demo' | 'Quote Requested'
+
+export interface SeedProfileCall {
+  id: string
+  subject: string
+  repId: string
+  repName: string
+  accountName: string
+  contactName: string
+  activityDate: string
+  callType: ProfileCallType
+  callOutcome: ProfileCallOutcome
+  productsDiscussed: string[]
+  programSize: string
+  currentSupplier: string | null
+  budgetAvailable: number | null
+  budgetTimeframe: string | null
+  followUpDate: string | null
+  convertedToOpp: boolean
+  relatedOpportunityName: string | null
+  callDurationMinutes: number
+  callNotesSummary: string
+  competitorIntel: string | null
+}
+
+export interface SeedWeeklyCallVolume {
+  weekStart: string
+  [repName: string]: number | string
+}
+
+const profileCallProducts = ['Pyxis MedStation', 'Simulation Manikins', 'Hospital Beds', 'IV Trainers', 'Skills Lab Kits', 'Vital Signs Monitors', 'Consumables', 'Other']
+const programSizes = ['Small (<50 students)', 'Medium (50-150 students)', 'Large (150-500 students)', 'Enterprise (500+ students)']
+const budgetTimeframes = ['This Quarter', 'Next Quarter', 'This Fiscal Year', 'Next Fiscal Year', 'Unknown']
+const competitors = ['Pocket Nurse', 'Laerdal direct sales', 'Local distributor', 'State contract vendor']
+
+const profileCallContacts = [
+  'Dr. Patricia Hammond', 'Prof. Linda Martinez', 'Dean Robert Chen', 'Dr. Angela Foster',
+  'Karen Williams, RN', 'Dr. James Okafor', 'Prof. Susan Reilly', 'Dr. Michelle Torres',
+  'Dr. Nancy Sullivan', 'Prof. Steven Park', 'Lisa Nakamura, MSN', 'Dr. Barbara Klein',
+  'Dean Cheryl Washington', 'Prof. Thomas Reeder', 'Dr. Priya Sharma', 'Janet Cooper, RN',
+  'Dr. David Moreno', 'Prof. Amy Richardson', 'Dr. Kwame Asante', 'Rachel Goldstein, MSN',
+  'Dr. Catherine Byrne', 'Prof. Michael Stein', 'Dr. Yolanda Cruz', 'Dean Frank Romano',
+  'Dr. Heather Banks', 'Prof. Douglas Wu', 'Dr. Samantha Obi', 'Dr. Robert Tran',
+  'Prof. Elena Vasquez', 'Dr. Timothy Brooks',
+]
+
+const profileCallNotes: Record<string, string[]> = {
+  'Sarah Mitchell': [
+    'Discussed upgrading their simulation lab from Laerdal to Gaumard manikins. Very interested in Pediatric HAL. Currently running 3 cohorts of 40 students. Budget approval expected by end of fiscal year. Follow up with ROI comparison sheet.',
+    'Comprehensive needs assessment for new nursing wing. They need 4 Pyxis units and 6 hospital beds. Decision maker is the Dean — scheduling follow-up with both. Budget is pre-approved from a capital improvement grant.',
+    'Product demo for SimMan 3G PLUS went very well. Faculty were impressed with the wireless capability. They currently use older SimMan classics from 2018. Want pricing for 2 units plus service contract.',
+    'Budget discussion for FY2027 capital equipment. They have $180K earmarked for simulation upgrades. Competing against Pocket Nurse bid that came in 10% lower. Need to emphasize our service SLA advantage.',
+    'Follow-up from last month demo. Lab coordinator confirmed they will move forward with the Pyxis order. Waiting on PO from procurement — should have it within 2 weeks. Big win for Q2.',
+    'Initial call with new contact at their satellite campus. They are building a brand new simulation center opening Fall 2026. Early-stage but could be a $200K+ opportunity. Sending our capabilities deck.',
+    'Contract review meeting — walked through MSA terms and pricing tiers. They want volume pricing across 3 campuses. Legal is reviewing our standard terms. Expecting signed contract by mid-April.',
+    'Follow-up on IV trainer order. They added 10 more venipuncture arms and suture kits to the existing PO. Quick add-on sale. Also asked about our wound care simulation kits for their advanced nursing program.',
+    'Needs assessment for their NCLEX prep lab. Currently using outdated equipment from 2015. Program director wants full modernization. Setting up on-site demo for department chairs next week.',
+    'Discussed clinical rotation kit requirements. They need 60 kits for fall enrollment. Price-sensitive — comparing against Pocket Nurse bundled kits. Our quality is better but need to sharpen pricing.',
+    'Deep dive on Pyxis MedStation ES features. Their current automated dispensing cabinet is EOL in June. Urgent timeline. Decision committee meets April 5th. Sending formal proposal Monday.',
+    'Product demo for vital signs monitors and diagnostic equipment. Strong interest from the new assistant dean. They want to standardize across all labs. Potential $50K order.',
+    'Follow-up call regarding simulation manikin maintenance contracts. Renewed 3-year service agreement. Also discussed upcoming Lucina childbirth simulator purchase for OB program.',
+  ],
+  'James Thornton': [
+    'Initial discovery with new nursing program. They are launching an accelerated BSN in Fall 2026 and need a complete sim lab build-out. Early stage but high potential. Sending catalog and scheduling campus visit.',
+    'Follow-up on simulation equipment quote. They are comparing us against Laerdal direct. Our bundled pricing with service is competitive. Decision expected in 3 weeks.',
+    'Needs assessment for their skills lab refresh. Current equipment is 5+ years old. Need new IV arms, catheter trainers, and airway management trainers. Moderate budget available.',
+    'Product demo of Nursing Anne simulator. Faculty liked the clinical scenario programming. Concern about training time for new equipment. Offered complimentary onboarding sessions.',
+    'Budget discussion — their allocation for FY2027 is lower than expected due to enrollment dip. May need to phase the purchase across two fiscal years. Adjusting proposal accordingly.',
+    'Follow-up call — left voicemail for purchasing director. Will try again Thursday. They have an open PO that needs to be processed before fiscal year end.',
+    'Contract review for annual consumables supply agreement. Straightforward renewal with 3% price adjustment. They asked about adding ECG electrode pads to the standing order.',
+    'Discussed expanding their hospital sim center capabilities. Interested in high-fidelity manikins for resident training. Different budget pool than nursing — working with medical education dept.',
+  ],
+  'Maria Gonzalez': [
+    'Initial discovery call with lab coordinator. School is expanding their LPN-to-RN bridge program and needs additional simulation capacity. Currently using basic task trainers only.',
+    'Follow-up on skills lab kit proposal. Budget holder is the VP of Academic Affairs. She confirmed budget is available this fiscal year but needs to see competitive bids first.',
+    'Product demo via Zoom — showed SimNewB newborn simulator capabilities. They have a strong maternal-child health program. Very interested but need approval from the board of trustees.',
+    'Needs assessment for consumables restock. They go through IV tubing and replacement skins quickly. Setting up quarterly auto-ship to avoid stockouts during clinical rotations.',
+    'Budget discussion — program is growing 15% year-over-year. They want to invest in capital equipment but need to justify ROI to administration. Sending our ROI calculator spreadsheet.',
+    'Follow-up from trade show introduction at INACSL. They remembered our booth demo. Warm lead — scheduling on-site visit for next month. Interested in full sim lab consultation.',
+    'Discussed competitive landscape. They got an aggressive bid from Pocket Nurse. Our differentiator is the integrated service contract and faster delivery times. Need to respond by Friday.',
+    'Contract review for multi-year equipment lease option. Their CFO prefers leasing over capital purchase for cash flow reasons. Working with our finance team on lease terms.',
+  ],
+  'David Kim': [
+    'Called purchasing contact — no answer. Will try again next week.',
+    'Left voicemail for lab coordinator about scheduling a product demo. This is the 3rd attempt — may need to find a different contact.',
+    'Brief call with department secretary. Contact is traveling until next week. Noted interest in hospital beds for their new sim lab. Very preliminary.',
+    'Initial discovery — short call. They are exploring options but no budget allocated yet. Probably a next-fiscal-year opportunity. Added to nurture list.',
+    'Follow-up from email inquiry. They downloaded our catalog and have questions about Pyxis compatibility. Call was brief — 8 minutes. Sending technical specs.',
+    'Left voicemail for dean regarding simulation equipment consultation. She has been difficult to reach. Need to try different approach — maybe through faculty referral.',
+    'Had a productive call with new assistant professor. She is advocating internally for simulation upgrades. Good champion but not the budget holder. Sent her our case studies.',
+  ],
+  'Lisa Chen': [
+    'Initial discovery call with new prospect. They are a growing for-profit nursing program expanding to 3 new campuses. Massive potential opportunity. Very early stage — building relationship.',
+    'Needs assessment for their existing simulation lab. Currently underequipped — only 2 basic manikins for 120 students. Clear need for significant upgrade. Program director very engaged.',
+    'Initial discovery with community college nursing program. They received a state grant for simulation equipment. $75K to spend by September. Moving fast on this one.',
+    'Follow-up on needs assessment. Program director is building an internal business case. I offered to help draft the equipment justification document. She was very appreciative.',
+    'Product demo for skills lab kits and consumables. Showed the complete nursing fundamentals kit. They want to pilot with one cohort first. Quick win potential — $12K order.',
+    'Initial discovery — reached out to hospital training center. They train 200+ nurses per year and need to modernize. Currently using competitors equipment. Long sales cycle but big upside.',
+    'Needs assessment for clinical rotation supplies. They standardize kits across 4 campuses. Potential bulk deal. Introduced them to our volume pricing program.',
+    'Initial discovery with small community college. Limited budget but enthusiastic faculty. Good long-term relationship potential. Sent starter kit options under $5K.',
+    'Follow-up on pilot kit proposal. They approved the pilot. Processing PO this week. If successful, they will roll out to all cohorts in Fall — $45K opportunity.',
+    'Budget discussion with procurement director. They have end-of-year funds that need to be committed by March 31st. Rushing a quote for IV trainers and catheter simulators.',
+    'Needs assessment call with dean of nursing. Comprehensive discussion about 3-year equipment roadmap. She shared their strategic plan. Great intel for long-term account planning.',
+  ],
+}
+
+const profileCallCompetitorIntel: Record<string, (string | null)[]> = {
+  'Sarah Mitchell': [
+    'Pocket Nurse has been aggressively pricing bundled skill kits 10-15% below our list price. They are offering free shipping on orders over $5K.',
+    null,
+    'Laerdal direct sales rep visited last month and offered a trade-in program for old SimMan units. We need a competitive trade-in offer.',
+    'Pocket Nurse bid came in at $162K vs our $180K. They are bundling maintenance for year 1. We need to match or justify the delta.',
+    null,
+    null,
+    null,
+    null,
+    'Current equipment is mostly Laerdal with some Gaumard. They have existing Laerdal service contracts that expire in August.',
+    'Pocket Nurse offering clinical rotation kits at $380/kit vs our $480. Volume is 60 kits — $6K difference. Need to compete on quality.',
+    null,
+    null,
+    null,
+  ],
+  'James Thornton': [
+    null,
+    'Laerdal direct rep offered 18-month payment terms vs our standard net-30. Working with finance to match.',
+    null,
+    null,
+    null,
+    null,
+    null,
+    'Local distributor (Northeast Medical Supply) has established relationships here. They can not match our simulation expertise but have faster delivery for commodities.',
+  ],
+  'Maria Gonzalez': [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    'Pocket Nurse submitted aggressive bid. Differentiating on service contract — our 4-hour response SLA vs their next-business-day.',
+    null,
+  ],
+  'David Kim': [null, null, null, null, null, null, null],
+  'Lisa Chen': [
+    null,
+    'Currently buying from Pocket Nurse. Dissatisfied with quality of task trainers — several broke within first semester. Opportunity to displace.',
+    'State contract vendor (Nasco Healthcare) has preferential pricing through their GPO. Need to get on the state contract list.',
+    null,
+    null,
+    'They use Laerdal manikins exclusively. Training center director mentioned Laerdal support has been slow lately. Possible opening.',
+    null,
+    null,
+    null,
+    null,
+    null,
+  ],
+}
+
+function generateProfileCalls(): SeedProfileCall[] {
+  const rand = seededRandom(7777)
+  const calls: SeedProfileCall[] = []
+
+  interface RepConfig {
+    repId: string
+    repName: string
+    callCount: number
+    outcomes: ProfileCallOutcome[]
+    types: ProfileCallType[]
+    durationMin: number
+    durationMax: number
+    conversionRate: number
+    accountPool: string[]
+    productBias: string[]
+    programSizeBias: string[]
+  }
+
+  const repConfigs: RepConfig[] = [
+    {
+      repId: 'REP-001', repName: 'Sarah Mitchell', callCount: 26, conversionRate: 0.40,
+      outcomes: ['Interested - Next Steps', 'Interested - Next Steps', 'Interested - Next Steps', 'Quote Requested', 'Quote Requested', 'Scheduled Demo', 'Scheduled Demo', 'Needs Follow-Up', 'Needs Follow-Up', 'Not Interested', 'No Answer'],
+      types: ['Follow-Up', 'Follow-Up', 'Product Demo', 'Product Demo', 'Budget Discussion', 'Budget Discussion', 'Needs Assessment', 'Contract Review', 'Initial Discovery'],
+      durationMin: 20, durationMax: 45,
+      accountPool: ['Rush University College of Nursing', 'University of Illinois Chicago College of Nursing', 'Loyola University Chicago Marcella Niehoff School of Nursing', 'University of Michigan School of Nursing', 'Case Western Reserve Frances Payne Bolton School of Nursing', 'Northwestern Memorial Hospital Education', 'Advocate Aurora Health Training Center', 'Mayo Clinic Simulation Center', 'Cleveland Clinic Education Institute', 'College of DuPage Nursing Program', 'Harper College Nursing Program', 'Moraine Valley Community College'],
+      productBias: ['Pyxis MedStation', 'Simulation Manikins', 'Hospital Beds', 'Vital Signs Monitors'],
+      programSizeBias: ['Large (150-500 students)', 'Enterprise (500+ students)', 'Large (150-500 students)', 'Medium (50-150 students)'],
+    },
+    {
+      repId: 'REP-002', repName: 'James Thornton', callCount: 15, conversionRate: 0.25,
+      outcomes: ['Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'Not Interested', 'Left Voicemail', 'Quote Requested'],
+      types: ['Initial Discovery', 'Follow-Up', 'Follow-Up', 'Product Demo', 'Needs Assessment', 'Budget Discussion', 'Contract Review'],
+      durationMin: 15, durationMax: 30,
+      accountPool: ['NYU Rory Meyers College of Nursing', 'Johns Hopkins School of Nursing', 'University of Pennsylvania School of Nursing', 'Columbia University School of Nursing', 'University of Pittsburgh School of Nursing', 'Massachusetts General Hospital Sim Center'],
+      productBias: ['Simulation Manikins', 'Hospital Beds', 'Skills Lab Kits', 'Consumables'],
+      programSizeBias: ['Large (150-500 students)', 'Medium (50-150 students)', 'Enterprise (500+ students)'],
+    },
+    {
+      repId: 'REP-003', repName: 'Maria Gonzalez', callCount: 14, conversionRate: 0.25,
+      outcomes: ['Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'Not Interested', 'No Answer', 'Quote Requested'],
+      types: ['Initial Discovery', 'Follow-Up', 'Follow-Up', 'Product Demo', 'Needs Assessment', 'Budget Discussion', 'Contract Review'],
+      durationMin: 15, durationMax: 30,
+      accountPool: ['Emory University Nell Hodgson Woodruff School of Nursing', 'Duke University School of Nursing', 'Vanderbilt University School of Nursing', 'Miami Dade College Nursing', 'ECPI University Nursing'],
+      productBias: ['Simulation Manikins', 'Skills Lab Kits', 'IV Trainers', 'Consumables'],
+      programSizeBias: ['Medium (50-150 students)', 'Large (150-500 students)', 'Small (<50 students)'],
+    },
+    {
+      repId: 'REP-004', repName: 'David Kim', callCount: 7, conversionRate: 0.14,
+      outcomes: ['No Answer', 'No Answer', 'Left Voicemail', 'Left Voicemail', 'Not Interested', 'Needs Follow-Up', 'Interested - Next Steps'],
+      types: ['Initial Discovery', 'Initial Discovery', 'Follow-Up', 'Follow-Up', 'Needs Assessment'],
+      durationMin: 5, durationMax: 15,
+      accountPool: ['UCLA School of Nursing', 'University of Washington School of Nursing', 'Cleveland Clinic Education Institute'],
+      productBias: ['Hospital Beds', 'Pyxis MedStation', 'Consumables'],
+      programSizeBias: ['Medium (50-150 students)', 'Large (150-500 students)'],
+    },
+    {
+      repId: 'REP-005', repName: 'Lisa Chen', callCount: 11, conversionRate: 0.18,
+      outcomes: ['Interested - Next Steps', 'Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'No Answer'],
+      types: ['Initial Discovery', 'Initial Discovery', 'Initial Discovery', 'Needs Assessment', 'Needs Assessment', 'Follow-Up', 'Budget Discussion'],
+      durationMin: 15, durationMax: 30,
+      accountPool: ['Houston Community College Nursing', 'Chamberlain University College of Nursing', 'Herzing University Nursing Program', 'Rasmussen University School of Nursing'],
+      productBias: ['Skills Lab Kits', 'IV Trainers', 'Consumables', 'Simulation Manikins'],
+      programSizeBias: ['Small (<50 students)', 'Medium (50-150 students)', 'Medium (50-150 students)'],
+    },
+  ]
+
+  // Generate dates spread across Jan 1 - Mar 31, 2026
+  const startDate = new Date('2026-01-05')
+  const endDate = new Date('2026-03-31')
+  const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+
+  let callId = 1
+
+  for (const config of repConfigs) {
+    const notes = profileCallNotes[config.repName]
+    const intel = profileCallCompetitorIntel[config.repName]
+
+    for (let i = 0; i < config.callCount; i++) {
+      const dayOffset = Math.floor(rand() * totalDays)
+      const date = new Date(startDate.getTime() + dayOffset * 24 * 60 * 60 * 1000)
+      // Skip weekends
+      if (date.getDay() === 0) date.setDate(date.getDate() + 1)
+      if (date.getDay() === 6) date.setDate(date.getDate() + 2)
+      const dateStr = date.toISOString().split('T')[0]
+
+      const outcome = pick(config.outcomes, rand)
+      const callType = pick(config.types, rand)
+      const account = pick(config.accountPool, rand)
+      const contact = pick(profileCallContacts, rand)
+      const duration = randomInt(config.durationMin, config.durationMax, rand)
+      const isConverted = rand() < config.conversionRate
+      const numProducts = outcome === 'No Answer' || outcome === 'Left Voicemail' ? 0 : randomInt(1, 3, rand)
+      const products = numProducts > 0 ? pickN([...config.productBias, ...profileCallProducts], numProducts, rand) : []
+      const size = pick(config.programSizeBias, rand)
+      const hasBudget = outcome !== 'No Answer' && outcome !== 'Left Voicemail' && outcome !== 'Not Interested' && rand() > 0.4
+      const budget = hasBudget ? randomInt(15, 250, rand) * 1000 : null
+      const timeframe = hasBudget ? pick(budgetTimeframes, rand) : null
+      const hasFollowUp = outcome !== 'Not Interested' && outcome !== 'No Answer'
+      const followUpDate = hasFollowUp ? new Date(date.getTime() + randomInt(3, 14, rand) * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null
+      const supplier = rand() > 0.5 ? pick(competitors, rand) : null
+      const noteIdx = i % notes.length
+      const intelEntry = i < intel.length ? intel[i] : null
+
+      calls.push({
+        id: `PC-${String(callId++).padStart(3, '0')}`,
+        subject: `Profile Call — ${account}`,
+        repId: config.repId,
+        repName: config.repName,
+        accountName: account,
+        contactName: contact,
+        activityDate: dateStr,
+        callType,
+        callOutcome: outcome,
+        productsDiscussed: products,
+        programSize: size,
+        currentSupplier: supplier,
+        budgetAvailable: budget,
+        budgetTimeframe: timeframe,
+        followUpDate,
+        convertedToOpp: isConverted,
+        relatedOpportunityName: isConverted ? `${account} — ${pick(['SimLab Expansion', 'Equipment Refresh', 'Capital Purchase', 'Skills Lab Build-Out', 'Annual Supply Order', 'Simulation Upgrade'], rand)}` : null,
+        callDurationMinutes: outcome === 'No Answer' ? 0 : outcome === 'Left Voicemail' ? randomInt(1, 3, rand) : duration,
+        callNotesSummary: notes[noteIdx],
+        competitorIntel: intelEntry,
+      })
+    }
+  }
+
+  return calls.sort((a, b) => b.activityDate.localeCompare(a.activityDate))
+}
+
+export const seedProfileCalls = generateProfileCalls()
+
+// =============================================================================
+// 18. Weekly Call Volume (last 8 weeks)
+// =============================================================================
+
+export const seedWeeklyCallVolume: SeedWeeklyCallVolume[] = [
+  { weekStart: '2026-02-02', 'Sarah Mitchell': 3, 'James Thornton': 1, 'Maria Gonzalez': 2, 'David Kim': 2, 'Lisa Chen': 0 },
+  { weekStart: '2026-02-09', 'Sarah Mitchell': 3, 'James Thornton': 2, 'Maria Gonzalez': 1, 'David Kim': 1, 'Lisa Chen': 0 },
+  { weekStart: '2026-02-16', 'Sarah Mitchell': 3, 'James Thornton': 2, 'Maria Gonzalez': 2, 'David Kim': 1, 'Lisa Chen': 0 },
+  { weekStart: '2026-02-23', 'Sarah Mitchell': 4, 'James Thornton': 2, 'Maria Gonzalez': 1, 'David Kim': 1, 'Lisa Chen': 1 },
+  { weekStart: '2026-03-02', 'Sarah Mitchell': 3, 'James Thornton': 2, 'Maria Gonzalez': 2, 'David Kim': 0, 'Lisa Chen': 2 },
+  { weekStart: '2026-03-09', 'Sarah Mitchell': 3, 'James Thornton': 2, 'Maria Gonzalez': 2, 'David Kim': 1, 'Lisa Chen': 2 },
+  { weekStart: '2026-03-16', 'Sarah Mitchell': 4, 'James Thornton': 2, 'Maria Gonzalez': 2, 'David Kim': 1, 'Lisa Chen': 3 },
+  { weekStart: '2026-03-23', 'Sarah Mitchell': 4, 'James Thornton': 3, 'Maria Gonzalez': 2, 'David Kim': 0, 'Lisa Chen': 3 },
 ]

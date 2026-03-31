@@ -47,7 +47,7 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* YashAdmin exact design tokens */
+  /* MedShip design tokens */
   --color-medship-primary: #452B90;
   --color-medship-primary-light: #6B4BC4;
   --color-medship-primary-dark: #2A1B5A;
@@ -65,7 +65,7 @@
   --color-medship-dark-card: #182237;
   --color-medship-dark-border: rgba(255, 255, 255, 0.10);
 
-  /* YashAdmin card shadow */
+  /* Card shadow */
   --shadow-card: 0 0 2.5rem 0 rgba(82, 63, 105, 0.1);
   --shadow-card-hover: 0 0 1.875rem rgba(69, 43, 144, 0.15);
 }
@@ -95,7 +95,7 @@
   --chart-4: #58BAD7;
   --chart-5: #FF9F00;
   --radius: 0.625rem;
-  /* Sidebar: dark navy like the YashAdmin demo screenshot */
+  /* Sidebar: dark navy */
   --sidebar: #222B40;
   --sidebar-foreground: rgba(255, 255, 255, 0.7);
   --sidebar-primary: #F8B940;
@@ -158,7 +158,7 @@
   }
 }
 
-/* Mapbox popup override — match YashAdmin card aesthetic */
+/* Mapbox popup styling */
 .medship-map-popup .mapboxgl-popup-content {
   border-radius: 0.625rem;
   padding: 12px 14px;

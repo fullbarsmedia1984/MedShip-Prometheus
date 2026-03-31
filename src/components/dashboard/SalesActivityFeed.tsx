@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { CheckCircle, Send, PlusCircle, XCircle } from 'lucide-react'
+import { CheckCircle, Send, PlusCircle, XCircle, PhoneCall } from 'lucide-react'
 import type { SeedSalesActivity, SeedSalesRep } from '@/lib/seed-data'
 
 interface SalesActivityFeedProps {
@@ -50,6 +50,12 @@ const typeConfig = {
     bgColor: 'bg-red-400/10',
     label: 'Lost',
   },
+  profile_call: {
+    icon: PhoneCall,
+    iconColor: 'text-medship-secondary',
+    bgColor: 'bg-medship-secondary/10',
+    label: 'Profile Call',
+  },
 }
 
 export function SalesActivityFeed({ activities, reps }: SalesActivityFeedProps) {
@@ -96,14 +102,34 @@ export function SalesActivityFeed({ activities, reps }: SalesActivityFeedProps) 
                     {activity.type === 'quote_sent' && <> sent quote to <span className="font-medium">{activity.customerName}</span></>}
                     {activity.type === 'opportunity_created' && <> created new opportunity with <span className="font-medium">{activity.customerName}</span></>}
                     {activity.type === 'deal_lost' && <> lost deal with <span className="font-medium">{activity.customerName}</span></>}
+                    {activity.type === 'profile_call' && <> completed a profile call with <span className="font-medium">{activity.contactName ?? 'contact'}</span> at <span className="font-medium">{activity.customerName}</span></>}
                   </p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className={cn(
-                      'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-semibold',
-                      config.bgColor, config.iconColor
-                    )}>
-                      ${activity.amount.toLocaleString()}
-                    </span>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {activity.type === 'profile_call' ? (
+                      <>
+                        {activity.callOutcome && (
+                          <span className={cn(
+                            'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-semibold',
+                            config.bgColor, config.iconColor
+                          )}>
+                            {activity.callOutcome}
+                          </span>
+                        )}
+                        {activity.productsDiscussed && activity.productsDiscussed.length > 0 && (
+                          <span className="truncate text-[0.6rem] text-muted-foreground">
+                            {activity.productsDiscussed.slice(0, 2).join(', ')}
+                            {activity.productsDiscussed.length > 2 && ` +${activity.productsDiscussed.length - 2}`}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className={cn(
+                        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-semibold',
+                        config.bgColor, config.iconColor
+                      )}>
+                        ${activity.amount.toLocaleString()}
+                      </span>
+                    )}
                     <span className="text-[0.65rem] text-muted-foreground">
                       {relativeTime(activity.timestamp)}
                     </span>

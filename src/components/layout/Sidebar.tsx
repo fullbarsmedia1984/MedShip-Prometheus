@@ -114,7 +114,7 @@ export function Sidebar() {
       )}
       style={{ boxShadow: '0 0.9375rem 1.875rem 0 rgba(0,0,0,0.02)' }}
     >
-      {/* Logo — matches YashAdmin header area height of 4.375rem */}
+      {/* Logo */}
       <div className={cn(
         'flex h-[4.375rem] items-center border-b border-sidebar-border',
         isCollapsed ? 'justify-center px-2' : 'px-5'
@@ -124,8 +124,8 @@ export function Sidebar() {
         ) : (
           <div className="flex items-center gap-1">
             <Activity className="h-5 w-5 text-medship-secondary" />
-            <span className="text-lg font-semibold text-white">YASH</span>
-            <span className="text-lg font-normal text-white/70">ADMIN</span>
+            <span className="text-lg font-semibold text-white">MEDICAL</span>
+            <span className="text-lg font-normal text-white/70">SHIPMENT</span>
           </div>
         )}
       </div>
@@ -199,8 +199,8 @@ export function Sidebar() {
               <div className="flex h-[4.375rem] items-center justify-between border-b border-sidebar-border px-5">
                 <div className="flex items-center gap-1">
                   <Activity className="h-5 w-5 text-medship-secondary" />
-                  <span className="text-lg font-semibold text-white">YASH</span>
-                  <span className="text-lg font-normal text-white/70">ADMIN</span>
+                  <span className="text-lg font-semibold text-white">MEDICAL</span>
+                  <span className="text-lg font-normal text-white/70">SHIPMENT</span>
                 </div>
                 <button
                   onClick={closeMobile}

@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import {
   Table,
@@ -66,6 +67,7 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
               <TableHead className="hidden w-[220px] lg:table-cell">Revenue Bar</TableHead>
               <TableHead className="hidden text-center md:table-cell">Deals Closed</TableHead>
               <TableHead className="hidden text-center md:table-cell">Quotes Sent</TableHead>
+              <TableHead className="hidden text-center lg:table-cell">Profile Calls</TableHead>
               <TableHead className="hidden text-right xl:table-cell">Avg Deal Size</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Win Rate</TableHead>
               <TableHead className="text-center">Activity</TableHead>
@@ -116,6 +118,23 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
                   </TableCell>
                   <TableCell className="hidden text-center font-medium md:table-cell">{rep.dealsClosed}</TableCell>
                   <TableCell className="hidden text-center font-medium md:table-cell">{rep.quotesSent}</TableCell>
+                  <TableCell className="hidden text-center lg:table-cell">
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="font-semibold tabular-nums">{rep.profileCalls}</span>
+                      {rep.profileCallsChange !== 0 && (
+                        <span className={cn(
+                          'inline-flex items-center text-[0.6rem]',
+                          rep.profileCallsChange > 0 ? 'text-emerald-500' : 'text-red-400'
+                        )}>
+                          {rep.profileCallsChange > 0 ? (
+                            <ArrowUpRight className="h-3 w-3" />
+                          ) : (
+                            <ArrowDownRight className="h-3 w-3" />
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="hidden text-right tabular-nums xl:table-cell">
                     ${rep.avgDealSize.toLocaleString()}
                   </TableCell>

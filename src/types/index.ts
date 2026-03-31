@@ -285,6 +285,47 @@ export const AUTOMATION_INFO: Record<
   },
 };
 
+// --- Profile Call Types ---
+
+export interface SFProfileCall {
+  Id: string;
+  Subject: string;
+  OwnerId: string;
+  OwnerName: string;
+  AccountId: string;
+  AccountName: string;
+  ContactId: string | null;
+  ContactName: string | null;
+  ActivityDate: string;
+  Status: string;
+  callType: string | null;
+  callOutcome: string | null;
+  productsDiscussed: string | null;
+  programSize: string | null;
+  currentSupplier: string | null;
+  budgetAvailable: number | null;
+  budgetTimeframe: string | null;
+  followUpDate: string | null;
+  convertedToOpp: boolean;
+  relatedOpportunityId: string | null;
+  relatedOpportunityName: string | null;
+  callDurationMinutes: number | null;
+  callNotesSummary: string | null;
+  competitorIntel: string | null;
+  createdDate: string;
+}
+
+export interface SFProfileCallMetrics {
+  repId: string;
+  repName: string;
+  totalCalls: number;
+  converted: number;
+  conversionRate: number;
+  avgDuration: number;
+  callsThisWeek: number;
+  callsThisMonth: number;
+}
+
 // --- API Response Types ---
 
 export interface InventoryLookupResponse {

@@ -27,6 +27,7 @@ import {
   Clock,
   FileText,
   TrendingUp,
+  Phone,
   ArrowRight,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -43,6 +44,7 @@ import {
   getSalesKpis,
   getCustomersWithLocations,
   getRegionSummaries,
+  getProfileCallMetrics,
 } from '@/lib/data'
 import type { RevenueMetrics, SalesKpis } from '@/lib/data'
 import type { MonthlyRevenue, CategorySales, Order, Product, IntegrationStatusData, SeedSalesRep, SeedSalesActivity, SeedPipelineStage, Customer, SeedRegionSummary } from '@/lib/seed-data'
@@ -71,6 +73,7 @@ export default function DashboardPage() {
   const [pipeline, setPipeline] = useState<SeedPipelineStage[]>([])
   const [mapCustomers, setMapCustomers] = useState<Customer[]>([])
   const [regionSummaries, setRegionSummaries] = useState<SeedRegionSummary[]>([])
+  const [profileCallData, setProfileCallData] = useState<{ totalMTD: number; totalLastMonth: number; conversionRate: number } | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -88,6 +91,7 @@ export default function DashboardPage() {
           pipelineData,
           customersData,
           regionsData,
+          profileCallsData,
         ] = await Promise.all([
           getRevenueMetrics(),
           getSalesKpis(),
@@ -101,6 +105,7 @@ export default function DashboardPage() {
           getPipelineSnapshot(),
           getCustomersWithLocations(),
           getRegionSummaries(),
+          getProfileCallMetrics(),
         ])
 
         setMetrics(metricsData)
@@ -115,6 +120,7 @@ export default function DashboardPage() {
         setPipeline(pipelineData)
         setMapCustomers(customersData)
         setRegionSummaries(regionsData)
+        setProfileCallData(profileCallsData)
       } catch (error) {
         console.error('Failed to load dashboard data:', error)
       } finally {
@@ -185,12 +191,14 @@ export default function DashboardPage() {
             iconColor="text-medship-secondary"
           />
           <KpiCard
-            title="Pipeline Value"
-            value={`$${salesKpis.pipelineValue.toLocaleString()}`}
-            change={8.2}
+            title="Profile Calls (MTD)"
+            value={profileCallData?.totalMTD ?? 0}
+            change={profileCallData && profileCallData.totalLastMonth > 0
+              ? Math.round(((profileCallData.totalMTD - profileCallData.totalLastMonth) / profileCallData.totalLastMonth) * 1000) / 10
+              : 0}
             changeLabel="vs last month"
-            icon={TrendingUp}
-            iconColor="text-medship-danger"
+            icon={Phone}
+            iconColor="text-medship-success"
           />
         </div>
 
