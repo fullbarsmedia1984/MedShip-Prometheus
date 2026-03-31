@@ -15,6 +15,8 @@ export class FishbowlClient implements IFishbowlClient {
   private username: string;
   private password: string;
   private serverVersion: string | null = null;
+  private cfAccessClientId: string | null;
+  private cfAccessClientSecret: string | null;
 
   constructor() {
     const apiUrl = process.env.FISHBOWL_API_URL;
@@ -27,6 +29,8 @@ export class FishbowlClient implements IFishbowlClient {
     this.baseUrl = apiUrl.replace(/\/+$/, '');
     this.username = process.env.FISHBOWL_USERNAME ?? '';
     this.password = process.env.FISHBOWL_PASSWORD ?? '';
+    this.cfAccessClientId = process.env.FISHBOWL_CF_ACCESS_CLIENT_ID ?? null;
+    this.cfAccessClientSecret = process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET ?? null;
   }
 
   // ---------------------------------------------------------------------------
@@ -40,7 +44,10 @@ export class FishbowlClient implements IFishbowlClient {
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getCfAccessHeaders(),
+        },
         body: JSON.stringify({
           username: this.username,
           password: this.password,
@@ -108,6 +115,7 @@ export class FishbowlClient implements IFishbowlClient {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${this.token}`,
+      ...this.getCfAccessHeaders(),
     };
 
     let response: Response;
@@ -160,6 +168,20 @@ export class FishbowlClient implements IFishbowlClient {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cloudflare Access headers
+  // ---------------------------------------------------------------------------
+
+  private getCfAccessHeaders(): Record<string, string> {
+    if (this.cfAccessClientId && this.cfAccessClientSecret) {
+      return {
+        'CF-Access-Client-Id': this.cfAccessClientId,
+        'CF-Access-Client-Secret': this.cfAccessClientSecret,
+      };
+    }
+    return {};
   }
 
   // ---------------------------------------------------------------------------
