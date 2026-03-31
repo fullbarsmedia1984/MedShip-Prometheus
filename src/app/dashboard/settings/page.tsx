@@ -149,7 +149,7 @@ export default function SettingsPage() {
               return (
                 <Card key={system.key} className={cn(isPhase2 && 'opacity-60')}>
                   <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div
                           className={cn(
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge
                           status={
                             isPhase2
@@ -194,11 +194,12 @@ export default function SettingsPage() {
                           >
                             <RefreshCw
                               className={cn(
-                                'mr-2 h-4 w-4',
+                                'mr-1 h-4 w-4',
                                 testing === system.key && 'animate-spin'
                               )}
                             />
-                            Test Connection
+                            <span className="hidden sm:inline">Test Connection</span>
+                            <span className="sm:hidden">Test</span>
                           </Button>
                         )}
                       </div>

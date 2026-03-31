@@ -34,8 +34,17 @@ function getStatusColors(status: string): ColorConfig {
     }
   }
 
+  // Purple/primary statuses
+  if (['required', 'yes'].includes(normalized)) {
+    return {
+      bg: 'bg-medship-primary/10',
+      text: 'text-medship-primary',
+      dot: 'bg-medship-primary',
+    }
+  }
+
   // Orange/warning statuses
-  if (['pending', 'warning', 'low stock'].includes(normalized)) {
+  if (['pending', 'warning', 'low stock', 'optional', 'no', 'not_configured', 'disconnected'].includes(normalized)) {
     return {
       bg: 'bg-medship-warning/10',
       text: 'text-medship-warning',

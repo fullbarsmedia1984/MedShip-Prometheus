@@ -41,12 +41,12 @@ function CustomTooltip({ active, payload }: {
   if (!entry) return null
 
   return (
-    <div className="rounded-lg bg-white px-4 py-3 shadow-lg ring-1 ring-black/5">
-      <p className="mb-1 text-sm font-medium text-gray-900">{entry.category}</p>
-      <p className="text-sm text-gray-600">
-        Revenue: <span className="font-semibold">{formatCurrency(entry.revenue)}</span>
+    <div className="rounded-[0.625rem] border border-[#E6E6E6] bg-white px-4 py-3 shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)]">
+      <p className="mb-1 text-[0.813rem] font-medium text-[#374557]">{entry.category}</p>
+      <p className="text-[0.813rem] text-[#888]">
+        Revenue: <span className="font-semibold text-[#452B90]">{formatCurrency(entry.revenue)}</span>
       </p>
-      <p className="text-sm text-gray-600">
+      <p className="text-[0.813rem] text-[#888]">
         Share: <span className="font-semibold">{entry.percentage}%</span>
       </p>
     </div>
@@ -73,11 +73,12 @@ function renderLabel(props: Record<string, unknown>) {
     <text
       x={x}
       y={y}
-      fill="#374151"
+      fill="#374557"
       textAnchor="middle"
       dominantBaseline="central"
       fontSize={12}
       fontWeight={500}
+      fontFamily="Poppins"
     >
       {`${pct}%`}
     </text>
@@ -117,7 +118,7 @@ export function CategoryPieChart({ data }: CategoryPieChartProps) {
               iconType="circle"
               iconSize={8}
               formatter={(value: string) => (
-                <span className="text-xs text-gray-600">{value}</span>
+                <span style={{ fontSize: '0.75rem', color: '#888888', fontFamily: 'Poppins' }}>{value}</span>
               )}
             />
           </PieChart>

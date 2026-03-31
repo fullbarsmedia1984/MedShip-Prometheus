@@ -19,45 +19,47 @@ import {
   X,
 } from 'lucide-react'
 
-const navigation = [
+const mainNav = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
+]
+
+const opsNav = [
   { name: 'Integrations', href: '/dashboard/integrations', icon: RefreshCw },
   { name: 'Event Log', href: '/dashboard/events', icon: List },
   { name: 'Failed Syncs', href: '/dashboard/failed', icon: AlertTriangle },
+]
+
+const configNav = [
   { name: 'Field Mappings', href: '/dashboard/mappings', icon: Map },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
-export function Sidebar() {
-  const pathname = usePathname()
-  const { isCollapsed, toggleSidebar, isMobileOpen, closeMobile } = useSidebar()
-
-  const sidebarContent = (
-    <div
-      className={cn(
-        'flex h-full flex-col bg-sidebar text-sidebar-foreground transition-all duration-300',
-        isCollapsed ? 'w-[60px]' : 'w-[240px]'
+function NavSection({
+  label,
+  items,
+  pathname,
+  isCollapsed,
+  onNavigate,
+  isFirst = false,
+}: {
+  label: string
+  items: typeof mainNav
+  pathname: string
+  isCollapsed: boolean
+  onNavigate?: () => void
+  isFirst?: boolean
+}) {
+  return (
+    <div className={cn(!isFirst && 'mt-2 border-t border-sidebar-border pt-3')}>
+      {!isCollapsed && (
+        <div className="mb-2 px-5 text-[0.75rem] font-normal uppercase tracking-[0.05rem] text-medship-secondary">
+          {label}
+        </div>
       )}
-    >
-      {/* Logo */}
-      <div className="flex h-16 items-center border-b border-sidebar-border px-4">
-        {isCollapsed ? (
-          <span className="mx-auto text-xl font-bold text-white">M</span>
-        ) : (
-          <div className="flex items-center">
-            <span className="text-xl font-bold text-white">MedShip</span>
-            <span className="ml-2 text-xl font-light text-sidebar-foreground/70">
-              Prometheus
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-2 py-4">
-        {navigation.map((item) => {
+      <div className="space-y-0.5">
+        {items.map((item) => {
           const isActive =
             item.href === '/dashboard'
               ? pathname === '/dashboard'
@@ -67,38 +69,91 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              onClick={closeMobile}
+              onClick={onNavigate}
               className={cn(
-                'group relative flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'group relative flex items-center text-[0.813rem] font-normal transition-colors',
+                isCollapsed
+                  ? 'mx-auto justify-center rounded-[0.625rem] p-[0.813rem]'
+                  : 'rounded-md px-5 py-[0.625rem]',
                 isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  ? 'text-medship-secondary'
+                  : 'text-sidebar-foreground hover:text-medship-secondary'
               )}
             >
-              {/* Active indicator — gold left border */}
-              {isActive && (
-                <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-sm bg-sidebar-primary" />
-              )}
               <item.icon
                 className={cn(
-                  'h-5 w-5 flex-shrink-0',
-                  isCollapsed ? 'mx-auto' : 'mr-3',
+                  'h-[1.375rem] w-[1.375rem] flex-shrink-0',
+                  !isCollapsed && 'mr-[0.65rem]',
                   isActive
-                    ? 'text-sidebar-primary'
-                    : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground'
+                    ? 'text-medship-secondary'
+                    : 'text-sidebar-foreground/60 group-hover:text-medship-secondary'
                 )}
               />
               {!isCollapsed && <span>{item.name}</span>}
             </Link>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+export function Sidebar() {
+  const pathname = usePathname()
+  const { isCollapsed, toggleSidebar, isMobileOpen, closeMobile } = useSidebar()
+
+  const sidebarContent = (
+    <div
+      className={cn(
+        'flex h-full flex-col bg-sidebar transition-all duration-300',
+        isCollapsed ? 'w-[3.75rem]' : 'w-[15rem]'
+      )}
+      style={{ boxShadow: '0 0.9375rem 1.875rem 0 rgba(0,0,0,0.02)' }}
+    >
+      {/* Logo — matches YashAdmin header area height of 4.375rem */}
+      <div className={cn(
+        'flex h-[4.375rem] items-center border-b border-sidebar-border',
+        isCollapsed ? 'justify-center px-2' : 'px-5'
+      )}>
+        {isCollapsed ? (
+          <span className="text-lg font-bold text-white">M</span>
+        ) : (
+          <div className="flex items-center gap-1">
+            <Activity className="h-5 w-5 text-medship-secondary" />
+            <span className="text-lg font-semibold text-white">YASH</span>
+            <span className="text-lg font-normal text-white/70">ADMIN</span>
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4">
+        <NavSection
+          label="Business"
+          items={mainNav}
+          pathname={pathname}
+          isCollapsed={isCollapsed}
+          isFirst
+        />
+        <NavSection
+          label="Operations"
+          items={opsNav}
+          pathname={pathname}
+          isCollapsed={isCollapsed}
+        />
+        <NavSection
+          label="Configuration"
+          items={configNav}
+          pathname={pathname}
+          isCollapsed={isCollapsed}
+        />
       </nav>
 
       {/* Collapse toggle */}
       <div className="border-t border-sidebar-border px-2 py-2">
         <button
           onClick={toggleSidebar}
-          className="flex w-full items-center justify-center rounded-md p-2 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+          className="flex w-full items-center justify-center rounded-[0.625rem] p-2 text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isCollapsed ? (
@@ -111,8 +166,8 @@ export function Sidebar() {
 
       {/* Footer */}
       {!isCollapsed && (
-        <div className="border-t border-sidebar-border px-4 py-3">
-          <div className="flex items-center gap-2 text-xs text-sidebar-foreground/50">
+        <div className="border-t border-sidebar-border px-5 py-3">
+          <div className="flex items-center gap-2 text-[0.75rem] text-sidebar-foreground/40">
             <Activity className="h-3.5 w-3.5" />
             <span>MedShip Prometheus v0.1</span>
           </div>
@@ -123,28 +178,25 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex h-full flex-shrink-0">{sidebarContent}</aside>
+      {/* Desktop sidebar — visible at lg (1024px+) */}
+      <aside className="hidden h-full flex-shrink-0 lg:flex">{sidebarContent}</aside>
 
-      {/* Mobile overlay */}
+      {/* Mobile/tablet overlay — visible below lg */}
       {isMobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          {/* Backdrop */}
+        <div className="fixed inset-0 z-40 lg:hidden">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={closeMobile}
             aria-hidden="true"
           />
-          {/* Sidebar drawer */}
-          <aside className="relative z-50 flex h-full w-[240px]">
-            <div className="flex h-full w-[240px] flex-col bg-sidebar text-sidebar-foreground">
-              {/* Mobile close button */}
-              <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-                <div className="flex items-center">
-                  <span className="text-xl font-bold text-white">MedShip</span>
-                  <span className="ml-2 text-xl font-light text-sidebar-foreground/70">
-                    Prometheus
-                  </span>
+          <aside className="relative z-50 flex h-full w-[15rem]">
+            <div className="flex h-full w-[15rem] flex-col bg-sidebar" style={{ boxShadow: '0 0.9375rem 1.875rem 0 rgba(0,0,0,0.02)' }}>
+              {/* Mobile close + logo */}
+              <div className="flex h-[4.375rem] items-center justify-between border-b border-sidebar-border px-5">
+                <div className="flex items-center gap-1">
+                  <Activity className="h-5 w-5 text-medship-secondary" />
+                  <span className="text-lg font-semibold text-white">YASH</span>
+                  <span className="text-lg font-normal text-white/70">ADMIN</span>
                 </div>
                 <button
                   onClick={closeMobile}
@@ -156,45 +208,34 @@ export function Sidebar() {
               </div>
 
               {/* Mobile navigation */}
-              <nav className="flex-1 space-y-1 px-2 py-4">
-                {navigation.map((item) => {
-                  const isActive =
-                    item.href === '/dashboard'
-                      ? pathname === '/dashboard'
-                      : pathname.startsWith(item.href)
-
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      onClick={closeMobile}
-                      className={cn(
-                        'group relative flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                      )}
-                    >
-                      {isActive && (
-                        <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-sm bg-sidebar-primary" />
-                      )}
-                      <item.icon
-                        className={cn(
-                          'mr-3 h-5 w-5 flex-shrink-0',
-                          isActive
-                            ? 'text-sidebar-primary'
-                            : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground'
-                        )}
-                      />
-                      <span>{item.name}</span>
-                    </Link>
-                  )
-                })}
+              <nav className="flex-1 overflow-y-auto py-4">
+                <NavSection
+                  label="Business"
+                  items={mainNav}
+                  pathname={pathname}
+                  isCollapsed={false}
+                  onNavigate={closeMobile}
+                  isFirst
+                />
+                <NavSection
+                  label="Operations"
+                  items={opsNav}
+                  pathname={pathname}
+                  isCollapsed={false}
+                  onNavigate={closeMobile}
+                />
+                <NavSection
+                  label="Configuration"
+                  items={configNav}
+                  pathname={pathname}
+                  isCollapsed={false}
+                  onNavigate={closeMobile}
+                />
               </nav>
 
               {/* Mobile footer */}
-              <div className="border-t border-sidebar-border px-4 py-3">
-                <div className="flex items-center gap-2 text-xs text-sidebar-foreground/50">
+              <div className="border-t border-sidebar-border px-5 py-3">
+                <div className="flex items-center gap-2 text-[0.75rem] text-sidebar-foreground/40">
                   <Activity className="h-3.5 w-3.5" />
                   <span>MedShip Prometheus v0.1</span>
                 </div>

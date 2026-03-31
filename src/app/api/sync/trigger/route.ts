@@ -25,12 +25,22 @@ export async function POST(request: NextRequest) {
   try {
     // Verify authentication
     const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Dev bypass: skip auth when Supabase isn't configured
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const devBypass =
+      process.env.NODE_ENV === 'development' &&
+      (!supabaseUrl || !supabaseAnonKey)
+
+    if (!devBypass) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
     }
 
     const body = await request.json()

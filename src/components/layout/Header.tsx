@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils'
 import { useSidebar } from './SidebarContext'
 import { useTheme } from 'next-themes'
-import { Bell, Sun, Moon, Menu } from 'lucide-react'
+import { Bell, Sun, Moon, Menu, Search } from 'lucide-react'
 
 interface HeaderProps {
   title: string
@@ -15,42 +15,31 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
   const { theme, setTheme } = useTheme()
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-card px-4 md:px-6">
+    <header className="flex h-[4.375rem] items-center justify-between bg-background px-[2.1rem]">
       {/* Left: mobile hamburger + title */}
       <div className="flex items-center gap-3">
         <button
           onClick={toggleMobile}
-          className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+          className="rounded-[0.625rem] p-2 text-muted-foreground hover:bg-card hover:text-foreground lg:hidden"
           aria-label="Open menu"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+        <h1 className="text-lg font-medium text-foreground">{title}</h1>
       </div>
 
       {/* Right: actions */}
-      <div className="flex items-center gap-2">
-        {/* Notification bell */}
-        <button
-          className="relative rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" />
-          {failedSyncCount > 0 && (
-            <span
-              className={cn(
-                'absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white'
-              )}
-            >
-              {failedSyncCount > 99 ? '99+' : failedSyncCount}
-            </span>
-          )}
-        </button>
+      <div className="flex items-center gap-1">
+        {/* Search placeholder (like YashAdmin) */}
+        <div className="mr-2 hidden items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground lg:flex">
+          <Search className="h-4 w-4" />
+          <span>Search here...</span>
+        </div>
 
         {/* Dark/light mode toggle */}
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          className="flex h-10 w-10 items-center justify-center rounded-[0.625rem] text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
           aria-label="Toggle theme"
         >
           {theme === 'dark' ? (
@@ -60,14 +49,26 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
           )}
         </button>
 
-        {/* User avatar */}
-        <div className="flex items-center gap-2 rounded-md px-2 py-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold">
-            A
-          </div>
-          <span className="hidden text-sm font-medium text-foreground md:inline">
-            Admin
-          </span>
+        {/* Notification bell */}
+        <button
+          className="relative flex h-10 w-10 items-center justify-center rounded-[0.625rem] text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          aria-label="Notifications"
+        >
+          <Bell className="h-5 w-5" />
+          {failedSyncCount > 0 && (
+            <span className="absolute right-1 top-1 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-medship-danger px-1 text-[0.625rem] font-bold text-white">
+              {failedSyncCount > 99 ? '99+' : failedSyncCount}
+            </span>
+          )}
+        </button>
+
+        {/* User avatar — matches YashAdmin style */}
+        <div className="ml-2 flex items-center gap-2">
+          <img
+            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Ccircle cx='18' cy='18' r='18' fill='%23452B90'/%3E%3Ctext x='18' y='24' font-family='Poppins,sans-serif' font-size='16' font-weight='600' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E"
+            alt="Admin"
+            className="h-10 w-10 rounded-full"
+          />
         </div>
       </div>
     </header>

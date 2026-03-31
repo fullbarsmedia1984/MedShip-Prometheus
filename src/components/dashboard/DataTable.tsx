@@ -66,7 +66,6 @@ export function DataTable<T extends Record<string, any>>({
     onSort(key, newDirection)
   }
 
-  // Generate visible page numbers
   const getPageNumbers = (): number[] => {
     const pages: number[] = []
     const maxVisible = 5
@@ -85,93 +84,104 @@ export function DataTable<T extends Record<string, any>>({
 
   return (
     <div className="space-y-4">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            {columns.map((col) => (
-              <TableHead
-                key={col.key}
-                className={cn(
-                  col.sortable && onSort && 'cursor-pointer select-none',
-                  col.className
-                )}
-                onClick={() => col.sortable && handleSort(col.key)}
-              >
-                <span className="inline-flex items-center gap-1">
-                  {col.label}
-                  {col.sortable && sortKey === col.key && (
-                    sortDirection === 'asc' ? (
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )
-                  )}
-                </span>
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((row, rowIndex) => {
-            const rowId = row.id as string | undefined
-            const isExpanded = expandedRow != null && rowId === expandedRow
-
-            return (
-              <Fragment key={rowId ?? rowIndex}>
-                <TableRow
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              {columns.map((col) => (
+                <TableHead
+                  key={col.key}
                   className={cn(
-                    rowIndex % 2 === 0 && 'bg-muted/30',
-                    onRowClick && 'cursor-pointer',
+                    'whitespace-nowrap border-b border-[#E6E6E6] py-[0.9375rem] px-[0.625rem] text-[0.875rem] font-medium capitalize text-card-foreground dark:border-[rgba(255,255,255,0.1)]',
+                    col.sortable && onSort && 'cursor-pointer select-none',
+                    col.className
                   )}
-                  onClick={() => onRowClick?.(row)}
+                  onClick={() => col.sortable && handleSort(col.key)}
                 >
-                  {columns.map((col) => {
-                    const value = getNestedValue(row, col.key)
-                    return (
-                      <TableCell key={col.key} className={col.className}>
-                        {col.render ? col.render(value, row) : (value ?? '-')}
-                      </TableCell>
-                    )
-                  })}
-                </TableRow>
-                {isExpanded && renderExpanded && (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={columns.length} className="p-0">
-                      {renderExpanded(row)}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </Fragment>
-            )
-          })}
-        </TableBody>
-      </Table>
+                  <span className="inline-flex items-center gap-1">
+                    {col.label}
+                    {col.sortable && sortKey === col.key && (
+                      sortDirection === 'asc' ? (
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      )
+                    )}
+                  </span>
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.map((row, rowIndex) => {
+              const rowId = row.id as string | undefined
+              const isExpanded = expandedRow != null && rowId === expandedRow
 
-      {/* Pagination */}
+              return (
+                <Fragment key={rowId ?? rowIndex}>
+                  <TableRow
+                    className={cn(
+                      'border-b border-[#E6E6E6] transition-colors dark:border-[rgba(255,255,255,0.1)]',
+                      rowIndex % 2 === 1 && 'bg-[#F3F0EC] dark:bg-[rgba(255,255,255,0.02)]',
+                      'hover:bg-[#F3F0EC] dark:hover:bg-[rgba(255,255,255,0.04)]',
+                      onRowClick && 'cursor-pointer',
+                    )}
+                    onClick={() => onRowClick?.(row)}
+                  >
+                    {columns.map((col) => {
+                      const value = getNestedValue(row, col.key)
+                      return (
+                        <TableCell
+                          key={col.key}
+                          className={cn(
+                            'whitespace-nowrap py-[0.9375rem] px-[0.625rem] align-middle',
+                            col.className
+                          )}
+                        >
+                          {col.render ? col.render(value, row) : (value ?? '-')}
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+                  {isExpanded && renderExpanded && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={columns.length} className="p-0">
+                        {renderExpanded(row)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination — matches YashAdmin "Showing 1 to 5 of 10 entries" + page numbers */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-2">
-          <p className="text-xs text-muted-foreground">
-            Showing {(page - 1) * pageSize + 1}
-            {' '}-{' '}
-            {Math.min(page * pageSize, totalItems)} of {totalItems}
+        <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+          <p className="text-[0.813rem] text-muted-foreground">
+            Showing {(page - 1) * pageSize + 1} to{' '}
+            {Math.min(page * pageSize, totalItems)} of {totalItems} entries
           </p>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
-              size="icon-xs"
+              size="sm"
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}
+              className="h-8 w-8 p-0"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-4 w-4" />
             </Button>
 
             {getPageNumbers().map((pageNum) => (
               <Button
                 key={pageNum}
                 variant={pageNum === page ? 'default' : 'outline'}
-                size="xs"
+                size="sm"
                 onClick={() => onPageChange(pageNum)}
-                className="min-w-6"
+                className="h-8 min-w-8 p-0 text-xs"
               >
                 {pageNum}
               </Button>
@@ -179,11 +189,12 @@ export function DataTable<T extends Record<string, any>>({
 
             <Button
               variant="outline"
-              size="icon-xs"
+              size="sm"
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages}
+              className="h-8 w-8 p-0"
             >
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
