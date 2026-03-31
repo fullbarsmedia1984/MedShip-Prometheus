@@ -14,6 +14,12 @@ import {
   seedFieldMappings,
   seedConnectionConfigs,
   seedSalesReps,
+  seedEnhancedSalesReps,
+  seedPipelineStages,
+  seedSalesActivities,
+  seedQuotes,
+  seedMonthlyRepRevenue,
+  seedPipelineByRep,
 } from '@/lib/seed-data'
 import type {
   Product,
@@ -23,6 +29,12 @@ import type {
   CategorySales,
   IntegrationStatusData,
   SalesRep,
+  SeedSalesRep,
+  SeedPipelineStage,
+  SeedSalesActivity,
+  SeedQuote,
+  SeedMonthlyRepRevenue,
+  SeedPipelineByRep,
 } from '@/lib/seed-data'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
 
@@ -361,4 +373,83 @@ export async function getConnectionConfigs(): Promise<ConnectionConfig[]> {
 // TODO: Replace seed data with Supabase query in Phase 2
 export async function getCustomers(): Promise<Customer[]> {
   return seedCustomers
+}
+
+// ---------------------------------------------------------------------------
+// Sales Analytics
+// ---------------------------------------------------------------------------
+
+export async function getSalesLeaderboard(): Promise<SeedSalesRep[]> {
+  return [...seedEnhancedSalesReps].sort((a, b) => b.revenueMTD - a.revenueMTD)
+}
+
+export async function getEnhancedSalesReps(): Promise<SeedSalesRep[]> {
+  return seedEnhancedSalesReps
+}
+
+export async function getPipelineSnapshot(): Promise<SeedPipelineStage[]> {
+  return seedPipelineStages
+}
+
+export async function getSalesActivity(limit = 10): Promise<SeedSalesActivity[]> {
+  return [...seedSalesActivities]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, limit)
+}
+
+export interface QuoteFilters {
+  status?: string
+  search?: string
+  page?: number
+  pageSize?: number
+}
+
+export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedResult<SeedQuote>> {
+  let items = [...seedQuotes]
+
+  if (filters.status && filters.status !== 'all') {
+    items = items.filter((q) => q.status === filters.status)
+  }
+  if (filters.search) {
+    const q = filters.search.toLowerCase()
+    items = items.filter(
+      (quote) =>
+        quote.repName.toLowerCase().includes(q) ||
+        quote.customerName.toLowerCase().includes(q)
+    )
+  }
+
+  items.sort((a, b) => b.date.localeCompare(a.date))
+  return paginate(items, filters.page, filters.pageSize)
+}
+
+export async function getMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {
+  return seedMonthlyRepRevenue
+}
+
+export async function getPipelineByRep(): Promise<SeedPipelineByRep[]> {
+  return seedPipelineByRep
+}
+
+export interface SalesKpis {
+  revenueMTD: number
+  revenueQTD: number
+  revenueYTD: number
+  quotesSentMTD: number
+  dealsClosedMTD: number
+  avgDaysToClose: number
+  pipelineValue: number
+}
+
+export async function getSalesKpis(): Promise<SalesKpis> {
+  const reps = seedEnhancedSalesReps
+  return {
+    revenueMTD: reps.reduce((s, r) => s + r.revenueMTD, 0),
+    revenueQTD: reps.reduce((s, r) => s + r.revenueQTD, 0),
+    revenueYTD: reps.reduce((s, r) => s + r.revenueYTD, 0),
+    quotesSentMTD: reps.reduce((s, r) => s + r.quotesSent, 0),
+    dealsClosedMTD: reps.reduce((s, r) => s + r.dealsClosed, 0),
+    avgDaysToClose: Math.round(reps.reduce((s, r) => s + r.avgDaysToClose, 0) / reps.length),
+    pipelineValue: reps.reduce((s, r) => s + r.pipelineValue, 0),
+  }
 }

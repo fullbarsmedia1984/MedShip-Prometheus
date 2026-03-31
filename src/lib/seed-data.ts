@@ -724,6 +724,218 @@ export const seedFieldMappings: FieldMapping[] = [
 // 10. Connection Configs
 // =============================================================================
 
+// =============================================================================
+// 11. Enhanced Sales Rep Data (for Sales Leaderboard & Analytics)
+// =============================================================================
+
+export interface SeedSalesRep {
+  id: string
+  name: string
+  email: string
+  region: string
+  color: string
+  revenueMTD: number
+  revenueQTD: number
+  revenueYTD: number
+  dealsClosed: number
+  dealsLost: number
+  quotesSent: number
+  avgDealSize: number
+  avgDaysToClose: number
+  pipelineValue: number
+  winRate: number
+  activityScore: 'hot' | 'active' | 'slow' | 'cold'
+}
+
+export const seedEnhancedSalesReps: SeedSalesRep[] = [
+  {
+    id: 'REP-001', name: 'Sarah Mitchell', email: 'sarah.mitchell@medshipllc.com', region: 'Midwest',
+    color: '#452B90', revenueMTD: 167420, revenueQTD: 412800, revenueYTD: 1284500,
+    dealsClosed: 14, dealsLost: 3, quotesSent: 28, avgDealSize: 11958, avgDaysToClose: 18,
+    pipelineValue: 245000, winRate: 82.4, activityScore: 'hot',
+  },
+  {
+    id: 'REP-002', name: 'James Thornton', email: 'james.thornton@medshipllc.com', region: 'Northeast',
+    color: '#3A9B94', revenueMTD: 89200, revenueQTD: 248600, revenueYTD: 876300,
+    dealsClosed: 9, dealsLost: 4, quotesSent: 19, avgDealSize: 9911, avgDaysToClose: 22,
+    pipelineValue: 178000, winRate: 69.2, activityScore: 'active',
+  },
+  {
+    id: 'REP-003', name: 'Maria Gonzalez', email: 'maria.gonzalez@medshipllc.com', region: 'Southeast',
+    color: '#F8B940', revenueMTD: 72850, revenueQTD: 198400, revenueYTD: 724100,
+    dealsClosed: 7, dealsLost: 5, quotesSent: 16, avgDealSize: 10407, avgDaysToClose: 25,
+    pipelineValue: 132000, winRate: 58.3, activityScore: 'active',
+  },
+  {
+    id: 'REP-004', name: 'David Kim', email: 'david.kim@medshipllc.com', region: 'West',
+    color: '#58BAD7', revenueMTD: 31400, revenueQTD: 85200, revenueYTD: 312600,
+    dealsClosed: 3, dealsLost: 8, quotesSent: 9, avgDealSize: 10467, avgDaysToClose: 34,
+    pipelineValue: 64000, winRate: 27.3, activityScore: 'cold',
+  },
+  {
+    id: 'REP-005', name: 'Lisa Chen', email: 'lisa.chen@medshipllc.com', region: 'South Central',
+    color: '#FF9F00', revenueMTD: 42600, revenueQTD: 42600, revenueYTD: 42600,
+    dealsClosed: 4, dealsLost: 1, quotesSent: 22, avgDealSize: 10650, avgDaysToClose: 15,
+    pipelineValue: 198000, winRate: 80.0, activityScore: 'hot',
+  },
+]
+
+// =============================================================================
+// 12. Pipeline Data
+// =============================================================================
+
+export interface SeedPipelineStage {
+  stage: string
+  count: number
+  value: number
+  color: string
+}
+
+export const seedPipelineStages: SeedPipelineStage[] = [
+  { stage: 'Prospecting', count: 12, value: 284000, color: '#93C5FD' },
+  { stage: 'Qualification', count: 8, value: 196000, color: '#60A5FA' },
+  { stage: 'Proposal', count: 6, value: 168000, color: '#3B82F6' },
+  { stage: 'Negotiation', count: 4, value: 125000, color: '#2563EB' },
+  { stage: 'Closed Won', count: 37, value: 403470, color: '#3A9B94' },
+  { stage: 'Closed Lost', count: 9, value: 87000, color: '#FF5E5E' },
+]
+
+// =============================================================================
+// 13. Sales Activity Feed
+// =============================================================================
+
+export interface SeedSalesActivity {
+  id: string
+  repId: string
+  repName: string
+  type: 'deal_closed' | 'quote_sent' | 'opportunity_created' | 'deal_lost'
+  customerName: string
+  amount: number
+  description: string
+  timestamp: string
+}
+
+export const seedSalesActivities: SeedSalesActivity[] = [
+  { id: 'ACT-001', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'deal_closed', customerName: 'Rush University College of Nursing', amount: 72000, description: 'Closed deal with Rush University College of Nursing for $72,000', timestamp: '2026-03-31T10:45:00Z' },
+  { id: 'ACT-002', repId: 'REP-005', repName: 'Lisa Chen', type: 'quote_sent', customerName: 'Houston Community College Nursing', amount: 18500, description: 'Sent quote to Houston Community College Nursing for $18,500', timestamp: '2026-03-31T10:20:00Z' },
+  { id: 'ACT-003', repId: 'REP-002', repName: 'James Thornton', type: 'opportunity_created', customerName: 'Columbia University School of Nursing', amount: 45000, description: 'Created new opportunity: Columbia University SimLab Expansion', timestamp: '2026-03-31T09:30:00Z' },
+  { id: 'ACT-004', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'quote_sent', customerName: 'University of Michigan School of Nursing', amount: 28000, description: 'Sent quote to University of Michigan School of Nursing for $28,000', timestamp: '2026-03-31T08:15:00Z' },
+  { id: 'ACT-005', repId: 'REP-004', repName: 'David Kim', type: 'deal_lost', customerName: 'UCLA School of Nursing', amount: 38000, description: 'Lost deal: UCLA School of Nursing — went with competitor pricing', timestamp: '2026-03-31T07:50:00Z' },
+  { id: 'ACT-006', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'deal_closed', customerName: 'Emory University Nell Hodgson Woodruff School of Nursing', amount: 32000, description: 'Closed deal with Emory University for $32,000', timestamp: '2026-03-30T16:30:00Z' },
+  { id: 'ACT-007', repId: 'REP-005', repName: 'Lisa Chen', type: 'opportunity_created', customerName: 'Rasmussen University School of Nursing', amount: 22000, description: 'Created new opportunity: Rasmussen Nursing Kit Bulk Order', timestamp: '2026-03-30T15:45:00Z' },
+  { id: 'ACT-008', repId: 'REP-002', repName: 'James Thornton', type: 'deal_closed', customerName: 'NYU Rory Meyers College of Nursing', amount: 48000, description: 'Closed deal with NYU Rory Meyers for $48,000', timestamp: '2026-03-30T14:20:00Z' },
+  { id: 'ACT-009', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'quote_sent', customerName: 'Northwestern Memorial Hospital Education', amount: 65000, description: 'Sent quote to Northwestern Memorial for $65,000', timestamp: '2026-03-30T13:00:00Z' },
+  { id: 'ACT-010', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'quote_sent', customerName: 'Duke University School of Nursing', amount: 28500, description: 'Sent quote to Duke University for $28,500', timestamp: '2026-03-30T11:45:00Z' },
+  { id: 'ACT-011', repId: 'REP-004', repName: 'David Kim', type: 'deal_lost', customerName: 'University of Washington School of Nursing', amount: 22000, description: 'Lost deal: UW Nursing — budget frozen for Q1', timestamp: '2026-03-30T10:30:00Z' },
+  { id: 'ACT-012', repId: 'REP-005', repName: 'Lisa Chen', type: 'deal_closed', customerName: 'ECPI University Nursing', amount: 15200, description: 'Closed deal with ECPI University for $15,200', timestamp: '2026-03-30T09:15:00Z' },
+  { id: 'ACT-013', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'deal_closed', customerName: 'Loyola University Chicago Marcella Niehoff School of Nursing', amount: 42500, description: 'Closed deal with Loyola Chicago for $42,500', timestamp: '2026-03-30T08:00:00Z' },
+  { id: 'ACT-014', repId: 'REP-002', repName: 'James Thornton', type: 'quote_sent', customerName: 'Johns Hopkins School of Nursing', amount: 55000, description: 'Sent quote to Johns Hopkins for $55,000', timestamp: '2026-03-29T17:00:00Z' },
+  { id: 'ACT-015', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'opportunity_created', customerName: 'Vanderbilt University School of Nursing', amount: 35000, description: 'Created new opportunity: Vanderbilt Sim Equipment Refresh', timestamp: '2026-03-29T16:00:00Z' },
+  { id: 'ACT-016', repId: 'REP-004', repName: 'David Kim', type: 'quote_sent', customerName: 'Mayo Clinic Simulation Center', amount: 78000, description: 'Sent quote to Mayo Clinic Sim Center for $78,000', timestamp: '2026-03-29T15:20:00Z' },
+  { id: 'ACT-017', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'deal_closed', customerName: 'University of Illinois Chicago College of Nursing', amount: 28400, description: 'Closed deal with UIC for $28,400', timestamp: '2026-03-29T14:10:00Z' },
+  { id: 'ACT-018', repId: 'REP-005', repName: 'Lisa Chen', type: 'quote_sent', customerName: 'Chamberlain University College of Nursing', amount: 42000, description: 'Sent quote to Chamberlain University for $42,000', timestamp: '2026-03-29T13:30:00Z' },
+  { id: 'ACT-019', repId: 'REP-002', repName: 'James Thornton', type: 'deal_closed', customerName: 'University of Pennsylvania School of Nursing', amount: 38600, description: 'Closed deal with UPenn Nursing for $38,600', timestamp: '2026-03-29T11:00:00Z' },
+  { id: 'ACT-020', repId: 'REP-004', repName: 'David Kim', type: 'deal_lost', customerName: 'Cleveland Clinic Education Institute', amount: 32000, description: 'Lost deal: Cleveland Clinic — decided to delay purchase to Q3', timestamp: '2026-03-29T10:00:00Z' },
+  { id: 'ACT-021', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'deal_closed', customerName: 'Miami Dade College Nursing', amount: 12850, description: 'Closed deal with Miami Dade College for $12,850', timestamp: '2026-03-29T09:30:00Z' },
+  { id: 'ACT-022', repId: 'REP-001', repName: 'Sarah Mitchell', type: 'opportunity_created', customerName: 'Advocate Aurora Health Training Center', amount: 58000, description: 'Created new opportunity: Advocate Aurora SimLab Build-Out', timestamp: '2026-03-29T08:45:00Z' },
+  { id: 'ACT-023', repId: 'REP-005', repName: 'Lisa Chen', type: 'deal_closed', customerName: 'Herzing University Nursing Program', amount: 14800, description: 'Closed deal with Herzing University for $14,800', timestamp: '2026-03-29T08:00:00Z' },
+  { id: 'ACT-024', repId: 'REP-002', repName: 'James Thornton', type: 'quote_sent', customerName: 'Case Western Reserve Frances Payne Bolton School of Nursing', amount: 34000, description: 'Sent quote to Case Western Reserve for $34,000', timestamp: '2026-03-29T07:30:00Z' },
+  { id: 'ACT-025', repId: 'REP-003', repName: 'Maria Gonzalez', type: 'quote_sent', customerName: 'College of DuPage Nursing Program', amount: 8500, description: 'Sent quote to College of DuPage for $8,500', timestamp: '2026-03-29T07:00:00Z' },
+]
+
+// =============================================================================
+// 14. Quote Data
+// =============================================================================
+
+export interface SeedQuote {
+  id: string
+  date: string
+  repName: string
+  customerName: string
+  amount: number
+  status: 'sent' | 'viewed' | 'accepted' | 'expired' | 'rejected'
+  daysOpen: number
+}
+
+export const seedQuotes: SeedQuote[] = [
+  { id: 'QT-001', date: '2026-03-31', repName: 'Sarah Mitchell', customerName: 'University of Michigan School of Nursing', amount: 28000, status: 'sent', daysOpen: 0 },
+  { id: 'QT-002', date: '2026-03-31', repName: 'Lisa Chen', customerName: 'Houston Community College Nursing', amount: 18500, status: 'sent', daysOpen: 0 },
+  { id: 'QT-003', date: '2026-03-30', repName: 'Sarah Mitchell', customerName: 'Northwestern Memorial Hospital Education', amount: 65000, status: 'viewed', daysOpen: 1 },
+  { id: 'QT-004', date: '2026-03-30', repName: 'Maria Gonzalez', customerName: 'Duke University School of Nursing', amount: 28500, status: 'viewed', daysOpen: 1 },
+  { id: 'QT-005', date: '2026-03-29', repName: 'James Thornton', customerName: 'Johns Hopkins School of Nursing', amount: 55000, status: 'viewed', daysOpen: 2 },
+  { id: 'QT-006', date: '2026-03-29', repName: 'David Kim', customerName: 'Mayo Clinic Simulation Center', amount: 78000, status: 'sent', daysOpen: 2 },
+  { id: 'QT-007', date: '2026-03-29', repName: 'Lisa Chen', customerName: 'Chamberlain University College of Nursing', amount: 42000, status: 'viewed', daysOpen: 2 },
+  { id: 'QT-008', date: '2026-03-29', repName: 'James Thornton', customerName: 'Case Western Reserve Frances Payne Bolton School of Nursing', amount: 34000, status: 'sent', daysOpen: 2 },
+  { id: 'QT-009', date: '2026-03-29', repName: 'Maria Gonzalez', customerName: 'College of DuPage Nursing Program', amount: 8500, status: 'accepted', daysOpen: 2 },
+  { id: 'QT-010', date: '2026-03-28', repName: 'Sarah Mitchell', customerName: 'Rush University College of Nursing', amount: 72000, status: 'accepted', daysOpen: 3 },
+  { id: 'QT-011', date: '2026-03-27', repName: 'James Thornton', customerName: 'NYU Rory Meyers College of Nursing', amount: 48000, status: 'accepted', daysOpen: 4 },
+  { id: 'QT-012', date: '2026-03-27', repName: 'Maria Gonzalez', customerName: 'Emory University Nell Hodgson Woodruff School of Nursing', amount: 32000, status: 'accepted', daysOpen: 4 },
+  { id: 'QT-013', date: '2026-03-26', repName: 'David Kim', customerName: 'UCLA School of Nursing', amount: 38000, status: 'rejected', daysOpen: 5 },
+  { id: 'QT-014', date: '2026-03-26', repName: 'Lisa Chen', customerName: 'ECPI University Nursing', amount: 15200, status: 'accepted', daysOpen: 5 },
+  { id: 'QT-015', date: '2026-03-25', repName: 'Sarah Mitchell', customerName: 'Loyola University Chicago Marcella Niehoff School of Nursing', amount: 42500, status: 'accepted', daysOpen: 6 },
+  { id: 'QT-016', date: '2026-03-25', repName: 'James Thornton', customerName: 'University of Pennsylvania School of Nursing', amount: 38600, status: 'accepted', daysOpen: 6 },
+  { id: 'QT-017', date: '2026-03-24', repName: 'David Kim', customerName: 'University of Washington School of Nursing', amount: 22000, status: 'rejected', daysOpen: 7 },
+  { id: 'QT-018', date: '2026-03-24', repName: 'Maria Gonzalez', customerName: 'Miami Dade College Nursing', amount: 12850, status: 'accepted', daysOpen: 7 },
+  { id: 'QT-019', date: '2026-03-23', repName: 'Lisa Chen', customerName: 'Herzing University Nursing Program', amount: 14800, status: 'accepted', daysOpen: 8 },
+  { id: 'QT-020', date: '2026-03-22', repName: 'Sarah Mitchell', customerName: 'University of Illinois Chicago College of Nursing', amount: 28400, status: 'accepted', daysOpen: 9 },
+  { id: 'QT-021', date: '2026-03-21', repName: 'David Kim', customerName: 'Cleveland Clinic Education Institute', amount: 32000, status: 'rejected', daysOpen: 10 },
+  { id: 'QT-022', date: '2026-03-20', repName: 'James Thornton', customerName: 'University of Pittsburgh School of Nursing', amount: 24500, status: 'accepted', daysOpen: 11 },
+  { id: 'QT-023', date: '2026-03-19', repName: 'Maria Gonzalez', customerName: 'Moraine Valley Community College', amount: 6200, status: 'accepted', daysOpen: 12 },
+  { id: 'QT-024', date: '2026-03-18', repName: 'Sarah Mitchell', customerName: 'Advocate Aurora Health Training Center', amount: 44000, status: 'expired', daysOpen: 13 },
+  { id: 'QT-025', date: '2026-03-17', repName: 'Lisa Chen', customerName: 'Rasmussen University School of Nursing', amount: 19500, status: 'viewed', daysOpen: 14 },
+  { id: 'QT-026', date: '2026-03-15', repName: 'David Kim', customerName: 'Oakton College Nursing Program', amount: 5800, status: 'expired', daysOpen: 16 },
+  { id: 'QT-027', date: '2026-03-14', repName: 'James Thornton', customerName: 'Massachusetts General Hospital Sim Center', amount: 62000, status: 'accepted', daysOpen: 17 },
+  { id: 'QT-028', date: '2026-03-12', repName: 'Sarah Mitchell', customerName: 'College of Lake County Nursing', amount: 7800, status: 'accepted', daysOpen: 19 },
+  { id: 'QT-029', date: '2026-03-10', repName: 'Maria Gonzalez', customerName: 'Harper College Nursing Program', amount: 4900, status: 'expired', daysOpen: 21 },
+  { id: 'QT-030', date: '2026-03-08', repName: 'David Kim', customerName: 'Triton College Nursing Program', amount: 3800, status: 'rejected', daysOpen: 23 },
+  { id: 'QT-031', date: '2026-03-06', repName: 'Lisa Chen', customerName: 'Chamberlain University College of Nursing', amount: 35000, status: 'accepted', daysOpen: 25 },
+  { id: 'QT-032', date: '2026-03-04', repName: 'James Thornton', customerName: 'Columbia University School of Nursing', amount: 45000, status: 'viewed', daysOpen: 27 },
+  { id: 'QT-033', date: '2026-03-02', repName: 'Sarah Mitchell', customerName: 'Case Western Reserve Frances Payne Bolton School of Nursing', amount: 29000, status: 'accepted', daysOpen: 29 },
+  { id: 'QT-034', date: '2026-03-01', repName: 'Maria Gonzalez', customerName: 'Vanderbilt University School of Nursing', amount: 35000, status: 'sent', daysOpen: 30 },
+]
+
+// =============================================================================
+// 15. Monthly Revenue by Rep (last 6 months)
+// =============================================================================
+
+export interface SeedMonthlyRepRevenue {
+  month: string
+  [repName: string]: number | string
+}
+
+export const seedMonthlyRepRevenue: SeedMonthlyRepRevenue[] = [
+  { month: 'Oct 2025', 'Sarah Mitchell': 98400, 'James Thornton': 72100, 'Maria Gonzalez': 58200, 'David Kim': 45600, 'Lisa Chen': 0 },
+  { month: 'Nov 2025', 'Sarah Mitchell': 112000, 'James Thornton': 64500, 'Maria Gonzalez': 51800, 'David Kim': 38200, 'Lisa Chen': 0 },
+  { month: 'Dec 2025', 'Sarah Mitchell': 78500, 'James Thornton': 48200, 'Maria Gonzalez': 42100, 'David Kim': 28400, 'Lisa Chen': 0 },
+  { month: 'Jan 2026', 'Sarah Mitchell': 142800, 'James Thornton': 88400, 'Maria Gonzalez': 68200, 'David Kim': 32800, 'Lisa Chen': 0 },
+  { month: 'Feb 2026', 'Sarah Mitchell': 102580, 'James Thornton': 71000, 'Maria Gonzalez': 57350, 'David Kim': 21000, 'Lisa Chen': 0 },
+  { month: 'Mar 2026', 'Sarah Mitchell': 167420, 'James Thornton': 89200, 'Maria Gonzalez': 72850, 'David Kim': 31400, 'Lisa Chen': 42600 },
+]
+
+// =============================================================================
+// 16. Pipeline by Rep
+// =============================================================================
+
+export interface SeedPipelineByRep {
+  repName: string
+  Prospecting: number
+  Qualification: number
+  Proposal: number
+  Negotiation: number
+}
+
+export const seedPipelineByRep: SeedPipelineByRep[] = [
+  { repName: 'Sarah Mitchell', Prospecting: 58000, Qualification: 65000, Proposal: 72000, Negotiation: 50000 },
+  { repName: 'James Thornton', Prospecting: 45000, Qualification: 48000, Proposal: 55000, Negotiation: 30000 },
+  { repName: 'Maria Gonzalez', Prospecting: 38000, Qualification: 32000, Proposal: 35000, Negotiation: 27000 },
+  { repName: 'David Kim', Prospecting: 22000, Qualification: 18000, Proposal: 14000, Negotiation: 10000 },
+  { repName: 'Lisa Chen', Prospecting: 68000, Qualification: 52000, Proposal: 48000, Negotiation: 30000 },
+]
+
+// =============================================================================
+// 10. Connection Configs
+// =============================================================================
+
 export const seedConnectionConfigs: ConnectionConfig[] = [
   {
     id: 'CONN-001',

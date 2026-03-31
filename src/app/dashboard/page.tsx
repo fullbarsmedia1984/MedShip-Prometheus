@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { SyncStatusCard } from '@/components/dashboard/SyncStatusCard'
+import { SalesLeaderboard } from '@/components/dashboard/SalesLeaderboard'
+import { SalesActivityFeed } from '@/components/dashboard/SalesActivityFeed'
+import { PipelineSnapshot } from '@/components/dashboard/PipelineSnapshot'
 import { RevenueChart } from '@/components/charts/RevenueChart'
 import { CategoryPieChart } from '@/components/charts/CategoryPieChart'
 import { Header } from '@/components/layout/Header'
@@ -21,6 +24,8 @@ import {
   ShoppingCart,
   CheckCircle,
   Clock,
+  FileText,
+  TrendingUp,
   ArrowRight,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -31,9 +36,13 @@ import {
   getRecentOrders,
   getInventoryAlerts,
   getIntegrationStatus,
+  getSalesLeaderboard,
+  getSalesActivity,
+  getPipelineSnapshot,
+  getSalesKpis,
 } from '@/lib/data'
-import type { RevenueMetrics } from '@/lib/data'
-import type { MonthlyRevenue, CategorySales, Order, Product, IntegrationStatusData } from '@/lib/seed-data'
+import type { RevenueMetrics, SalesKpis } from '@/lib/data'
+import type { MonthlyRevenue, CategorySales, Order, Product, IntegrationStatusData, SeedSalesRep, SeedSalesActivity, SeedPipelineStage } from '@/lib/seed-data'
 import type { AutomationType } from '@/types'
 
 function formatDate(dateStr: string): string {
@@ -48,37 +57,53 @@ function formatDate(dateStr: string): string {
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState<RevenueMetrics | null>(null)
+  const [salesKpis, setSalesKpis] = useState<SalesKpis | null>(null)
   const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenue[]>([])
   const [categorySales, setCategorySales] = useState<CategorySales[]>([])
   const [recentOrders, setRecentOrders] = useState<Order[]>([])
   const [inventoryAlerts, setInventoryAlerts] = useState<Product[]>([])
   const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
+  const [leaderboard, setLeaderboard] = useState<SeedSalesRep[]>([])
+  const [activities, setActivities] = useState<SeedSalesActivity[]>([])
+  const [pipeline, setPipeline] = useState<SeedPipelineStage[]>([])
 
   useEffect(() => {
     async function loadData() {
       try {
         const [
           metricsData,
+          salesKpisData,
           revenueData,
           categoryData,
           ordersData,
           alertsData,
           integrationsData,
+          leaderboardData,
+          activitiesData,
+          pipelineData,
         ] = await Promise.all([
           getRevenueMetrics(),
+          getSalesKpis(),
           getMonthlyRevenue(),
           getCategorySales(),
           getRecentOrders(10),
           getInventoryAlerts(5),
           getIntegrationStatus(),
+          getSalesLeaderboard(),
+          getSalesActivity(10),
+          getPipelineSnapshot(),
         ])
 
         setMetrics(metricsData)
+        setSalesKpis(salesKpisData)
         setMonthlyRevenue(revenueData)
         setCategorySales(categoryData)
         setRecentOrders(ordersData)
         setInventoryAlerts(alertsData)
         setIntegrations(integrationsData)
+        setLeaderboard(leaderboardData)
+        setActivities(activitiesData)
+        setPipeline(pipelineData)
       } catch (error) {
         console.error('Failed to load dashboard data:', error)
       } finally {
@@ -89,7 +114,7 @@ export default function DashboardPage() {
     loadData()
   }, [])
 
-  if (loading || !metrics) {
+  if (loading || !metrics || !salesKpis) {
     return (
       <div className="flex flex-col">
         <Header title="Dashboard" />
@@ -105,8 +130,8 @@ export default function DashboardPage() {
       <Header title="Dashboard" />
 
       <div className="space-y-6 p-6">
-        {/* Row 1 — KPI Cards */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Row 1 — KPI Cards (6 total: 3x2 grid) */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard
             title="Revenue (MTD)"
             value={`$${metrics.mtdRevenue.toLocaleString()}`}
@@ -140,9 +165,28 @@ export default function DashboardPage() {
             iconColor="text-medship-warning"
             invertChange
           />
+          <KpiCard
+            title="Quotes Sent (MTD)"
+            value={salesKpis.quotesSentMTD}
+            change={12.4}
+            changeLabel="vs last month"
+            icon={FileText}
+            iconColor="text-medship-secondary"
+          />
+          <KpiCard
+            title="Pipeline Value"
+            value={`$${salesKpis.pipelineValue.toLocaleString()}`}
+            change={8.2}
+            changeLabel="vs last month"
+            icon={TrendingUp}
+            iconColor="text-medship-danger"
+          />
         </div>
 
-        {/* Row 2 — Charts */}
+        {/* Row 2 — Sales Leaderboard */}
+        <SalesLeaderboard reps={leaderboard} />
+
+        {/* Row 3 — Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-7">
             <RevenueChart data={monthlyRevenue} />
@@ -152,7 +196,17 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 3 — Recent Orders + Inventory Alerts */}
+        {/* Row 4 — Sales Activity Feed + Pipeline Snapshot */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-7">
+            <SalesActivityFeed activities={activities} reps={leaderboard} />
+          </div>
+          <div className="lg:col-span-5">
+            <PipelineSnapshot stages={pipeline} />
+          </div>
+        </div>
+
+        {/* Row 5 — Recent Orders + Inventory Alerts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Recent Orders */}
           <div className="lg:col-span-7">
@@ -260,7 +314,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 4 — Integration Health */}
+        {/* Row 6 — Integration Health */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Integration Health</CardTitle>

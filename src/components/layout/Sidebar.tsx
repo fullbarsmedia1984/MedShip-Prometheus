@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
+  BarChart3,
   RefreshCw,
   List,
   AlertTriangle,
@@ -21,6 +22,7 @@ import {
 
 const mainNav = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
 ]
