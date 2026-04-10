@@ -5,6 +5,37 @@ import type { SystemName } from '@/types'
 const VALID_SYSTEMS: SystemName[] = ['salesforce', 'fishbowl', 'quickbooks', 'easypost']
 
 /**
+ * Fetch all saved connection configs from Supabase.
+ * Returns configs with field names but masked values for password fields.
+ */
+export async function GET() {
+  try {
+    const supabase = createAdminClient()
+
+    const { data, error } = await supabase
+      .from('connection_configs')
+      .select('*')
+      .order('system_name')
+
+    if (error) {
+      console.error('Failed to fetch connection configs:', error)
+      return NextResponse.json(
+        { error: 'Failed to fetch configs', detail: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json(data ?? [])
+  } catch (error) {
+    console.error('Settings API error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
  * Save connection credentials for an external system.
  * Stores config in the connection_configs table.
  */

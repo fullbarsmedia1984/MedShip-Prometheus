@@ -17,7 +17,6 @@ import {
   EyeOff,
   Save,
 } from 'lucide-react'
-import { getConnectionConfigs } from '@/lib/data'
 import type { ConnectionConfig } from '@/types'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -87,8 +86,25 @@ export default function SettingsPage() {
 
   const fetchConnections = useCallback(async () => {
     try {
-      const data = await getConnectionConfigs()
+      const res = await fetch('/api/settings/connections')
+      if (!res.ok) throw new Error('Failed to fetch')
+      const data: ConnectionConfig[] = await res.json()
       setConnections(data)
+
+      // Populate form fields from saved configs
+      const populated: Record<string, Record<string, string>> = {}
+      for (const conn of data) {
+        if (conn.config && typeof conn.config === 'object') {
+          populated[conn.system_name] = conn.config as Record<string, string>
+        }
+      }
+      setFormValues((prev) => {
+        const merged = { ...prev }
+        for (const [system, fields] of Object.entries(populated)) {
+          merged[system] = { ...fields, ...prev[system] }
+        }
+        return merged
+      })
     } catch (error) {
       console.error('Failed to fetch connections:', error)
     } finally {
