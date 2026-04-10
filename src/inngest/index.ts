@@ -19,6 +19,8 @@ export {
   lowStockCheck,
   lowStockCheckManual,
 } from './functions/low-stock-check'
+export { sfFullSync } from './functions/sf-full-sync'
+export { sfIncrementalSync } from './functions/sf-incremental-sync'
 
 // Re-export client for convenience
 export { inngest } from './client'

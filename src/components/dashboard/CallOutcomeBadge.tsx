@@ -8,8 +8,6 @@ const outcomeConfig: Record<string, { bg: string; text: string; label?: string }
   'Quote Requested':         { bg: 'bg-green-500/15', text: 'text-green-600' },
   'Needs Follow-Up':         { bg: 'bg-amber-500/15', text: 'text-amber-600' },
   'Not Interested':          { bg: 'bg-red-500/15', text: 'text-red-500' },
-  'No Answer':               { bg: 'bg-gray-500/10', text: 'text-gray-500' },
-  'Left Voicemail':          { bg: 'bg-gray-400/10', text: 'text-gray-400' },
 }
 
 interface CallOutcomeBadgeProps {

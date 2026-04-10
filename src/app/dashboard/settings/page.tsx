@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Header } from '@/components/layout/Header'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,10 +16,28 @@ import {
   Eye,
   EyeOff,
   Save,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Zap,
+  Leaf,
 } from 'lucide-react'
 import type { ConnectionConfig } from '@/types'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface SyncTableState {
+  table_name: string
+  last_full_sync_at: string | null
+  last_incremental_sync_at: string | null
+  record_count: number
+  last_error: string | null
+  last_sync_duration_ms: number | null
+}
 
 interface SystemConfig {
   key: string
@@ -28,6 +46,10 @@ interface SystemConfig {
   fields: { name: string; label: string; type: 'text' | 'password'; placeholder: string }[]
   phase2?: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 const SYSTEM_CONFIGS: SystemConfig[] = [
   {
@@ -75,7 +97,37 @@ const SYSTEM_CONFIGS: SystemConfig[] = [
   },
 ]
 
+const TABLE_LABELS: Record<string, string> = {
+  sf_users: 'Users',
+  sf_accounts: 'Accounts',
+  sf_products: 'Products',
+  sf_opportunities: 'Opportunities',
+  sf_opportunity_line_items: 'Line Items',
+  sf_profile_calls: 'Profile Calls',
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function relativeTime(isoStr: string | null): string {
+  if (!isoStr) return 'Never'
+  const diff = Date.now() - new Date(isoStr).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function SettingsPage() {
+  // Connection config state
   const [loading, setLoading] = useState(true)
   const [connections, setConnections] = useState<ConnectionConfig[]>([])
   const [testing, setTesting] = useState<string | null>(null)
@@ -84,6 +136,18 @@ export default function SettingsPage() {
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
   const [resetConfirm, setResetConfirm] = useState('')
 
+  // Data source state
+  const [dataSourceMode, setDataSourceMode] = useState<'seed' | 'live'>('seed')
+  const [pendingMode, setPendingMode] = useState<'live' | null>(null)
+  const [syncState, setSyncState] = useState<SyncTableState[]>([])
+  const [syncing, setSyncing] = useState(false)
+  const [syncExpanded, setSyncExpanded] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ---------------------------------------------------------------------------
+  // Data fetching
+  // ---------------------------------------------------------------------------
+
   const fetchConnections = useCallback(async () => {
     try {
       const res = await fetch('/api/settings/connections')
@@ -91,7 +155,6 @@ export default function SettingsPage() {
       const data: ConnectionConfig[] = await res.json()
       setConnections(data)
 
-      // Populate form fields from saved configs
       const populated: Record<string, Record<string, string>> = {}
       for (const conn of data) {
         if (conn.config && typeof conn.config === 'object') {
@@ -112,9 +175,46 @@ export default function SettingsPage() {
     }
   }, [])
 
+  const fetchDataSource = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/data-source')
+      if (res.ok) {
+        const data = await res.json()
+        setDataSourceMode(data.mode ?? 'seed')
+      }
+    } catch {
+      // Supabase may not be configured — default to seed
+    }
+  }, [])
+
+  const fetchSyncState = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sync/salesforce')
+      if (res.ok) {
+        const data = await res.json()
+        setSyncState(data.syncState ?? [])
+      }
+    } catch {
+      // Ignore — sync state table may not exist yet
+    }
+  }, [])
+
   useEffect(() => {
     fetchConnections()
-  }, [fetchConnections])
+    fetchDataSource()
+    fetchSyncState()
+  }, [fetchConnections, fetchDataSource, fetchSyncState])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
+  // ---------------------------------------------------------------------------
+  // Connection handlers
+  // ---------------------------------------------------------------------------
 
   const testConnection = async (systemName: string) => {
     setTesting(systemName)
@@ -220,6 +320,118 @@ export default function SettingsPage() {
     return new Date(ts).toLocaleString()
   }
 
+  // ---------------------------------------------------------------------------
+  // Data source handlers
+  // ---------------------------------------------------------------------------
+
+  const handleModeToggle = async (mode: 'seed' | 'live') => {
+    if (mode === dataSourceMode) return
+
+    if (mode === 'live') {
+      // Show inline confirmation
+      setPendingMode('live')
+      return
+    }
+
+    // Switching to seed — no confirmation needed
+    await applyMode('seed')
+  }
+
+  const applyMode = async (mode: 'seed' | 'live') => {
+    try {
+      const res = await fetch('/api/settings/data-source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
+      if (res.ok) {
+        setDataSourceMode(mode)
+        setPendingMode(null)
+        toast.success(`Switched to ${mode === 'live' ? 'Live Data' : 'Seed Data'}`, {
+          description: mode === 'live'
+            ? 'Dashboard will now show live Salesforce data from the cache.'
+            : 'Dashboard will now show demo data.',
+        })
+      } else {
+        toast.error('Failed to switch data source')
+      }
+    } catch {
+      toast.error('Failed to switch data source', {
+        description: 'Could not reach the settings API',
+      })
+    }
+  }
+
+  const triggerSync = async () => {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/sync/salesforce', { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to trigger sync')
+      toast.success('Sync started', { description: 'Pulling data from Salesforce...' })
+
+      // Poll for progress every 3 seconds
+      pollRef.current = setInterval(async () => {
+        try {
+          const stateRes = await fetch('/api/sync/salesforce')
+          if (stateRes.ok) {
+            const data = await stateRes.json()
+            const states: SyncTableState[] = data.syncState ?? []
+            setSyncState(states)
+
+            // Check if sync finished (all tables have a recent sync time)
+            const allSynced = states.length > 0 && states.every((s) => {
+              if (!s.last_full_sync_at) return false
+              const elapsed = Date.now() - new Date(s.last_full_sync_at).getTime()
+              return elapsed < 120_000 // Within last 2 minutes
+            })
+
+            if (allSynced) {
+              if (pollRef.current) clearInterval(pollRef.current)
+              pollRef.current = null
+              setSyncing(false)
+              const totalRecords = states.reduce((s, t) => s + (t.record_count ?? 0), 0)
+              toast.success('Sync complete', {
+                description: `${totalRecords.toLocaleString()} records cached across ${states.length} tables.`,
+              })
+            }
+          }
+        } catch {
+          // Ignore polling errors
+        }
+      }, 3000)
+
+      // Safety timeout: stop polling after 5 minutes
+      setTimeout(() => {
+        if (pollRef.current) {
+          clearInterval(pollRef.current)
+          pollRef.current = null
+          setSyncing(false)
+        }
+      }, 300_000)
+    } catch {
+      setSyncing(false)
+      toast.error('Failed to start sync')
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Derived state
+  // ---------------------------------------------------------------------------
+
+  const totalRecordsCached = syncState.reduce((s, t) => s + (t.record_count ?? 0), 0)
+  const lastFullSync = syncState
+    .map((s) => s.last_full_sync_at)
+    .filter(Boolean)
+    .sort()
+    .pop() ?? null
+  const hasErrors = syncState.some((s) => s.last_error)
+  const isLive = dataSourceMode === 'live'
+  const isCacheEmpty = totalRecordsCached === 0
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
   return (
     <div className="flex flex-col">
       <Header title="Settings" />
@@ -231,6 +443,200 @@ export default function SettingsPage() {
           </div>
         ) : (
           <>
+            {/* ============================================================ */}
+            {/* Data Source Section                                           */}
+            {/* ============================================================ */}
+            <Card className="overflow-hidden border-2 border-border/60">
+              <CardHeader className="border-b border-border/40 bg-gradient-to-r from-medship-primary/[0.03] to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-medship-primary/10">
+                    <Database className="h-5 w-5 text-medship-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Data Source</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Choose whether the dashboard reads from demo data or live Salesforce
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-5">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                  {/* Left: Mode Toggle */}
+                  <div className="space-y-4">
+                    <div>
+                      <p className="mb-2.5 text-sm font-medium text-card-foreground">Active Mode</p>
+                      {/* Segmented control */}
+                      <div className="inline-flex rounded-lg border border-border/60 bg-muted/30 p-1">
+                        <button
+                          onClick={() => handleModeToggle('seed')}
+                          className={cn(
+                            'relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-all',
+                            dataSourceMode === 'seed'
+                              ? 'bg-amber-500/15 text-amber-600 shadow-sm'
+                              : 'text-muted-foreground hover:text-card-foreground'
+                          )}
+                        >
+                          <Leaf className="h-4 w-4" />
+                          Seed Data
+                        </button>
+                        <button
+                          onClick={() => handleModeToggle('live')}
+                          className={cn(
+                            'relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-all',
+                            dataSourceMode === 'live'
+                              ? 'bg-emerald-500/15 text-emerald-600 shadow-sm'
+                              : 'text-muted-foreground hover:text-card-foreground'
+                          )}
+                        >
+                          <Zap className="h-4 w-4" />
+                          Live Data
+                        </button>
+                      </div>
+
+                      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                        {isLive
+                          ? 'Using live Salesforce data cached in Supabase. Data refreshes via scheduled syncs every 15 minutes.'
+                          : 'Using demo data for testing and demonstrations. No Salesforce queries are made.'}
+                      </p>
+                    </div>
+
+                    {/* Inline confirmation for switching to live */}
+                    {pendingMode === 'live' && (
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-50/50 p-4 dark:bg-amber-950/20">
+                        <p className="mb-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+                          Switch to live data? Make sure you&rsquo;ve run at least one full sync from Salesforce.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => applyMode('live')}
+                            className="bg-emerald-600 text-white hover:bg-emerald-700"
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPendingMode(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Warning: live but empty */}
+                    {isLive && isCacheEmpty && (
+                      <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-50/50 p-3 dark:bg-red-950/20">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                        <p className="text-sm text-red-600 dark:text-red-400">
+                          Live mode active but no data has been synced. Click <strong>Sync Now</strong> to pull from Salesforce.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: Sync Status */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-card-foreground">Salesforce Sync Status</p>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>Last sync: <strong className="text-card-foreground">{relativeTime(lastFullSync)}</strong></span>
+                        <span className="text-border">|</span>
+                        <span><strong className="text-card-foreground">{totalRecordsCached.toLocaleString()}</strong> records</span>
+                      </div>
+                    </div>
+
+                    {/* Sync Now button */}
+                    <Button
+                      onClick={triggerSync}
+                      disabled={syncing}
+                      className={cn(
+                        'w-full justify-center gap-2 py-2.5',
+                        syncing
+                          ? 'bg-medship-primary/80'
+                          : 'bg-medship-primary hover:bg-medship-primary-light'
+                      )}
+                      size="lg"
+                    >
+                      <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
+                      {syncing ? 'Syncing...' : 'Sync Now'}
+                    </Button>
+
+                    {/* Error warning */}
+                    {hasErrors && !syncing && (
+                      <div className="flex items-center gap-2 text-xs text-medship-danger">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span>Some tables had errors during last sync</span>
+                      </div>
+                    )}
+
+                    {/* Collapsible per-table breakdown */}
+                    {syncState.length > 0 && (
+                      <div className="rounded-lg border border-border/50">
+                        <button
+                          onClick={() => setSyncExpanded(!syncExpanded)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-card-foreground"
+                        >
+                          {syncExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          )}
+                          Per-table breakdown
+                        </button>
+
+                        {syncExpanded && (
+                          <div className="border-t border-border/30">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-left text-muted-foreground">
+                                  <th className="px-3 py-1.5 font-medium">Table</th>
+                                  <th className="px-3 py-1.5 text-right font-medium">Records</th>
+                                  <th className="px-3 py-1.5 text-right font-medium">Last Sync</th>
+                                  <th className="px-3 py-1.5 text-center font-medium">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border/20">
+                                {syncState.map((table) => (
+                                  <tr key={table.table_name} className="text-card-foreground">
+                                    <td className="px-3 py-1.5 font-medium">
+                                      {TABLE_LABELS[table.table_name] ?? table.table_name}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums">
+                                      {(table.record_count ?? 0).toLocaleString()}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-right text-muted-foreground">
+                                      {relativeTime(table.last_full_sync_at)}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-center">
+                                      {table.last_error ? (
+                                        <span title={table.last_error}>
+                                          <AlertTriangle className="mx-auto h-3.5 w-3.5 text-medship-danger" />
+                                        </span>
+                                      ) : table.last_full_sync_at ? (
+                                        <CheckCircle className="mx-auto h-3.5 w-3.5 text-emerald-500" />
+                                      ) : (
+                                        <span className="text-muted-foreground/40">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ============================================================ */}
+            {/* Connection Config Cards (existing)                           */}
+            {/* ============================================================ */}
             {SYSTEM_CONFIGS.map((system) => {
               const conn = getConnectionForSystem(system.key)
               const isConnected = conn?.is_active ?? false

@@ -288,19 +288,24 @@ export const AUTOMATION_INFO: Record<
 // --- Profile Call Types ---
 
 export interface SFProfileCall {
+  // Core Activity fields (exist on both Task and Event)
   Id: string;
   Subject: string;
   OwnerId: string;
   OwnerName: string;
-  AccountId: string;
-  AccountName: string;
-  ContactId: string | null;
-  ContactName: string | null;
+  AccountId: string | null;
+  AccountName: string | null;
+  WhoId: string | null;              // Contact or Lead ID
+  WhoName: string | null;
   ActivityDate: string;
   Status: string;
-  callType: string | null;
-  callOutcome: string | null;
-  productsDiscussed: string | null;
+  CreatedDate: string;
+  ActivityType: 'Task' | 'Event';    // Track which underlying object
+
+  // Our custom Activity fields
+  profileCallType: string | null;
+  profileCallOutcome: string | null;
+  productsDiscussed: string | null;   // Semicolon-separated (SF multi-select format)
   programSize: string | null;
   currentSupplier: string | null;
   budgetAvailable: number | null;
@@ -309,10 +314,23 @@ export interface SFProfileCall {
   convertedToOpp: boolean;
   relatedOpportunityId: string | null;
   relatedOpportunityName: string | null;
-  callDurationMinutes: number | null;
   callNotesSummary: string | null;
   competitorIntel: string | null;
-  createdDate: string;
+
+  // RingDNA metadata (read-only from integration)
+  ringdnaDirection: string | null;
+  ringdnaDurationMin: number | null;
+  ringdnaConnected: boolean;
+  ringdnaRating: number | null;
+  ringdnaRecordingUrl: string | null;
+  ringdnaVoicemail: boolean;
+  ringdnaKeywords: string | null;
+  ringdnaStartTime: string | null;
+  ringdnaDisposition: string | null;
+
+  // Calendly metadata (read-only from integration)
+  calendlyNoShow: boolean;
+  calendlyRescheduled: boolean;
 }
 
 export interface SFProfileCallMetrics {
@@ -321,9 +339,13 @@ export interface SFProfileCallMetrics {
   totalCalls: number;
   converted: number;
   conversionRate: number;
-  avgDuration: number;
+  connectedCalls: number;             // RingDNA: calls that actually reached the person
+  connectRate: number;                // connectedCalls / totalCalls
+  avgDuration: number;                // From RingDNA
+  avgRating: number | null;           // From RingDNA
   callsThisWeek: number;
   callsThisMonth: number;
+  topKeywords: string[];              // Most frequent RingDNA keywords
 }
 
 // --- API Response Types ---

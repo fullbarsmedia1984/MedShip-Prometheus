@@ -11,25 +11,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Phone } from 'lucide-react'
+import { ConnectRateBadge } from '@/components/dashboard/ConnectRateBadge'
 import type { SeedSalesRep } from '@/lib/seed-data'
-
-interface ProfileCallMetricsByRep {
-  repName: string
-  calls: number
-  converted: number
-  conversionRate: number
-  avgDuration: number
-}
+import type { ProfileCallMetricsResult } from '@/lib/data'
 
 interface ProfileCallLeaderboardProps {
   reps: SeedSalesRep[]
-  metrics: {
-    totalMTD: number
-    totalLastMonth: number
-    conversionRate: number
-    avgDuration: number
-    byRep: ProfileCallMetricsByRep[]
-  }
+  metrics: ProfileCallMetricsResult
 }
 
 export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboardProps) {
@@ -54,6 +42,10 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
               <p className="text-[0.65rem] text-muted-foreground">Total MTD</p>
             </div>
             <div className="text-right">
+              <p className="font-semibold text-card-foreground">{metrics.connectRate}%</p>
+              <p className="text-[0.65rem] text-muted-foreground">Connect Rate</p>
+            </div>
+            <div className="text-right">
               <p className="font-semibold text-card-foreground">{metrics.conversionRate}%</p>
               <p className="text-[0.65rem] text-muted-foreground">Conversion</p>
             </div>
@@ -72,9 +64,11 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
               <TableHead>Sales Rep</TableHead>
               <TableHead className="text-center">Profile Calls</TableHead>
               <TableHead className="hidden w-[200px] md:table-cell">Volume</TableHead>
+              <TableHead className="text-center">Connect Rate</TableHead>
               <TableHead className="text-center">Converted</TableHead>
               <TableHead className="text-center">Conversion Rate</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Avg Duration</TableHead>
+              <TableHead className="hidden text-center lg:table-cell">Avg Rating</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -127,12 +121,18 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
                       />
                     </div>
                   </TableCell>
+                  <TableCell className="text-center">
+                    <ConnectRateBadge rate={repMetric.connectRate} />
+                  </TableCell>
                   <TableCell className="text-center font-medium tabular-nums">{repMetric.converted}</TableCell>
                   <TableCell className={cn('text-center font-semibold tabular-nums', convColor)}>
                     {repMetric.conversionRate}%
                   </TableCell>
                   <TableCell className="hidden text-center tabular-nums text-muted-foreground lg:table-cell">
                     {repMetric.avgDuration}m
+                  </TableCell>
+                  <TableCell className="hidden text-center tabular-nums text-muted-foreground lg:table-cell">
+                    {repMetric.avgRating !== null ? repMetric.avgRating.toFixed(1) : '—'}
                   </TableCell>
                 </TableRow>
               )

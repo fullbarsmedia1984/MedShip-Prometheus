@@ -102,9 +102,70 @@ export async function getProductsByCode(
 
 // --- Profile Call Queries ---
 
+// Common fields for both Task and Event queries
+const PROFILE_CALL_FIELDS = `
+  Id, Subject, OwnerId, Owner.Name, AccountId, Account.Name,
+  WhoId, Who.Name, ActivityDate, Status, CreatedDate,
+  Profile_Call_Type__c, Profile_Call_Outcome__c, Products_Discussed__c,
+  Program_Size__c, Current_Supplier__c, Budget_Available__c,
+  Budget_Timeframe__c, Follow_Up_Date__c, Converted_to_Opp__c,
+  Related_Opportunity__c, Related_Opportunity__r.Name,
+  Call_Notes_Summary__c, Competitor_Intel__c,
+  ringdna__Call_Direction__c, ringdna__Call_Duration_min__c,
+  ringdna__Call_Connected__c, ringdna__Call_Rating__c,
+  ringdna__Call_Recording_URL__c, ringdna__Voicemail__c,
+  ringdna__Keywords__c, ringdna__Call_Start_Time__c,
+  ringdna__Call_Disposition__c,
+  Calendly__IsNoShow__c, Calendly__IsRescheduled__c
+`
+
 /**
- * Get profile call tasks with all custom fields.
- * Filter by date range, sales rep, and outcome.
+ * Helper to map raw SF response to SFProfileCall shape.
+ */
+function mapToProfileCall(raw: Record<string, any>, activityType: 'Task' | 'Event'): SFProfileCall {
+  return {
+    Id: raw.Id,
+    Subject: raw.Subject,
+    OwnerId: raw.OwnerId,
+    OwnerName: raw.Owner?.Name ?? '',
+    AccountId: raw.AccountId ?? null,
+    AccountName: raw.Account?.Name ?? null,
+    WhoId: raw.WhoId ?? null,
+    WhoName: raw.Who?.Name ?? null,
+    ActivityDate: raw.ActivityDate,
+    Status: raw.Status,
+    CreatedDate: raw.CreatedDate,
+    ActivityType: activityType,
+    profileCallType: raw.Profile_Call_Type__c ?? null,
+    profileCallOutcome: raw.Profile_Call_Outcome__c ?? null,
+    productsDiscussed: raw.Products_Discussed__c ?? null,
+    programSize: raw.Program_Size__c ?? null,
+    currentSupplier: raw.Current_Supplier__c ?? null,
+    budgetAvailable: raw.Budget_Available__c ?? null,
+    budgetTimeframe: raw.Budget_Timeframe__c ?? null,
+    followUpDate: raw.Follow_Up_Date__c ?? null,
+    convertedToOpp: raw.Converted_to_Opp__c ?? false,
+    relatedOpportunityId: raw.Related_Opportunity__c ?? null,
+    relatedOpportunityName: raw.Related_Opportunity__r?.Name ?? null,
+    callNotesSummary: raw.Call_Notes_Summary__c ?? null,
+    competitorIntel: raw.Competitor_Intel__c ?? null,
+    ringdnaDirection: raw.ringdna__Call_Direction__c ?? null,
+    ringdnaDurationMin: raw.ringdna__Call_Duration_min__c ?? null,
+    ringdnaConnected: raw.ringdna__Call_Connected__c ?? false,
+    ringdnaRating: raw.ringdna__Call_Rating__c ?? null,
+    ringdnaRecordingUrl: raw.ringdna__Call_Recording_URL__c ?? null,
+    ringdnaVoicemail: raw.ringdna__Voicemail__c ?? false,
+    ringdnaKeywords: raw.ringdna__Keywords__c ?? null,
+    ringdnaStartTime: raw.ringdna__Call_Start_Time__c ?? null,
+    ringdnaDisposition: raw.ringdna__Call_Disposition__c ?? null,
+    calendlyNoShow: raw.Calendly__IsNoShow__c ?? false,
+    calendlyRescheduled: raw.Calendly__IsRescheduled__c ?? false,
+  }
+}
+
+/**
+ * Get profile calls from both Task and Event, union and sort by date.
+ * Filter by date range, sales rep, account, and outcome.
  */
 export async function getProfileCalls(
   client: SalesforceClient,
@@ -121,66 +182,30 @@ export async function getProfileCalls(
 
   return client.withRetry(async (conn) => {
     try {
-      let soql = `
-        SELECT Id, Subject, OwnerId, Owner.Name, AccountId, Account.Name,
-               WhoId, Who.Name, ActivityDate, Status,
-               Call_Type__c, Call_Outcome__c, Products_Discussed__c,
-               Program_Size__c, Current_Supplier__c, Budget_Available__c,
-               Budget_Timeframe__c, Follow_Up_Date__c, Converted_to_Opp__c,
-               Related_Opportunity__c, Related_Opportunity__r.Name,
-               Call_Duration_Minutes__c, Call_Notes_Summary__c,
-               Competitor_Intel__c, CreatedDate
-        FROM Task
-        WHERE RecordType.DeveloperName = 'Profile_Call'
-      `
+      // Build WHERE clause
+      const conditions: string[] = ["RecordType.DeveloperName = 'Profile_Call'"]
+      if (filters?.startDate) conditions.push(`ActivityDate >= ${filters.startDate}`)
+      if (filters?.endDate) conditions.push(`ActivityDate <= ${filters.endDate}`)
+      if (filters?.ownerId) conditions.push(`OwnerId = '${escapeSoql(filters.ownerId)}'`)
+      if (filters?.accountId) conditions.push(`AccountId = '${escapeSoql(filters.accountId)}'`)
+      if (filters?.outcome) conditions.push(`Profile_Call_Outcome__c = '${escapeSoql(filters.outcome)}'`)
 
-      if (filters?.startDate) {
-        soql += ` AND ActivityDate >= ${filters.startDate}`
-      }
-      if (filters?.endDate) {
-        soql += ` AND ActivityDate <= ${filters.endDate}`
-      }
-      if (filters?.ownerId) {
-        soql += ` AND OwnerId = '${escapeSoql(filters.ownerId)}'`
-      }
-      if (filters?.accountId) {
-        soql += ` AND AccountId = '${escapeSoql(filters.accountId)}'`
-      }
-      if (filters?.outcome) {
-        soql += ` AND Call_Outcome__c = '${escapeSoql(filters.outcome)}'`
-      }
+      const whereClause = conditions.join(' AND ')
 
-      soql += ` ORDER BY ActivityDate DESC LIMIT ${limit}`
+      // Query Task and Event in parallel
+      const [taskResults, eventResults] = await Promise.all([
+        conn.query<Record<string, any>>(`SELECT ${PROFILE_CALL_FIELDS} FROM Task WHERE ${whereClause} ORDER BY ActivityDate DESC LIMIT ${limit}`),
+        conn.query<Record<string, any>>(`SELECT ${PROFILE_CALL_FIELDS} FROM Event WHERE ${whereClause} ORDER BY ActivityDate DESC LIMIT ${limit}`),
+      ])
 
-      const result = await conn.query<Record<string, any>>(soql)
+      // Map to unified shape with ActivityType marker
+      const tasks = taskResults.records.map((r) => mapToProfileCall(r, 'Task'))
+      const events = eventResults.records.map((r) => mapToProfileCall(r, 'Event'))
 
-      return result.records.map((r) => ({
-        Id: r.Id,
-        Subject: r.Subject,
-        OwnerId: r.OwnerId,
-        OwnerName: r.Owner?.Name ?? '',
-        AccountId: r.AccountId,
-        AccountName: r.Account?.Name ?? '',
-        ContactId: r.WhoId ?? null,
-        ContactName: r.Who?.Name ?? null,
-        ActivityDate: r.ActivityDate,
-        Status: r.Status,
-        callType: r.Call_Type__c ?? null,
-        callOutcome: r.Call_Outcome__c ?? null,
-        productsDiscussed: r.Products_Discussed__c ?? null,
-        programSize: r.Program_Size__c ?? null,
-        currentSupplier: r.Current_Supplier__c ?? null,
-        budgetAvailable: r.Budget_Available__c ?? null,
-        budgetTimeframe: r.Budget_Timeframe__c ?? null,
-        followUpDate: r.Follow_Up_Date__c ?? null,
-        convertedToOpp: r.Converted_to_Opp__c ?? false,
-        relatedOpportunityId: r.Related_Opportunity__c ?? null,
-        relatedOpportunityName: r.Related_Opportunity__r?.Name ?? null,
-        callDurationMinutes: r.Call_Duration_Minutes__c ?? null,
-        callNotesSummary: r.Call_Notes_Summary__c ?? null,
-        competitorIntel: r.Competitor_Intel__c ?? null,
-        createdDate: r.CreatedDate,
-      }))
+      // Merge, sort by date desc, apply final limit
+      return [...tasks, ...events]
+        .sort((a, b) => new Date(b.ActivityDate).getTime() - new Date(a.ActivityDate).getTime())
+        .slice(0, limit)
     } catch (error) {
       throwIfInvalidField(error)
       throw error
@@ -189,52 +214,69 @@ export async function getProfileCalls(
 }
 
 /**
- * Get profile call counts and metrics grouped by rep.
- * Used for leaderboard and KPI cards.
+ * Get aggregated metrics per rep for the leaderboard.
+ * Fetches all calls in range and computes stats client-side.
  */
 export async function getProfileCallMetrics(
   client: SalesforceClient,
   startDate: string,
   endDate: string
 ): Promise<SFProfileCallMetrics[]> {
-  return client.withRetry(async (conn) => {
-    try {
-      // Fetch all profile calls in the date range and aggregate in code
-      // (SOQL aggregate limitations on checkbox fields in some SF editions)
-      const result = await conn.query<Record<string, any>>(`
-        SELECT OwnerId, Owner.Name, Converted_to_Opp__c, Call_Duration_Minutes__c
-        FROM Task
-        WHERE RecordType.DeveloperName = 'Profile_Call'
-          AND ActivityDate >= ${startDate}
-          AND ActivityDate <= ${endDate}
-      `)
+  // Fetch all calls in range, aggregate in memory
+  const calls = await getProfileCalls(client, { startDate, endDate, limit: 2000 })
 
-      const byRep = new Map<string, { name: string; total: number; converted: number; totalDuration: number }>()
+  // Group by OwnerId
+  const byRep = new Map<string, SFProfileCall[]>()
+  for (const call of calls) {
+    const list = byRep.get(call.OwnerId) ?? []
+    list.push(call)
+    byRep.set(call.OwnerId, list)
+  }
 
-      for (const r of result.records) {
-        const id = r.OwnerId
-        const existing = byRep.get(id) ?? { name: r.Owner?.Name ?? '', total: 0, converted: 0, totalDuration: 0 }
-        existing.total++
-        if (r.Converted_to_Opp__c) existing.converted++
-        existing.totalDuration += r.Call_Duration_Minutes__c ?? 0
-        byRep.set(id, existing)
+  // Compute metrics per rep
+  const metrics: SFProfileCallMetrics[] = []
+  const now = new Date()
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  for (const [ownerId, repCalls] of byRep.entries()) {
+    const totalCalls = repCalls.length
+    const converted = repCalls.filter((c) => c.convertedToOpp).length
+    const connected = repCalls.filter((c) => c.ringdnaConnected).length
+    const ratings = repCalls.map((c) => c.ringdnaRating).filter((r): r is number => r !== null)
+    const durations = repCalls.map((c) => c.ringdnaDurationMin).filter((d): d is number => d !== null)
+
+    // Aggregate keywords
+    const keywordCounts = new Map<string, number>()
+    for (const call of repCalls) {
+      if (!call.ringdnaKeywords) continue
+      const words = call.ringdnaKeywords.split(/[,;]/).map((w) => w.trim()).filter(Boolean)
+      for (const word of words) {
+        keywordCounts.set(word, (keywordCounts.get(word) ?? 0) + 1)
       }
-
-      return Array.from(byRep.entries()).map(([repId, data]) => ({
-        repId,
-        repName: data.name,
-        totalCalls: data.total,
-        converted: data.converted,
-        conversionRate: data.total > 0 ? Math.round((data.converted / data.total) * 1000) / 10 : 0,
-        avgDuration: data.total > 0 ? Math.round(data.totalDuration / data.total) : 0,
-        callsThisWeek: 0, // computed separately if needed
-        callsThisMonth: data.total,
-      }))
-    } catch (error) {
-      throwIfInvalidField(error)
-      throw error
     }
-  })
+    const topKeywords = Array.from(keywordCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([word]) => word)
+
+    metrics.push({
+      repId: ownerId,
+      repName: repCalls[0].OwnerName,
+      totalCalls,
+      converted,
+      conversionRate: totalCalls > 0 ? Math.round((converted / totalCalls) * 1000) / 10 : 0,
+      connectedCalls: connected,
+      connectRate: totalCalls > 0 ? Math.round((connected / totalCalls) * 1000) / 10 : 0,
+      avgDuration: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0,
+      avgRating: ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
+      callsThisWeek: repCalls.filter((c) => new Date(c.ActivityDate) >= weekAgo).length,
+      callsThisMonth: repCalls.filter((c) => new Date(c.ActivityDate) >= monthAgo).length,
+      topKeywords,
+    })
+  }
+
+  return metrics.sort((a, b) => b.totalCalls - a.totalCalls)
 }
 
 /**
@@ -253,6 +295,42 @@ export async function getProfileCallConversionRate(
     converted,
     rate: totalCalls > 0 ? Math.round((converted / totalCalls) * 1000) / 10 : 0,
   }
+}
+
+/**
+ * Aggregate top competitor/market keywords across all reps (for org-wide intel).
+ * Uses RingDNA keywords from profile calls.
+ */
+export async function getTopCompetitorKeywords(
+  client: SalesforceClient,
+  startDate: string,
+  endDate: string,
+  limit: number = 10
+): Promise<Array<{ keyword: string; mentions: number; calls: number }>> {
+  const calls = await getProfileCalls(client, { startDate, endDate, limit: 2000 })
+
+  const keywordMentions = new Map<string, number>()
+  const keywordCalls = new Map<string, Set<string>>()
+
+  for (const call of calls) {
+    if (!call.ringdnaKeywords) continue
+    const words = call.ringdnaKeywords.split(/[,;]/).map((w) => w.trim()).filter(Boolean)
+    for (const word of words) {
+      keywordMentions.set(word, (keywordMentions.get(word) ?? 0) + 1)
+      const callSet = keywordCalls.get(word) ?? new Set()
+      callSet.add(call.Id)
+      keywordCalls.set(word, callSet)
+    }
+  }
+
+  return Array.from(keywordMentions.entries())
+    .map(([keyword, mentions]) => ({
+      keyword,
+      mentions,
+      calls: keywordCalls.get(keyword)?.size ?? 0,
+    }))
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, limit)
 }
 
 // --- Helpers ---

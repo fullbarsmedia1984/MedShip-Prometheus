@@ -66,8 +66,9 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
               <TableHead className="text-right">Revenue (MTD)</TableHead>
               <TableHead className="hidden w-[220px] lg:table-cell">Revenue Bar</TableHead>
               <TableHead className="hidden text-center md:table-cell">Deals Closed</TableHead>
-              <TableHead className="hidden text-center md:table-cell">Quotes Sent</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Profile Calls</TableHead>
+              <TableHead className="hidden text-center lg:table-cell">Connect Rate</TableHead>
+              <TableHead className="hidden text-center md:table-cell">Quotes Sent</TableHead>
               <TableHead className="hidden text-right xl:table-cell">Avg Deal Size</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Win Rate</TableHead>
               <TableHead className="text-center">Activity</TableHead>
@@ -117,7 +118,6 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
                     </div>
                   </TableCell>
                   <TableCell className="hidden text-center font-medium md:table-cell">{rep.dealsClosed}</TableCell>
-                  <TableCell className="hidden text-center font-medium md:table-cell">{rep.quotesSent}</TableCell>
                   <TableCell className="hidden text-center lg:table-cell">
                     <div className="flex items-center justify-center gap-1">
                       <span className="font-semibold tabular-nums">{rep.profileCalls}</span>
@@ -135,6 +135,21 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
                       )}
                     </div>
                   </TableCell>
+                  <TableCell className="hidden text-center lg:table-cell">
+                    {rep.connectRate !== undefined ? (
+                      <span className={cn(
+                        'inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-[0.7rem] font-semibold tabular-nums',
+                        rep.connectRate >= 75 ? 'bg-emerald-500/15 text-emerald-600'
+                          : rep.connectRate >= 50 ? 'bg-amber-500/15 text-amber-600'
+                          : 'bg-red-500/15 text-red-500'
+                      )}>
+                        {rep.connectRate}%
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/30">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden text-center font-medium md:table-cell">{rep.quotesSent}</TableCell>
                   <TableCell className="hidden text-right tabular-nums xl:table-cell">
                     ${rep.avgDealSize.toLocaleString()}
                   </TableCell>

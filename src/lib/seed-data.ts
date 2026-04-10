@@ -773,6 +773,7 @@ export interface SeedSalesRep {
   quotesSent: number
   profileCalls: number
   profileCallsChange: number
+  connectRate: number
   avgDealSize: number
   avgDaysToClose: number
   pipelineValue: number
@@ -784,31 +785,31 @@ export const seedEnhancedSalesReps: SeedSalesRep[] = [
   {
     id: 'REP-001', name: 'Sarah Mitchell', email: 'sarah.mitchell@medshipllc.com', region: 'Midwest',
     color: '#452B90', revenueMTD: 167420, revenueQTD: 412800, revenueYTD: 1284500,
-    dealsClosed: 14, dealsLost: 3, quotesSent: 28, profileCalls: 26, profileCallsChange: 30.0, avgDealSize: 11958, avgDaysToClose: 18,
+    dealsClosed: 14, dealsLost: 3, quotesSent: 28, profileCalls: 26, profileCallsChange: 30.0, connectRate: 85, avgDealSize: 11958, avgDaysToClose: 18,
     pipelineValue: 245000, winRate: 82.4, activityScore: 'hot',
   },
   {
     id: 'REP-002', name: 'James Thornton', email: 'james.thornton@medshipllc.com', region: 'Northeast',
     color: '#3A9B94', revenueMTD: 89200, revenueQTD: 248600, revenueYTD: 876300,
-    dealsClosed: 9, dealsLost: 4, quotesSent: 19, profileCalls: 15, profileCallsChange: 15.4, avgDealSize: 9911, avgDaysToClose: 22,
+    dealsClosed: 9, dealsLost: 4, quotesSent: 19, profileCalls: 15, profileCallsChange: 15.4, connectRate: 70, avgDealSize: 9911, avgDaysToClose: 22,
     pipelineValue: 178000, winRate: 69.2, activityScore: 'active',
   },
   {
     id: 'REP-003', name: 'Maria Gonzalez', email: 'maria.gonzalez@medshipllc.com', region: 'Southeast',
     color: '#F8B940', revenueMTD: 72850, revenueQTD: 198400, revenueYTD: 724100,
-    dealsClosed: 7, dealsLost: 5, quotesSent: 16, profileCalls: 14, profileCallsChange: 16.7, avgDealSize: 10407, avgDaysToClose: 25,
+    dealsClosed: 7, dealsLost: 5, quotesSent: 16, profileCalls: 14, profileCallsChange: 16.7, connectRate: 75, avgDealSize: 10407, avgDaysToClose: 25,
     pipelineValue: 132000, winRate: 58.3, activityScore: 'active',
   },
   {
     id: 'REP-004', name: 'David Kim', email: 'david.kim@medshipllc.com', region: 'West',
     color: '#58BAD7', revenueMTD: 31400, revenueQTD: 85200, revenueYTD: 312600,
-    dealsClosed: 3, dealsLost: 8, quotesSent: 9, profileCalls: 7, profileCallsChange: -30.0, avgDealSize: 10467, avgDaysToClose: 34,
+    dealsClosed: 3, dealsLost: 8, quotesSent: 9, profileCalls: 10, profileCallsChange: -30.0, connectRate: 40, avgDealSize: 10467, avgDaysToClose: 34,
     pipelineValue: 64000, winRate: 27.3, activityScore: 'cold',
   },
   {
     id: 'REP-005', name: 'Lisa Chen', email: 'lisa.chen@medshipllc.com', region: 'South Central',
     color: '#FF9F00', revenueMTD: 42600, revenueQTD: 42600, revenueYTD: 42600,
-    dealsClosed: 4, dealsLost: 1, quotesSent: 22, profileCalls: 11, profileCallsChange: 0, avgDealSize: 10650, avgDaysToClose: 15,
+    dealsClosed: 4, dealsLost: 1, quotesSent: 22, profileCalls: 13, profileCallsChange: 0, connectRate: 65, avgDealSize: 10650, avgDaysToClose: 15,
     pipelineValue: 198000, winRate: 80.0, activityScore: 'hot',
   },
 ]
@@ -1029,7 +1030,7 @@ export const seedConnectionConfigs: ConnectionConfig[] = [
 // =============================================================================
 
 export type ProfileCallType = 'Initial Discovery' | 'Follow-Up' | 'Product Demo' | 'Needs Assessment' | 'Budget Discussion' | 'Contract Review'
-export type ProfileCallOutcome = 'Interested - Next Steps' | 'Needs Follow-Up' | 'Not Interested' | 'No Answer' | 'Left Voicemail' | 'Scheduled Demo' | 'Quote Requested'
+export type ProfileCallOutcome = 'Interested - Next Steps' | 'Needs Follow-Up' | 'Not Interested' | 'Scheduled Demo' | 'Quote Requested'
 
 export interface SeedProfileCall {
   id: string
@@ -1039,8 +1040,11 @@ export interface SeedProfileCall {
   accountName: string
   contactName: string
   activityDate: string
-  callType: ProfileCallType
-  callOutcome: ProfileCallOutcome
+  activityType: 'Task' | 'Event'
+
+  // Our custom fields
+  profileCallType: ProfileCallType
+  profileCallOutcome: ProfileCallOutcome
   productsDiscussed: string[]
   programSize: string
   currentSupplier: string | null
@@ -1049,9 +1053,22 @@ export interface SeedProfileCall {
   followUpDate: string | null
   convertedToOpp: boolean
   relatedOpportunityName: string | null
-  callDurationMinutes: number
   callNotesSummary: string
   competitorIntel: string | null
+
+  // RingDNA simulated metadata
+  ringdnaDirection: 'Inbound' | 'Outbound'
+  ringdnaDurationMin: number
+  ringdnaConnected: boolean
+  ringdnaRating: number | null      // 1-5
+  ringdnaRecordingUrl: string | null
+  ringdnaVoicemail: boolean
+  ringdnaKeywords: string | null
+  ringdnaStartTime: string
+
+  // Calendly simulated metadata
+  calendlyNoShow: boolean
+  calendlyRescheduled: boolean
 }
 
 export interface SeedWeeklyCallVolume {
@@ -1063,6 +1080,16 @@ const profileCallProducts = ['Pyxis MedStation', 'Simulation Manikins', 'Hospita
 const programSizes = ['Small (<50 students)', 'Medium (50-150 students)', 'Large (150-500 students)', 'Enterprise (500+ students)']
 const budgetTimeframes = ['This Quarter', 'Next Quarter', 'This Fiscal Year', 'Next Fiscal Year', 'Unknown']
 const competitors = ['Pocket Nurse', 'Laerdal direct sales', 'Local distributor', 'State contract vendor']
+
+// RingDNA keyword pools for realistic simulation
+const ringdnaKeywordPool = [
+  'Pocket Nurse', 'Laerdal', 'budget', 'state contract', 'demo', 'Pyxis',
+  'simulation lab', 'grant funding', 'refurbished', 'capital request',
+  'Cardinal Health', 'McKesson', 'pricing', 'ROI', 'NCLEX', 'clinical rotation',
+  'accreditation', 'renewal', 'trade-in', 'lease option',
+]
+const topPerformerKeywordBias = ['Pyxis', 'grant funding', 'demo', 'simulation lab', 'ROI', 'capital request']
+const underperformerKeywordBias = ['budget', 'Pocket Nurse', 'pricing', 'refurbished']
 
 const profileCallContacts = [
   'Dr. Patricia Hammond', 'Prof. Linda Martinez', 'Dean Robert Chen', 'Dr. Angela Foster',
@@ -1197,63 +1224,70 @@ function generateProfileCalls(): SeedProfileCall[] {
     callCount: number
     outcomes: ProfileCallOutcome[]
     types: ProfileCallType[]
-    durationMin: number
-    durationMax: number
     conversionRate: number
+    connectRate: number
+    ratingAvg: number
+    ratingSpread: number
     accountPool: string[]
     productBias: string[]
     programSizeBias: string[]
+    keywordBias: string[]
   }
 
   const repConfigs: RepConfig[] = [
     {
       repId: 'REP-001', repName: 'Sarah Mitchell', callCount: 26, conversionRate: 0.40,
-      outcomes: ['Interested - Next Steps', 'Interested - Next Steps', 'Interested - Next Steps', 'Quote Requested', 'Quote Requested', 'Scheduled Demo', 'Scheduled Demo', 'Needs Follow-Up', 'Needs Follow-Up', 'Not Interested', 'No Answer'],
+      connectRate: 0.85, ratingAvg: 4.2, ratingSpread: 0.8,
+      outcomes: ['Interested - Next Steps', 'Interested - Next Steps', 'Interested - Next Steps', 'Quote Requested', 'Quote Requested', 'Scheduled Demo', 'Scheduled Demo', 'Needs Follow-Up', 'Needs Follow-Up', 'Not Interested'],
       types: ['Follow-Up', 'Follow-Up', 'Product Demo', 'Product Demo', 'Budget Discussion', 'Budget Discussion', 'Needs Assessment', 'Contract Review', 'Initial Discovery'],
-      durationMin: 20, durationMax: 45,
       accountPool: ['Rush University College of Nursing', 'University of Illinois Chicago College of Nursing', 'Loyola University Chicago Marcella Niehoff School of Nursing', 'University of Michigan School of Nursing', 'Case Western Reserve Frances Payne Bolton School of Nursing', 'Northwestern Memorial Hospital Education', 'Advocate Aurora Health Training Center', 'Mayo Clinic Simulation Center', 'Cleveland Clinic Education Institute', 'College of DuPage Nursing Program', 'Harper College Nursing Program', 'Moraine Valley Community College'],
       productBias: ['Pyxis MedStation', 'Simulation Manikins', 'Hospital Beds', 'Vital Signs Monitors'],
       programSizeBias: ['Large (150-500 students)', 'Enterprise (500+ students)', 'Large (150-500 students)', 'Medium (50-150 students)'],
+      keywordBias: topPerformerKeywordBias,
     },
     {
       repId: 'REP-002', repName: 'James Thornton', callCount: 15, conversionRate: 0.25,
-      outcomes: ['Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'Not Interested', 'Left Voicemail', 'Quote Requested'],
+      connectRate: 0.70, ratingAvg: 3.7, ratingSpread: 1.0,
+      outcomes: ['Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'Not Interested', 'Quote Requested'],
       types: ['Initial Discovery', 'Follow-Up', 'Follow-Up', 'Product Demo', 'Needs Assessment', 'Budget Discussion', 'Contract Review'],
-      durationMin: 15, durationMax: 30,
       accountPool: ['NYU Rory Meyers College of Nursing', 'Johns Hopkins School of Nursing', 'University of Pennsylvania School of Nursing', 'Columbia University School of Nursing', 'University of Pittsburgh School of Nursing', 'Massachusetts General Hospital Sim Center'],
       productBias: ['Simulation Manikins', 'Hospital Beds', 'Skills Lab Kits', 'Consumables'],
       programSizeBias: ['Large (150-500 students)', 'Medium (50-150 students)', 'Enterprise (500+ students)'],
+      keywordBias: ringdnaKeywordPool.slice(0, 10),
     },
     {
       repId: 'REP-003', repName: 'Maria Gonzalez', callCount: 14, conversionRate: 0.25,
-      outcomes: ['Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'Not Interested', 'No Answer', 'Quote Requested'],
+      connectRate: 0.75, ratingAvg: 3.8, ratingSpread: 0.9,
+      outcomes: ['Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'Not Interested', 'Quote Requested'],
       types: ['Initial Discovery', 'Follow-Up', 'Follow-Up', 'Product Demo', 'Needs Assessment', 'Budget Discussion', 'Contract Review'],
-      durationMin: 15, durationMax: 30,
       accountPool: ['Emory University Nell Hodgson Woodruff School of Nursing', 'Duke University School of Nursing', 'Vanderbilt University School of Nursing', 'Miami Dade College Nursing', 'ECPI University Nursing'],
       productBias: ['Simulation Manikins', 'Skills Lab Kits', 'IV Trainers', 'Consumables'],
       programSizeBias: ['Medium (50-150 students)', 'Large (150-500 students)', 'Small (<50 students)'],
+      keywordBias: ringdnaKeywordPool.slice(2, 12),
     },
     {
-      repId: 'REP-004', repName: 'David Kim', callCount: 7, conversionRate: 0.14,
-      outcomes: ['No Answer', 'No Answer', 'Left Voicemail', 'Left Voicemail', 'Not Interested', 'Needs Follow-Up', 'Interested - Next Steps'],
+      repId: 'REP-004', repName: 'David Kim', callCount: 10, conversionRate: 0.14,
+      connectRate: 0.40, ratingAvg: 2.8, ratingSpread: 1.2,
+      outcomes: ['Not Interested', 'Not Interested', 'Needs Follow-Up', 'Needs Follow-Up', 'Interested - Next Steps'],
       types: ['Initial Discovery', 'Initial Discovery', 'Follow-Up', 'Follow-Up', 'Needs Assessment'],
-      durationMin: 5, durationMax: 15,
       accountPool: ['UCLA School of Nursing', 'University of Washington School of Nursing', 'Cleveland Clinic Education Institute'],
       productBias: ['Hospital Beds', 'Pyxis MedStation', 'Consumables'],
       programSizeBias: ['Medium (50-150 students)', 'Large (150-500 students)'],
+      keywordBias: underperformerKeywordBias,
     },
     {
-      repId: 'REP-005', repName: 'Lisa Chen', callCount: 11, conversionRate: 0.18,
-      outcomes: ['Interested - Next Steps', 'Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'No Answer'],
+      repId: 'REP-005', repName: 'Lisa Chen', callCount: 13, conversionRate: 0.18,
+      connectRate: 0.65, ratingAvg: 3.5, ratingSpread: 1.0,
+      outcomes: ['Interested - Next Steps', 'Interested - Next Steps', 'Needs Follow-Up', 'Needs Follow-Up', 'Needs Follow-Up', 'Scheduled Demo', 'Not Interested'],
       types: ['Initial Discovery', 'Initial Discovery', 'Initial Discovery', 'Needs Assessment', 'Needs Assessment', 'Follow-Up', 'Budget Discussion'],
-      durationMin: 15, durationMax: 30,
       accountPool: ['Houston Community College Nursing', 'Chamberlain University College of Nursing', 'Herzing University Nursing Program', 'Rasmussen University School of Nursing'],
       productBias: ['Skills Lab Kits', 'IV Trainers', 'Consumables', 'Simulation Manikins'],
       programSizeBias: ['Small (<50 students)', 'Medium (50-150 students)', 'Medium (50-150 students)'],
+      keywordBias: ringdnaKeywordPool.slice(4, 14),
     },
   ]
 
-  // Generate dates spread across Jan 1 - Mar 31, 2026
+  // Generate dates spread across Jan 5 - Mar 31, 2026
   const startDate = new Date('2026-01-05')
   const endDate = new Date('2026-03-31')
   const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
@@ -1272,21 +1306,58 @@ function generateProfileCalls(): SeedProfileCall[] {
       if (date.getDay() === 6) date.setDate(date.getDate() + 2)
       const dateStr = date.toISOString().split('T')[0]
 
-      const outcome = pick(config.outcomes, rand)
+      // Activity type: 70% Task, 30% Event
+      const isEvent = rand() < 0.30
+      const activityType: 'Task' | 'Event' = isEvent ? 'Event' : 'Task'
+
+      // RingDNA: connected based on rep connect rate
+      const isConnected = rand() < config.connectRate
+      const isVoicemail = !isConnected && rand() < 0.5
+      const isOutbound = rand() < 0.80
+
+      // Duration: connected 8-25 min, voicemail 1 min, no-answer 0 min
+      const ringdnaDurationMin = isConnected
+        ? randomInt(8, 25, rand)
+        : isVoicemail ? 1 : 0
+
+      // Rating: only for connected calls, based on rep average
+      const ringdnaRating = isConnected
+        ? Math.max(1, Math.min(5, Math.round(config.ratingAvg + (rand() - 0.5) * config.ratingSpread * 2)))
+        : null
+
+      // Keywords: for connected calls, pick 1-3 from biased pool
+      const numKeywords = isConnected ? randomInt(1, 3, rand) : 0
+      const keywordPool = [...config.keywordBias, ...ringdnaKeywordPool]
+      const selectedKeywords = numKeywords > 0 ? pickN(keywordPool, numKeywords, rand) : []
+      const ringdnaKeywords = selectedKeywords.length > 0 ? selectedKeywords.join(', ') : null
+
+      // Recording URL for connected calls
+      const ringdnaRecordingUrl = isConnected ? `https://app.ringdna.com/recordings/${callId}` : null
+
+      // Start time (randomize hour between 8am-5pm)
+      const hour = randomInt(8, 17, rand)
+      const minute = randomInt(0, 59, rand)
+      const ringdnaStartTime = `${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`
+
+      // Calendly: only for Event records
+      const calendlyNoShow = isEvent && rand() < 0.10
+      const calendlyRescheduled = isEvent && !calendlyNoShow && rand() < 0.15
+
+      // Outcomes: only pick from outcomes if connected, otherwise Not Interested
+      const outcome = isConnected ? pick(config.outcomes, rand) : 'Not Interested' as ProfileCallOutcome
       const callType = pick(config.types, rand)
       const account = pick(config.accountPool, rand)
       const contact = pick(profileCallContacts, rand)
-      const duration = randomInt(config.durationMin, config.durationMax, rand)
-      const isConverted = rand() < config.conversionRate
-      const numProducts = outcome === 'No Answer' || outcome === 'Left Voicemail' ? 0 : randomInt(1, 3, rand)
+      const isConverted = isConnected && rand() < config.conversionRate
+      const numProducts = isConnected ? randomInt(1, 3, rand) : 0
       const products = numProducts > 0 ? pickN([...config.productBias, ...profileCallProducts], numProducts, rand) : []
       const size = pick(config.programSizeBias, rand)
-      const hasBudget = outcome !== 'No Answer' && outcome !== 'Left Voicemail' && outcome !== 'Not Interested' && rand() > 0.4
+      const hasBudget = isConnected && outcome !== 'Not Interested' && rand() > 0.4
       const budget = hasBudget ? randomInt(15, 250, rand) * 1000 : null
       const timeframe = hasBudget ? pick(budgetTimeframes, rand) : null
-      const hasFollowUp = outcome !== 'Not Interested' && outcome !== 'No Answer'
+      const hasFollowUp = isConnected && outcome !== 'Not Interested'
       const followUpDate = hasFollowUp ? new Date(date.getTime() + randomInt(3, 14, rand) * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null
-      const supplier = rand() > 0.5 ? pick(competitors, rand) : null
+      const supplier = isConnected && rand() > 0.5 ? pick(competitors, rand) : null
       const noteIdx = i % notes.length
       const intelEntry = i < intel.length ? intel[i] : null
 
@@ -1298,8 +1369,9 @@ function generateProfileCalls(): SeedProfileCall[] {
         accountName: account,
         contactName: contact,
         activityDate: dateStr,
-        callType,
-        callOutcome: outcome,
+        activityType,
+        profileCallType: callType,
+        profileCallOutcome: outcome,
         productsDiscussed: products,
         programSize: size,
         currentSupplier: supplier,
@@ -1308,9 +1380,18 @@ function generateProfileCalls(): SeedProfileCall[] {
         followUpDate,
         convertedToOpp: isConverted,
         relatedOpportunityName: isConverted ? `${account} — ${pick(['SimLab Expansion', 'Equipment Refresh', 'Capital Purchase', 'Skills Lab Build-Out', 'Annual Supply Order', 'Simulation Upgrade'], rand)}` : null,
-        callDurationMinutes: outcome === 'No Answer' ? 0 : outcome === 'Left Voicemail' ? randomInt(1, 3, rand) : duration,
-        callNotesSummary: notes[noteIdx],
-        competitorIntel: intelEntry,
+        callNotesSummary: isConnected ? notes[noteIdx] : (isVoicemail ? 'Left voicemail. Will try again.' : 'No answer — number rang out.'),
+        competitorIntel: isConnected ? intelEntry : null,
+        ringdnaDirection: isOutbound ? 'Outbound' : 'Inbound',
+        ringdnaDurationMin,
+        ringdnaConnected: isConnected,
+        ringdnaRating,
+        ringdnaRecordingUrl,
+        ringdnaVoicemail: isVoicemail,
+        ringdnaKeywords,
+        ringdnaStartTime,
+        calendlyNoShow,
+        calendlyRescheduled,
       })
     }
   }

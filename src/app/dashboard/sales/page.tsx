@@ -23,6 +23,8 @@ import {
   TrendingUp,
   Award,
   Phone,
+  PhoneCall,
+  Zap,
   ArrowUpDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -36,13 +38,15 @@ import {
   getProfileCallMetrics,
   getWeeklyCallVolume,
   getCallOutcomeBreakdown,
+  getTopCompetitorKeywords,
 } from '@/lib/data'
-import type { SalesKpis } from '@/lib/data'
+import type { SalesKpis, ProfileCallMetricsResult, KeywordResult } from '@/lib/data'
 import type { SeedSalesRep, SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
 import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
 import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
 import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
+import { CompetitorKeywordCard } from '@/components/dashboard/CompetitorKeywordCard'
 
 type SortKey = 'revenueMTD' | 'revenueQTD' | 'revenueYTD' | 'dealsClosed' | 'dealsLost' | 'winRate' | 'quotesSent' | 'avgDealSize' | 'avgDaysToClose' | 'pipelineValue'
 
@@ -61,14 +65,16 @@ export default function SalesPage() {
   const [profileCalls, setProfileCalls] = useState<SeedProfileCall[]>([])
   const [weeklyVolume, setWeeklyVolume] = useState<SeedWeeklyCallVolume[]>([])
   const [outcomeBreakdown, setOutcomeBreakdown] = useState<Array<{ outcome: string; count: number; percentage: number; color: string }>>([])
-  const [profileMetrics, setProfileMetrics] = useState<{ totalMTD: number; totalLastMonth: number; conversionRate: number; avgDuration: number; byRep: Array<{ repName: string; calls: number; converted: number; conversionRate: number; avgDuration: number }> } | null>(null)
+  const [profileMetrics, setProfileMetrics] = useState<ProfileCallMetricsResult | null>(null)
+  const [competitorKeywords, setCompetitorKeywords] = useState<KeywordResult[]>([])
+  const [keywordFilter, setKeywordFilter] = useState<string | undefined>(undefined)
   const [sortKey, setSortKey] = useState<SortKey>('revenueMTD')
   const [sortAsc, setSortAsc] = useState(false)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [kpisData, repsData, revenueData, pipelineData, quotesData, callsData, volumeData, outcomesData, metricsData] = await Promise.all([
+        const [kpisData, repsData, revenueData, pipelineData, quotesData, callsData, volumeData, outcomesData, metricsData, keywordsData] = await Promise.all([
           getSalesKpis(),
           getEnhancedSalesReps(),
           getMonthlyRepRevenue(),
@@ -78,6 +84,7 @@ export default function SalesPage() {
           getWeeklyCallVolume(),
           getCallOutcomeBreakdown(),
           getProfileCallMetrics(),
+          getTopCompetitorKeywords(10),
         ])
         setKpis(kpisData)
         setReps(repsData)
@@ -88,6 +95,7 @@ export default function SalesPage() {
         setWeeklyVolume(volumeData)
         setOutcomeBreakdown(outcomesData)
         setProfileMetrics(metricsData)
+        setCompetitorKeywords(keywordsData)
       } catch (error) {
         console.error('Failed to load sales data:', error)
       } finally {
@@ -271,6 +279,46 @@ export default function SalesPage() {
         </div>
 
         {/* Profile Call Activity Section */}
+
+        {/* Row 1: Call KPIs */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            title="Total Profile Calls MTD"
+            value={profileMetrics?.totalMTD ?? 0}
+            change={profileMetrics && profileMetrics.totalLastMonth > 0
+              ? Math.round(((profileMetrics.totalMTD - profileMetrics.totalLastMonth) / profileMetrics.totalLastMonth) * 1000) / 10
+              : 0}
+            changeLabel="vs last month"
+            icon={Phone}
+            iconColor="text-medship-primary"
+          />
+          <KpiCard
+            title="Connect Rate"
+            value={`${profileMetrics?.connectRate ?? 0}%`}
+            change={0}
+            changeLabel="org-wide (RingDNA)"
+            icon={PhoneCall}
+            iconColor="text-medship-success"
+          />
+          <KpiCard
+            title="Avg Call Duration"
+            value={`${profileMetrics?.avgDuration ?? 0}m`}
+            change={0}
+            changeLabel="from RingDNA"
+            icon={Clock}
+            iconColor="text-medship-info"
+          />
+          <KpiCard
+            title="Conversion to Opp"
+            value={`${profileMetrics?.conversionRate ?? 0}%`}
+            change={0}
+            changeLabel="calls to opportunities"
+            icon={Zap}
+            iconColor="text-medship-secondary"
+          />
+        </div>
+
+        {/* Row 2: Charts side by side */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-7">
             <WeeklyCallVolumeChart data={weeklyVolume} reps={reps} />
@@ -280,7 +328,19 @@ export default function SalesPage() {
           </div>
         </div>
 
-        <ProfileCallTable calls={profileCalls} reps={reps} />
+        {/* Row 3: Competitor Intelligence */}
+        <CompetitorKeywordCard
+          keywords={competitorKeywords}
+          onKeywordClick={(keyword) => setKeywordFilter(keyword)}
+        />
+
+        {/* Row 4: Profile Call Log Table */}
+        <ProfileCallTable
+          calls={profileCalls}
+          reps={reps}
+          keywordFilter={keywordFilter}
+          onClearKeywordFilter={() => setKeywordFilter(undefined)}
+        />
 
         {/* Quote Activity */}
         <Card>

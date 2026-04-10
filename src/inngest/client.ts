@@ -62,4 +62,11 @@ export type InngestEvents = {
       automation: string
     }
   }
+
+  // Salesforce → Supabase full cache sync
+  'medship/sf.full-sync': {
+    data: {
+      triggeredAt: string
+    }
+  }
 }

@@ -12,6 +12,8 @@ import {
   quotePdfGenerate,
   lowStockCheck,
   lowStockCheckManual,
+  sfFullSync,
+  sfIncrementalSync,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -43,5 +45,9 @@ export const { GET, POST, PUT } = serve({
     // P6: Low Stock Check
     lowStockCheck,
     lowStockCheckManual,
+
+    // SF → Supabase cache sync
+    sfFullSync,
+    sfIncrementalSync,
   ],
 })
