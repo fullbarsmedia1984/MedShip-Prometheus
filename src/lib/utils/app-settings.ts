@@ -5,6 +5,20 @@ export type DataSourceMode = 'seed' | 'live'
 // Cache the setting in memory for 30 seconds to avoid hammering the DB
 let cachedMode: { value: DataSourceMode; expires: number } | null = null
 
+/**
+ * Parse the JSONB value which may be:
+ * - A raw string: "seed" or "live" (Supabase auto-parses JSONB)
+ * - A quoted JSON string: "\"seed\"" (if double-encoded on write)
+ */
+function parseMode(raw: unknown): DataSourceMode {
+  if (typeof raw === 'string') {
+    // Strip any extra quotes from double-encoding
+    const cleaned = raw.replace(/^"|"$/g, '')
+    if (cleaned === 'live') return 'live'
+  }
+  return 'seed'
+}
+
 export async function getDataSourceMode(): Promise<DataSourceMode> {
   if (cachedMode && cachedMode.expires > Date.now()) {
     return cachedMode.value
@@ -18,7 +32,7 @@ export async function getDataSourceMode(): Promise<DataSourceMode> {
       .eq('key', 'data_source_mode')
       .single()
 
-    const mode: DataSourceMode = data?.value ?? 'seed'
+    const mode = parseMode(data?.value)
     cachedMode = { value: mode, expires: Date.now() + 30_000 }
     return mode
   } catch {
@@ -29,11 +43,12 @@ export async function getDataSourceMode(): Promise<DataSourceMode> {
 
 export async function setDataSourceMode(mode: DataSourceMode): Promise<void> {
   const supabase = createAdminClient()
+  // Store as a plain string in JSONB — no JSON.stringify to avoid double-encoding
   await supabase
     .from('app_settings')
     .upsert({
       key: 'data_source_mode',
-      value: JSON.stringify(mode),
+      value: mode,
       updated_at: new Date().toISOString(),
     })
   cachedMode = null // Invalidate cache
