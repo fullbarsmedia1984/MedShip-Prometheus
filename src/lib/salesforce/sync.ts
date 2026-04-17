@@ -1,7 +1,22 @@
 import type { SalesforceClient } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Connection } from 'jsforce'
 
 const BATCH_SIZE = 500
+
+/**
+ * Query all records using jsforce autoFetch to paginate past the 2,000 default limit.
+ */
+async function queryAll(conn: Connection, soql: string): Promise<Record<string, any>[]> {
+  return new Promise((resolve, reject) => {
+    const records: Record<string, any>[] = []
+    conn.query<Record<string, any>>(soql)
+      .on('record', (record) => records.push(record))
+      .on('end', () => resolve(records))
+      .on('error', (err) => reject(err))
+      .run({ autoFetch: true, maxFetch: 50_000 })
+  })
+}
 
 async function updateSyncState(
   supabase: SupabaseClient,
@@ -46,13 +61,13 @@ export async function syncUsers(sf: SalesforceClient, supabase: SupabaseClient):
   const start = Date.now()
   try {
     const conn = sf.getConnection()
-    const result = await conn.query<Record<string, any>>(`
+    const records = await queryAll(conn, `
       SELECT Id, Name, Email, Username, IsActive, UserType, Profile.Name
       FROM User
       WHERE IsActive = true AND UserType = 'Standard'
     `)
 
-    const rows = result.records.map((r) => ({
+    const rows = records.map((r) => ({
       sf_id: r.Id,
       name: r.Name,
       email: r.Email,
@@ -87,7 +102,7 @@ export async function syncAccounts(sf: SalesforceClient, supabase: SupabaseClien
   const start = Date.now()
   try {
     const conn = sf.getConnection()
-    const result = await conn.query<Record<string, any>>(`
+    const records = await queryAll(conn, `
       SELECT Id, Name, Type, Industry,
              BillingStreet, BillingCity, BillingState, BillingPostalCode, BillingCountry,
              ShippingStreet, ShippingCity, ShippingState, ShippingPostalCode, ShippingCountry,
@@ -97,7 +112,7 @@ export async function syncAccounts(sf: SalesforceClient, supabase: SupabaseClien
       ORDER BY LastModifiedDate DESC
     `)
 
-    const rows = result.records.map((r) => ({
+    const rows = records.map((r) => ({
       sf_id: r.Id,
       name: r.Name,
       type: r.Type,
@@ -144,13 +159,13 @@ export async function syncProducts(sf: SalesforceClient, supabase: SupabaseClien
   const start = Date.now()
   try {
     const conn = sf.getConnection()
-    const result = await conn.query<Record<string, any>>(`
+    const records = await queryAll(conn, `
       SELECT Id, ProductCode, Name, Description, Family, IsActive,
              Qty_On_Hand__c, Qty_Available__c, Last_Inventory_Sync__c
       FROM Product2
     `)
 
-    const rows = result.records.map((r) => ({
+    const rows = records.map((r) => ({
       sf_id: r.Id,
       product_code: r.ProductCode,
       name: r.Name,
@@ -187,7 +202,7 @@ export async function syncOpportunities(sf: SalesforceClient, supabase: Supabase
   const start = Date.now()
   try {
     const conn = sf.getConnection()
-    const result = await conn.query<Record<string, any>>(`
+    const records = await queryAll(conn, `
       SELECT Id, Name, AccountId, OwnerId, StageName, Amount, CloseDate,
              Probability, ForecastCategory, Type, LeadSource,
              IsClosed, IsWon,
@@ -197,7 +212,7 @@ export async function syncOpportunities(sf: SalesforceClient, supabase: Supabase
       FROM Opportunity
     `)
 
-    const rows = result.records.map((r) => ({
+    const rows = records.map((r) => ({
       sf_id: r.Id,
       name: r.Name,
       account_sf_id: r.AccountId,
@@ -244,13 +259,13 @@ export async function syncOpportunityLineItems(sf: SalesforceClient, supabase: S
   const start = Date.now()
   try {
     const conn = sf.getConnection()
-    const result = await conn.query<Record<string, any>>(`
+    const records = await queryAll(conn, `
       SELECT Id, OpportunityId, Product2Id, Product2.ProductCode, Product2.Name,
              Quantity, UnitPrice, TotalPrice
       FROM OpportunityLineItem
     `)
 
-    const rows = result.records.map((r) => ({
+    const rows = records.map((r) => ({
       sf_id: r.Id,
       opportunity_sf_id: r.OpportunityId,
       product_sf_id: r.Product2Id,
@@ -350,17 +365,13 @@ export async function syncProfileCalls(sf: SalesforceClient, supabase: SupabaseC
     const whereClause = "RecordType.DeveloperName = 'Profile_Call'"
 
     // Query Task and Event in parallel (Task has Status field, Event does not)
-    const [taskResults, eventResults] = await Promise.all([
-      conn.query<Record<string, any>>(
-        `SELECT ${TASK_PROFILE_CALL_FIELDS} FROM Task WHERE ${whereClause} ORDER BY ActivityDate DESC`
-      ),
-      conn.query<Record<string, any>>(
-        `SELECT ${EVENT_PROFILE_CALL_FIELDS} FROM Event WHERE ${whereClause} ORDER BY ActivityDate DESC`
-      ),
+    const [taskRecords, eventRecords] = await Promise.all([
+      queryAll(conn, `SELECT ${TASK_PROFILE_CALL_FIELDS} FROM Task WHERE ${whereClause} ORDER BY ActivityDate DESC`),
+      queryAll(conn, `SELECT ${EVENT_PROFILE_CALL_FIELDS} FROM Event WHERE ${whereClause} ORDER BY ActivityDate DESC`),
     ])
 
-    const taskRows = taskResults.records.map((r) => mapProfileCallRow(r, 'Task'))
-    const eventRows = eventResults.records.map((r) => mapProfileCallRow(r, 'Event'))
+    const taskRows = taskRecords.map((r) => mapProfileCallRow(r, 'Task'))
+    const eventRows = eventRecords.map((r) => mapProfileCallRow(r, 'Event'))
     const allRows = [...taskRows, ...eventRows]
 
     await upsertBatched(supabase, 'sf_profile_calls', allRows)
@@ -401,7 +412,7 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
   const accountsWm = watermarks.get('sf_accounts')
   if (accountsWm) {
     const start = Date.now()
-    const result = await conn.query<Record<string, any>>(`
+    const records = await queryAll(conn, `
       SELECT Id, Name, Type, Industry,
              BillingStreet, BillingCity, BillingState, BillingPostalCode, BillingCountry,
              ShippingStreet, ShippingCity, ShippingState, ShippingPostalCode, ShippingCountry,
@@ -409,8 +420,8 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
       FROM Account
       WHERE LastModifiedDate >= ${accountsWm}
     `)
-    if (result.records.length > 0) {
-      const rows = result.records.map((r) => ({
+    if (records.length > 0) {
+      const rows = records.map((r) => ({
         sf_id: r.Id, name: r.Name, type: r.Type, industry: r.Industry,
         billing_street: r.BillingStreet, billing_city: r.BillingCity,
         billing_state: r.BillingState, billing_postal_code: r.BillingPostalCode,
@@ -432,7 +443,7 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
   const oppsWm = watermarks.get('sf_opportunities')
   if (oppsWm) {
     const start = Date.now()
-    const result = await conn.query<Record<string, any>>(`
+    const records = await queryAll(conn, `
       SELECT Id, Name, AccountId, OwnerId, StageName, Amount, CloseDate,
              Probability, ForecastCategory, Type, LeadSource,
              IsClosed, IsWon, Fishbowl_SO_Number__c, Fulfillment_Status__c,
@@ -440,8 +451,8 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
       FROM Opportunity
       WHERE LastModifiedDate >= ${oppsWm}
     `)
-    if (result.records.length > 0) {
-      const rows = result.records.map((r) => ({
+    if (records.length > 0) {
+      const rows = records.map((r) => ({
         sf_id: r.Id, name: r.Name, account_sf_id: r.AccountId, owner_sf_id: r.OwnerId,
         stage_name: r.StageName, amount: r.Amount, close_date: r.CloseDate,
         probability: r.Probability, forecast_category: r.ForecastCategory,
@@ -462,13 +473,13 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
   if (callsWm) {
     const start = Date.now()
     const where = `RecordType.DeveloperName = 'Profile_Call' AND LastModifiedDate >= ${callsWm}`
-    const [taskResults, eventResults] = await Promise.all([
-      conn.query<Record<string, any>>(`SELECT ${TASK_PROFILE_CALL_FIELDS} FROM Task WHERE ${where}`),
-      conn.query<Record<string, any>>(`SELECT ${EVENT_PROFILE_CALL_FIELDS} FROM Event WHERE ${where}`),
+    const [taskRecords, eventRecords] = await Promise.all([
+      queryAll(conn, `SELECT ${TASK_PROFILE_CALL_FIELDS} FROM Task WHERE ${where}`),
+      queryAll(conn, `SELECT ${EVENT_PROFILE_CALL_FIELDS} FROM Event WHERE ${where}`),
     ])
     const rows = [
-      ...taskResults.records.map((r) => mapProfileCallRow(r, 'Task')),
-      ...eventResults.records.map((r) => mapProfileCallRow(r, 'Event')),
+      ...taskRecords.map((r) => mapProfileCallRow(r, 'Task')),
+      ...eventRecords.map((r) => mapProfileCallRow(r, 'Event')),
     ]
     if (rows.length > 0) {
       await upsertBatched(supabase, 'sf_profile_calls', rows)
