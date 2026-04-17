@@ -1,6 +1,6 @@
 # MedShip Prometheus — Project Summary
 
-**Generated:** 2026-03-31
+**Generated:** 2026-03-31 | **Last Updated:** 2026-04-17
 **Purpose:** Client-facing summary of everything built to date.
 
 ---
@@ -90,7 +90,9 @@ It is **not** an ERP. It is lightweight middleware with a web-based dashboard, h
 
 ## Database Schema (Supabase PostgreSQL)
 
-Six tables, all with Row-Level Security enabled:
+14 tables across two migrations, all with Row-Level Security enabled:
+
+**Migration 001 — Operational tables:**
 
 | Table | Purpose |
 |-------|---------|
@@ -101,7 +103,22 @@ Six tables, all with Row-Level Security enabled:
 | `connection_configs` | API credentials for external systems (encrypted at rest) |
 | `sync_schedules` | Cron schedules + last run stats for each automation |
 
-Migration file: `supabase/migrations/001_initial_schema.sql`
+**Migration 002 — Salesforce cache tables (added 2026-04-17):**
+
+| Table | Purpose |
+|-------|---------|
+| `app_settings` | Key-value store for data source mode and feature flags |
+| `sf_users` | Cached Salesforce User records (sales reps) |
+| `sf_accounts` | Cached Salesforce Account records |
+| `sf_products` | Cached Salesforce Product2 records with inventory levels |
+| `sf_opportunities` | Cached Salesforce Opportunity records (pipeline + closed deals) |
+| `sf_opportunity_line_items` | Cached Salesforce OpportunityLineItem records |
+| `sf_profile_calls` | Cached Profile Call activities (Task + Event union with RingDNA/Calendly metadata) |
+| `sf_sync_state` | Per-table sync metadata: last sync time, record count, errors, duration |
+
+Migration files: `supabase/migrations/001_initial_schema.sql`, `supabase/migrations/002_sf_cache_tables.sql`
+
+See `SALESFORCE_SYNC_ARCHITECTURE.md` for full sync system documentation.
 
 ---
 
@@ -112,7 +129,12 @@ Migration file: `supabase/migrations/001_initial_schema.sql`
 | GET | `/api/health` | Connection status for all systems (Supabase, Salesforce, Fishbowl, QuickBooks) |
 | GET | `/api/sync/status` | Automation stats + recent events with 24h success rates |
 | POST | `/api/sync/trigger` | Manually trigger any automation |
+| POST | `/api/sync/salesforce` | Triggers full SF → Supabase cache sync via Inngest |
+| GET | `/api/sync/salesforce` | Returns per-table sync state (record counts, timestamps, errors) |
+| GET | `/api/settings/data-source` | Returns current data source mode (seed or live) |
+| POST | `/api/settings/data-source` | Toggles data source mode |
 | GET | `/api/inventory` | Query inventory snapshot (by part number, search term, or paginated list) |
+| GET | `/api/debug/sf` | Debug endpoint for testing SF queries (dev only) |
 | POST | `/api/inngest` | Inngest framework handler for all scheduled/event-driven functions |
 | POST | `/api/webhooks/salesforce` | Receives Salesforce Platform Events, triggers P1 |
 | POST | `/api/webhooks/easypost` | Receives EasyPost tracking updates (handler not yet implemented) |
@@ -121,7 +143,7 @@ Migration file: `supabase/migrations/001_initial_schema.sql`
 
 ## Dashboard — FULLY BUILT
 
-The dashboard is complete with all pages rendering **seed data**. The data access layer (`src/lib/data.ts`) wraps all data fetching — every function is designed to be swapped from seed data to live Supabase queries as integrations go live.
+The dashboard is complete with all pages functional. The data access layer (`src/lib/data.ts`) routes queries to either **seed data** (for demos) or **live Supabase cache** (for production) based on the `data_source_mode` setting. Toggle between modes in Settings without code changes or restarts.
 
 ### Pages
 
@@ -365,13 +387,15 @@ supabase/
 | P5: Quote PDF | Stub only |
 | P6: Low Stock Alerts | Stub only |
 | Retry Handler | P1 complete, P2+ pending |
+| **SF → Supabase Sync** | **Live in production (3,870+ records)** |
+| **Data Source Toggle** | **Live — seed/live switch in Settings** |
 | Salesforce Client | Fully implemented |
 | Fishbowl Client | Fully implemented |
 | QuickBooks Client | Skeleton |
 | EasyPost Client | SDK wrapper built |
-| Database Schema | Complete (6 tables + RLS) |
-| API Endpoints | 7 endpoints, all functional |
-| Dashboard UI | 10 pages, fully built with seed data |
-| Charts | 5 chart components |
+| Database Schema | Complete (14 tables + RLS) |
+| API Endpoints | 12 endpoints, all functional |
+| Dashboard UI | 10 pages, seed + live data |
+| Charts | 7 chart components |
 | Auth | Supabase Auth scaffolded |
-| Deployment | Railway configured |
+| Deployment | Railway + Inngest Cloud |
