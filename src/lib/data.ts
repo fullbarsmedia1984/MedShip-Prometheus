@@ -246,9 +246,66 @@ async function getLiveRevenueMetrics(): Promise<RevenueMetrics> {
 // ---------------------------------------------------------------------------
 
 export async function getMonthlyRevenue(): Promise<MonthlyRevenue[]> {
-  // Live data: would need to aggregate sf_opportunities by month
-  // For now, seed data is sufficient — real monthly aggregation is a Phase 2 RPC function
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    const live = await getLiveMonthlyRevenue()
+    if (live.length > 0 && live.some((m) => m.revenue > 0)) {
+      return live
+    }
+  }
   return seedMonthlyRevenue
+}
+
+async function getLiveMonthlyRevenue(): Promise<MonthlyRevenue[]> {
+  const supabase = createAdminClient()
+
+  // Get last 12 months including current month
+  const now = new Date()
+  const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1)
+
+  const { data: opps, error } = await supabase
+    .from('sf_opportunities')
+    .select('amount, close_date')
+    .eq('is_won', true)
+    .gte('close_date', startDate.toISOString().split('T')[0])
+    .not('amount', 'is', null)
+
+  if (error || !opps) {
+    console.error('getLiveMonthlyRevenue query failed:', error)
+    return []
+  }
+
+  // Initialize all 12 months with 0 so gaps show as zero, not missing
+  const buckets = new Map<string, { revenue: number; orderCount: number }>()
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    buckets.set(key, { revenue: 0, orderCount: 0 })
+  }
+
+  // Sum opportunity amounts into buckets
+  for (const opp of opps) {
+    if (!opp.close_date || !opp.amount) continue
+    const key = opp.close_date.slice(0, 7) // "2026-03"
+    const bucket = buckets.get(key)
+    if (bucket) {
+      bucket.revenue += Number(opp.amount)
+      bucket.orderCount++
+    }
+  }
+
+  // Return in chronological order matching MonthlyRevenue shape
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, data]) => {
+      const [year, month] = key.split('-')
+      const monthDate = new Date(Number(year), Number(month) - 1, 1)
+      return {
+        month: monthDate.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+        revenue: Math.round(data.revenue),
+        orderCount: data.orderCount,
+      }
+    })
 }
 
 // ---------------------------------------------------------------------------

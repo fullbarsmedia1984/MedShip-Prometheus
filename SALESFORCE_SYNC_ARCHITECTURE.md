@@ -156,6 +156,7 @@ If `mode === 'live'` but the cache tables are empty (no sync has run), the data 
 | Function | Seed Source | Live Source |
 |---|---|---|
 | `getRevenueMetrics()` | seedMonthlyRevenue + seedOrders | sf_opportunities (is_won aggregation) |
+| `getMonthlyRevenue()` | seedMonthlyRevenue | sf_opportunities bucketed by close_date month (12-month window) |
 | `getSalesLeaderboard()` | seedEnhancedSalesReps | sf_users + sf_opportunities + sf_profile_calls |
 | `getSalesKpis()` | seedEnhancedSalesReps aggregation | Live sales reps aggregation |
 | `getPipelineSnapshot()` | seedPipelineStages | sf_opportunities grouped by stage_name |
@@ -165,7 +166,6 @@ If `mode === 'live'` but the cache tables are empty (no sync has run), the data 
 | `getTopCompetitorKeywords()` | seedProfileCalls.ringdnaKeywords | sf_profile_calls.ringdna_keywords |
 
 Functions without live variants yet (will use seed data regardless of mode):
-- `getMonthlyRevenue()` — needs monthly aggregation RPC
 - `getOrders()` — sf_opportunities shape differs from Order type
 - `getInventory()` — uses inventory_snapshot from P2, not sf_products
 - `getCustomersWithLocations()` — needs geocoding (Phase 2)

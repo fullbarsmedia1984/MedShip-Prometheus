@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getProfileCalls, getProfileCallMetrics, getTopCompetitorKeywords } from '@/lib/salesforce/queries'
 
-const VALID_QUERIES = ['org', 'opportunities', 'products', 'users', 'tasks', 'profile-calls', 'profile-call-metrics', 'competitor-keywords'] as const
+import { getMonthlyRevenue } from '@/lib/data'
+
+const VALID_QUERIES = ['org', 'opportunities', 'products', 'users', 'tasks', 'profile-calls', 'profile-call-metrics', 'competitor-keywords', 'monthly-revenue'] as const
 type QueryType = (typeof VALID_QUERIES)[number]
 
 function json(body: object, status = 200) {
@@ -27,6 +29,18 @@ export async function GET(request: NextRequest) {
   const client = createSalesforceClient()
 
   try {
+    // Monthly revenue doesn't need SF — queries Supabase cache directly
+    if (q === 'monthly-revenue') {
+      const start = Date.now()
+      const revenue = await getMonthlyRevenue()
+      return json({
+        query: 'monthly-revenue',
+        count: revenue.length,
+        executionMs: Date.now() - start,
+        data: revenue,
+      })
+    }
+
     await client.connect()
 
     // Profile call queries use the higher-level client functions
