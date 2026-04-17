@@ -19,7 +19,7 @@ interface CategoryPieChartProps {
   data: { category: string; revenue: number; percentage: number }[]
 }
 
-const COLORS = ['#452B90', '#3A9B94', '#F8B940', '#58BAD7', '#FF9F00', '#FF5E5E']
+const COLORS = ['#1E98D5', '#0FA62C', '#1C3C6E', '#A0007E', '#E89C0C', '#B5C8CD']
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -41,12 +41,12 @@ function CustomTooltip({ active, payload }: {
   if (!entry) return null
 
   return (
-    <div className="rounded-[0.625rem] border border-[#E6E6E6] bg-white px-4 py-3 shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)]">
-      <p className="mb-1 text-[0.813rem] font-medium text-[#374557]">{entry.category}</p>
-      <p className="text-[0.813rem] text-[#888]">
-        Revenue: <span className="font-semibold text-[#452B90]">{formatCurrency(entry.revenue)}</span>
+    <div className="rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 py-3 shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)]">
+      <p className="mb-1 text-[0.813rem] font-medium text-[#1C3C6E]">{entry.category}</p>
+      <p className="text-[0.813rem] text-[#576671]">
+        Revenue: <span className="font-semibold text-[#1E98D5]">{formatCurrency(entry.revenue)}</span>
       </p>
-      <p className="text-[0.813rem] text-[#888]">
+      <p className="text-[0.813rem] text-[#576671]">
         Share: <span className="font-semibold">{entry.percentage}%</span>
       </p>
     </div>
@@ -73,12 +73,12 @@ function renderLabel(props: Record<string, unknown>) {
     <text
       x={x}
       y={y}
-      fill="#374557"
+      fill="#1C3C6E"
       textAnchor="middle"
       dominantBaseline="central"
       fontSize={12}
       fontWeight={500}
-      fontFamily="Poppins"
+      fontFamily="Outfit"
     >
       {`${pct}%`}
     </text>
@@ -118,7 +118,7 @@ export function CategoryPieChart({ data }: CategoryPieChartProps) {
               iconType="circle"
               iconSize={8}
               formatter={(value: string) => (
-                <span style={{ fontSize: '0.75rem', color: '#888888', fontFamily: 'Poppins' }}>{value}</span>
+                <span style={{ fontSize: '0.75rem', color: '#576671', fontFamily: 'Outfit' }}>{value}</span>
               )}
             />
           </PieChart>

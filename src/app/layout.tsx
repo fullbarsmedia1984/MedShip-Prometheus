@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
-import { Poppins, Geist_Mono } from 'next/font/google'
+import { Outfit, Geist_Mono } from 'next/font/google'
 import { Providers } from '@/components/providers'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import './globals.css'
 
-const poppins = Poppins({
-  variable: '--font-poppins',
+const outfit = Outfit({
+  variable: '--font-outfit',
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
 })
@@ -28,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${poppins.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${outfit.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col font-sans">

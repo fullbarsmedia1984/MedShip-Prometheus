@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Activity, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function LoginPage() {
@@ -41,13 +41,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F3F0EC]">
-      {/* ── Left Panel: Purple branded area ── */}
+    <div className="flex min-h-screen bg-[#F4F7F9]">
+      {/* ── Left Panel: Blue branded area ── */}
       <div className="relative hidden w-1/2 items-center justify-center overflow-hidden p-8 lg:flex">
         <div
           className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[2rem]"
           style={{
-            background: 'linear-gradient(135deg, #452B90 0%, #5B3AAF 40%, #7B52D1 100%)',
+            background: 'linear-gradient(135deg, #1C3C6E 0%, #1E98D5 100%)',
           }}
         >
           {/* Subtle glass overlay shapes */}
@@ -61,7 +61,7 @@ export default function LoginPage() {
           />
           <div
             className="pointer-events-none absolute left-1/2 top-1/4 h-64 w-64 -translate-x-1/2 rounded-full opacity-[0.05]"
-            style={{ background: 'radial-gradient(circle, #F8B940 0%, transparent 70%)' }}
+            style={{ background: 'radial-gradient(circle, #0FA62C 0%, transparent 70%)' }}
           />
 
           {/* Content */}
@@ -73,8 +73,8 @@ export default function LoginPage() {
             <h1 className="mb-6 text-[2.75rem] font-bold leading-tight text-white">
               The Power of
               <br />
-              <span className="underline decoration-[#F8B940] decoration-[3px] underline-offset-[6px]">
-                MedShip
+              <span className="underline decoration-[#0FA62C] decoration-[3px] underline-offset-[6px]">
+                Medical Shipment
               </span>{' '}
               Prometheus
             </h1>
@@ -98,25 +98,25 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {/* Mobile logo — only visible below lg */}
           <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
-            <Activity className="h-7 w-7 text-[#452B90]" />
-            <span className="text-2xl font-semibold text-[#374557]">MedShip</span>
-            <span className="text-2xl font-light text-[#888]">Prometheus</span>
+            <img src="/ms-icon-color.png" alt="Medical Shipment" className="h-8 w-8" />
+            <span className="text-2xl font-semibold text-[#1C3C6E]">Medical Shipment</span>
+            <span className="text-2xl font-light text-[#576671]">Prometheus</span>
           </div>
 
           {/* Welcome heading */}
-          <h2 className="mb-2 text-center text-[2rem] font-bold text-[#374557]">
+          <h2 className="mb-2 text-center text-[2rem] font-bold text-[#1C3C6E]">
             Welcome Back
           </h2>
-          <p className="mb-8 text-center text-sm leading-relaxed text-[#888]">
+          <p className="mb-8 text-center text-sm leading-relaxed text-[#576671]">
             Sign in to access your integration dashboard and monitor
             real-time sync activity.
           </p>
 
           {/* Divider with "Login" label */}
           <div className="mb-8 flex items-center gap-4">
-            <div className="h-px flex-1 bg-[#E6E6E6]" />
-            <span className="text-sm font-semibold text-[#374557]">Login</span>
-            <div className="h-px flex-1 bg-[#E6E6E6]" />
+            <div className="h-px flex-1 bg-[#D6DEE3]" />
+            <span className="text-sm font-semibold text-[#1C3C6E]">Login</span>
+            <div className="h-px flex-1 bg-[#D6DEE3]" />
           </div>
 
           {/* Form */}
@@ -125,7 +125,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="email"
-                className="mb-1.5 block text-sm font-medium text-[#374557]"
+                className="mb-1.5 block text-sm font-medium text-[#1C3C6E]"
               >
                 Email
               </label>
@@ -136,7 +136,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@medshipllc.com"
                 required
-                className="h-12 w-full rounded-[0.625rem] border border-[#E6E6E6] bg-white px-4 text-sm text-[#374557] outline-none transition-all placeholder:text-[#bbb] focus:border-[#452B90] focus:ring-2 focus:ring-[#452B90]/20"
+                className="h-12 w-full rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 text-sm text-[#1C3C6E] outline-none transition-all placeholder:text-[#bbb] focus:border-[#1E98D5] focus:ring-2 focus:ring-[#1E98D5]/20"
               />
             </div>
 
@@ -144,7 +144,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="password"
-                className="mb-1.5 block text-sm font-medium text-[#374557]"
+                className="mb-1.5 block text-sm font-medium text-[#1C3C6E]"
               >
                 Password
               </label>
@@ -156,12 +156,12 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
-                  className="h-12 w-full rounded-[0.625rem] border border-[#E6E6E6] bg-white px-4 pr-12 text-sm text-[#374557] outline-none transition-all placeholder:text-[#bbb] focus:border-[#452B90] focus:ring-2 focus:ring-[#452B90]/20"
+                  className="h-12 w-full rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 pr-12 text-sm text-[#1C3C6E] outline-none transition-all placeholder:text-[#bbb] focus:border-[#1E98D5] focus:ring-2 focus:ring-[#1E98D5]/20"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#888] hover:text-[#374557]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#576671] hover:text-[#1C3C6E]"
                   tabIndex={-1}
                 >
                   {showPassword ? (
@@ -180,9 +180,9 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-[#E6E6E6] text-[#452B90] accent-[#452B90]"
+                className="h-4 w-4 rounded border-[#D6DEE3] text-[#1E98D5] accent-[#1E98D5]"
               />
-              <label htmlFor="remember" className="text-sm text-[#888]">
+              <label htmlFor="remember" className="text-sm text-[#576671]">
                 Remember my preference
               </label>
             </div>
@@ -194,8 +194,8 @@ export default function LoginPage() {
               className={cn(
                 'flex h-12 w-full items-center justify-center rounded-[0.625rem] text-sm font-semibold text-white transition-all',
                 loading
-                  ? 'cursor-not-allowed bg-[#452B90]/70'
-                  : 'bg-[#452B90] shadow-[0_4px_20px_rgba(69,43,144,0.35)] hover:bg-[#3a2479] hover:shadow-[0_6px_25px_rgba(69,43,144,0.45)] active:scale-[0.98]'
+                  ? 'cursor-not-allowed bg-[#1E98D5]/70'
+                  : 'bg-[#1E98D5] shadow-[0_4px_20px_rgba(30,152,213,0.35)] hover:bg-[#1a87bf] hover:shadow-[0_6px_25px_rgba(30,152,213,0.45)] active:scale-[0.98]'
               )}
             >
               {loading ? (
@@ -213,7 +213,7 @@ export default function LoginPage() {
           </form>
 
           {/* Footer text */}
-          <p className="mt-8 text-center text-sm text-[#888]">
+          <p className="mt-8 text-center text-sm text-[#576671]">
             Integration Hub &mdash; SF + Fishbowl + QB
           </p>
         </div>

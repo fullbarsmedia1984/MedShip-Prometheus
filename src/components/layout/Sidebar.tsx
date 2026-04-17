@@ -17,7 +17,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Activity,
   X,
 } from 'lucide-react'
 
@@ -120,10 +119,10 @@ export function Sidebar() {
         isCollapsed ? 'justify-center px-2' : 'px-5'
       )}>
         {isCollapsed ? (
-          <span className="text-lg font-bold text-white">M</span>
+          <img src="/ms-icon-color.png" alt="Medical Shipment" className="h-6 w-6" />
         ) : (
-          <div className="flex items-center gap-1">
-            <Activity className="h-5 w-5 text-medship-secondary" />
+          <div className="flex items-center gap-2">
+            <img src="/ms-icon-color.png" alt="Medical Shipment" className="h-8 w-8" />
             <span className="text-lg font-semibold text-white">MEDICAL</span>
             <span className="text-lg font-normal text-white/70">SHIPMENT</span>
           </div>
@@ -172,7 +171,7 @@ export function Sidebar() {
       {!isCollapsed && (
         <div className="border-t border-sidebar-border px-5 py-3">
           <div className="flex items-center gap-2 text-[0.75rem] text-sidebar-foreground/40">
-            <Activity className="h-3.5 w-3.5" />
+            <img src="/ms-icon-color.png" alt="MedShip" className="h-3.5 w-3.5 opacity-40" />
             <span>MedShip Prometheus v0.1</span>
           </div>
         </div>
@@ -197,8 +196,8 @@ export function Sidebar() {
             <div className="flex h-full w-[15rem] flex-col bg-sidebar" style={{ boxShadow: '0 0.9375rem 1.875rem 0 rgba(0,0,0,0.02)' }}>
               {/* Mobile close + logo */}
               <div className="flex h-[4.375rem] items-center justify-between border-b border-sidebar-border px-5">
-                <div className="flex items-center gap-1">
-                  <Activity className="h-5 w-5 text-medship-secondary" />
+                <div className="flex items-center gap-2">
+                  <img src="/ms-icon-color.png" alt="Medical Shipment" className="h-8 w-8" />
                   <span className="text-lg font-semibold text-white">MEDICAL</span>
                   <span className="text-lg font-normal text-white/70">SHIPMENT</span>
                 </div>
@@ -240,7 +239,7 @@ export function Sidebar() {
               {/* Mobile footer */}
               <div className="border-t border-sidebar-border px-5 py-3">
                 <div className="flex items-center gap-2 text-[0.75rem] text-sidebar-foreground/40">
-                  <Activity className="h-3.5 w-3.5" />
+                  <img src="/ms-icon-color.png" alt="MedShip" className="h-3.5 w-3.5 opacity-40" />
                   <span>MedShip Prometheus v0.1</span>
                 </div>
               </div>

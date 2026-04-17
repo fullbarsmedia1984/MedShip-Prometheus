@@ -42,11 +42,11 @@ import type { ClientMapStats } from '@/lib/data'
 import type { Customer, SeedRegionSummary } from '@/lib/seed-data'
 
 const REP_COLORS: Record<string, string> = {
-  'Sarah Mitchell': '#452B90',
-  'James Thornton': '#3A9B94',
-  'Maria Gonzalez': '#F8B940',
-  'David Kim': '#58BAD7',
-  'Lisa Chen': '#FF9F00',
+  'Sarah Mitchell': '#1E98D5',
+  'James Thornton': '#0FA62C',
+  'Maria Gonzalez': '#1C3C6E',
+  'David Kim': '#A0007E',
+  'Lisa Chen': '#E89C0C',
 }
 
 type ColorMode = 'status' | 'rep'
@@ -59,13 +59,13 @@ function RepDonutTooltip({ active, payload }: {
   if (!active || !payload || payload.length === 0) return null
   const entry = payload[0]
   return (
-    <div className="rounded-[0.625rem] border border-[#E6E6E6] bg-white px-4 py-3 shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)]">
-      <p className="text-[0.813rem] font-medium text-[#374557]">{entry.name}</p>
-      <p className="text-[0.75rem] text-[#888]">
-        Clients: <span className="font-semibold text-[#374557]">{entry.value}</span>
+    <div className="rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 py-3 shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)]">
+      <p className="text-[0.813rem] font-medium text-[#1C3C6E]">{entry.name}</p>
+      <p className="text-[0.75rem] text-[#576671]">
+        Clients: <span className="font-semibold text-[#1C3C6E]">{entry.value}</span>
       </p>
-      <p className="text-[0.75rem] text-[#888]">
-        Revenue: <span className="font-semibold text-[#452B90]">${(entry.payload?.revenue || 0).toLocaleString()}</span>
+      <p className="text-[0.75rem] text-[#576671]">
+        Revenue: <span className="font-semibold text-[#1E98D5]">${(entry.payload?.revenue || 0).toLocaleString()}</span>
       </p>
     </div>
   )
@@ -132,7 +132,7 @@ export default function TerritoryPage() {
     name,
     value: data.count,
     revenue: data.revenue,
-    color: REP_COLORS[name] || '#888',
+    color: REP_COLORS[name] || '#576671',
   })).sort((a, b) => b.value - a.value)
 
   if (loading || !stats) {
@@ -296,7 +296,7 @@ export default function TerritoryPage() {
                   <Legend
                     iconType="circle"
                     iconSize={8}
-                    wrapperStyle={{ fontSize: '0.75rem', fontFamily: 'Poppins' }}
+                    wrapperStyle={{ fontSize: '0.75rem', fontFamily: 'Outfit' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -343,7 +343,7 @@ export default function TerritoryPage() {
                         <div className="flex items-center gap-1.5">
                           <div
                             className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.45rem] font-bold text-white"
-                            style={{ backgroundColor: REP_COLORS[r.topRep] || '#888' }}
+                            style={{ backgroundColor: REP_COLORS[r.topRep] || '#576671' }}
                           >
                             {r.topRep.split(' ').map(n => n[0]).join('')}
                           </div>

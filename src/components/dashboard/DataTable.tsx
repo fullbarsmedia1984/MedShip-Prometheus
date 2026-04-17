@@ -92,7 +92,7 @@ export function DataTable<T extends Record<string, any>>({
                 <TableHead
                   key={col.key}
                   className={cn(
-                    'whitespace-nowrap border-b border-[#E6E6E6] py-[0.9375rem] px-[0.625rem] text-[0.875rem] font-medium capitalize text-card-foreground dark:border-[rgba(255,255,255,0.1)]',
+                    'whitespace-nowrap border-b border-[#D6DEE3] py-[0.9375rem] px-[0.625rem] text-[0.875rem] font-medium capitalize text-card-foreground dark:border-[rgba(255,255,255,0.1)]',
                     col.sortable && onSort && 'cursor-pointer select-none',
                     col.className
                   )}
@@ -121,9 +121,9 @@ export function DataTable<T extends Record<string, any>>({
                 <Fragment key={rowId ?? rowIndex}>
                   <TableRow
                     className={cn(
-                      'border-b border-[#E6E6E6] transition-colors dark:border-[rgba(255,255,255,0.1)]',
-                      rowIndex % 2 === 1 && 'bg-[#F3F0EC] dark:bg-[rgba(255,255,255,0.02)]',
-                      'hover:bg-[#F3F0EC] dark:hover:bg-[rgba(255,255,255,0.04)]',
+                      'border-b border-[#D6DEE3] transition-colors dark:border-[rgba(255,255,255,0.1)]',
+                      rowIndex % 2 === 1 && 'bg-[#F4F7F9] dark:bg-[rgba(255,255,255,0.02)]',
+                      'hover:bg-[#F4F7F9] dark:hover:bg-[rgba(255,255,255,0.04)]',
                       onRowClick && 'cursor-pointer',
                     )}
                     onClick={() => onRowClick?.(row)}

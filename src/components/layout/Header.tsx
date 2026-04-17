@@ -65,7 +65,7 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
         {/* User avatar */}
         <div className="ml-2 flex items-center gap-2">
           <img
-            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Ccircle cx='18' cy='18' r='18' fill='%23452B90'/%3E%3Ctext x='18' y='24' font-family='Poppins,sans-serif' font-size='16' font-weight='600' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E"
+            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Ccircle cx='18' cy='18' r='18' fill='%231C3C6E'/%3E%3Ctext x='18' y='24' font-family='Outfit,sans-serif' font-size='16' font-weight='600' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E"
             alt="Admin"
             className="h-10 w-10 rounded-full"
           />

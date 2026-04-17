@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-poppins), 'Poppins', sans-serif;
+  --font-sans: var(--font-outfit), 'Outfit', sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-poppins), 'Poppins', sans-serif;
+  --font-heading: var(--font-outfit), 'Outfit', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,97 +47,100 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* MedShip design tokens */
-  --color-medship-primary: #452B90;
-  --color-medship-primary-light: #6B4BC4;
-  --color-medship-primary-dark: #2A1B5A;
-  --color-medship-secondary: #F8B940;
-  --color-medship-secondary-dark: #F6A70F;
-  --color-medship-success: #3A9B94;
-  --color-medship-info: #58BAD7;
-  --color-medship-warning: #FF9F00;
-  --color-medship-danger: #FF5E5E;
-  --color-medship-body-bg: #F3F0EC;
-  --color-medship-heading: #374557;
-  --color-medship-text: #888888;
-  --color-medship-border: #E6E6E6;
-  --color-medship-dark-bg: #151C2C;
-  --color-medship-dark-card: #182237;
+  /* MedShip brand colors — from official color palette */
+  --color-medship-primary: #1E98D5;       /* Light Blue — PMS 2925 C */
+  --color-medship-primary-light: #3AACE3;
+  --color-medship-primary-dark: #1C3C6E;  /* Dark Blue — PMS 654 C */
+  --color-medship-secondary: #0FA62C;     /* Bright Green — PMS 3529 C */
+  --color-medship-success: #0FA62C;
+  --color-medship-info: #1E98D5;
+  --color-medship-warning: #E89C0C;
+  --color-medship-danger: #D93025;
+  --color-medship-accent: #A0007E;        /* Magenta — PMS 2415 C */
+  --color-medship-pale-blue: #B5C8CD;     /* Pale Blue — PMS 4155 C */
+  --color-medship-slate: #576671;          /* Slate Gray — PMS 431 C */
+  --color-medship-body-bg: #F4F7F9;
+  --color-medship-heading: #1C3C6E;
+  --color-medship-text: #576671;
+  --color-medship-border: #D6DEE3;
+  --color-medship-muted: #8A9BA5;
+  --color-medship-dark-bg: #0F1A2E;
+  --color-medship-dark-card: #162035;
   --color-medship-dark-border: rgba(255, 255, 255, 0.10);
 
   /* Card shadow */
-  --shadow-card: 0 0 2.5rem 0 rgba(82, 63, 105, 0.1);
-  --shadow-card-hover: 0 0 1.875rem rgba(69, 43, 144, 0.15);
+  --shadow-card: 0 0 2.5rem 0 rgba(28, 60, 110, 0.08);
+  --shadow-card-hover: 0 0 1.875rem rgba(30, 152, 213, 0.12);
 }
 
 :root {
-  --background: #F3F0EC;
-  --foreground: #374557;
+  --background: #F4F7F9;
+  --foreground: #576671;
   --card: #FFFFFF;
-  --card-foreground: #374557;
+  --card-foreground: #1C3C6E;
   --popover: #FFFFFF;
-  --popover-foreground: #374557;
-  --primary: #452B90;
+  --popover-foreground: #1C3C6E;
+  --primary: #1E98D5;
   --primary-foreground: #FFFFFF;
-  --secondary: #F8B940;
+  --secondary: #0FA62C;
   --secondary-foreground: #FFFFFF;
-  --muted: #F3F0EC;
-  --muted-foreground: #888888;
-  --accent: #F3F0EC;
-  --accent-foreground: #374557;
-  --destructive: #FF5E5E;
-  --border: #E6E6E6;
-  --input: #E6E6E6;
-  --ring: #452B90;
-  --chart-1: #452B90;
-  --chart-2: #3A9B94;
-  --chart-3: #F8B940;
-  --chart-4: #58BAD7;
-  --chart-5: #FF9F00;
+  --muted: #F4F7F9;
+  --muted-foreground: #8A9BA5;
+  --accent: #B5C8CD;
+  --accent-foreground: #1C3C6E;
+  --destructive: #D93025;
+  --border: #D6DEE3;
+  --input: #D6DEE3;
+  --ring: #1E98D5;
+  --chart-1: #1E98D5;
+  --chart-2: #0FA62C;
+  --chart-3: #1C3C6E;
+  --chart-4: #A0007E;
+  --chart-5: #E89C0C;
   --radius: 0.625rem;
-  /* Sidebar: dark navy */
-  --sidebar: #222B40;
+  /* Sidebar: dark blue */
+  --sidebar: #1C3C6E;
   --sidebar-foreground: rgba(255, 255, 255, 0.7);
-  --sidebar-primary: #F8B940;
-  --sidebar-primary-foreground: #222B40;
+  --sidebar-primary: #1E98D5;
+  --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
   --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #452B90;
+  --sidebar-ring: #1E98D5;
 }
 
 .dark {
-  --background: #151C2C;
-  --foreground: #DDDDDD;
-  --card: #182237;
-  --card-foreground: #DDDDDD;
-  --popover: #182237;
-  --popover-foreground: #DDDDDD;
-  --primary: #7C5DC7;
+  --background: #0F1A2E;
+  --foreground: #E0E6EB;
+  --card: #162035;
+  --card-foreground: #E0E6EB;
+  --popover: #162035;
+  --popover-foreground: #E0E6EB;
+  --primary: #3AACE3;
   --primary-foreground: #FFFFFF;
-  --secondary: #F8B940;
-  --secondary-foreground: #1E2A4A;
-  --muted: #1E2A4A;
-  --muted-foreground: #828690;
-  --accent: #1E2A4A;
-  --accent-foreground: #DDDDDD;
-  --destructive: #FF5E5E;
+  --secondary: #12C234;
+  --secondary-foreground: #0F1A2E;
+  --muted: #1A2844;
+  --muted-foreground: #7A8D99;
+  --accent: #1A2844;
+  --accent-foreground: #E0E6EB;
+  --destructive: #E5453A;
   --border: rgba(255, 255, 255, 0.10);
   --input: rgba(255, 255, 255, 0.15);
-  --ring: #7C5DC7;
-  --chart-1: #7C5DC7;
-  --chart-2: #4DC7BF;
-  --chart-3: #F8B940;
-  --chart-4: #58BAD7;
-  --chart-5: #FF9F00;
-  --sidebar: #0F1629;
+  --ring: #3AACE3;
+  --chart-1: #3AACE3;
+  --chart-2: #12C234;
+  --chart-3: #5A8FBD;
+  --chart-4: #C24FA0;
+  --chart-5: #F0AD20;
+  --sidebar: #0B1221;
   --sidebar-foreground: rgba(255, 255, 255, 0.65);
-  --sidebar-primary: #F8B940;
-  --sidebar-primary-foreground: #0F1629;
+  --sidebar-primary: #3AACE3;
+  --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
   --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #7C5DC7;
+  --sidebar-ring: #3AACE3;
 }
 
 @layer base {

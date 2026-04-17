@@ -21,11 +21,11 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 const REP_COLORS: Record<string, string> = {
-  'Sarah Mitchell': '#452B90',
-  'James Thornton': '#3A9B94',
-  'Maria Gonzalez': '#F8B940',
-  'David Kim': '#58BAD7',
-  'Lisa Chen': '#FF9F00',
+  'Sarah Mitchell': '#1E98D5',
+  'James Thornton': '#0FA62C',
+  'Maria Gonzalez': '#1C3C6E',
+  'David Kim': '#A0007E',
+  'Lisa Chen': '#E89C0C',
 }
 
 function buildGeoJSON(customers: Customer[]) {
@@ -45,7 +45,7 @@ function buildGeoJSON(customers: Customer[]) {
         rep: c.assignedRep,
         type: c.type,
         statusColor: STATUS_COLORS[c.customerStatus] || '#9ca3af',
-        repColor: REP_COLORS[c.assignedRep] || '#888888',
+        repColor: REP_COLORS[c.assignedRep] || '#576671',
       },
       geometry: {
         type: 'Point' as const,
@@ -133,7 +133,7 @@ export function ClientMap({
             source: 'customers',
             filter: ['has', 'point_count'],
             paint: {
-              'circle-color': '#452B90',
+              'circle-color': '#1E98D5',
               'circle-opacity': 0.85,
               'circle-radius': ['step', ['get', 'point_count'], 18, 5, 24, 15, 32],
               'circle-stroke-width': 2,
@@ -231,13 +231,13 @@ export function ClientMap({
             const lastOrder = props.lastOrder ? new Date(props.lastOrder + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No orders'
 
             popup.setLngLat(coords).setHTML(`
-              <div style="font-family:Poppins,sans-serif;padding:2px 0;">
-                <div style="font-weight:600;font-size:0.8rem;color:#374557;margin-bottom:4px;">${props.name}</div>
-                <div style="font-size:0.7rem;color:#888;margin-bottom:2px;">${props.city}, ${props.state}</div>
-                <div style="font-size:0.7rem;color:#888;">Rep: <span style="font-weight:500;color:#374557;">${props.rep}</span></div>
-                <div style="display:flex;gap:12px;margin-top:6px;padding-top:6px;border-top:1px solid #e6e6e6;">
-                  <div><div style="font-size:0.65rem;color:#888;text-transform:uppercase;">Revenue</div><div style="font-size:0.8rem;font-weight:600;color:#452B90;">${revenue}</div></div>
-                  <div><div style="font-size:0.65rem;color:#888;text-transform:uppercase;">Last Order</div><div style="font-size:0.75rem;font-weight:500;color:#374557;">${lastOrder}</div></div>
+              <div style="font-family:Outfit,sans-serif;padding:2px 0;">
+                <div style="font-weight:600;font-size:0.8rem;color:#1C3C6E;margin-bottom:4px;">${props.name}</div>
+                <div style="font-size:0.7rem;color:#576671;margin-bottom:2px;">${props.city}, ${props.state}</div>
+                <div style="font-size:0.7rem;color:#576671;">Rep: <span style="font-weight:500;color:#1C3C6E;">${props.rep}</span></div>
+                <div style="display:flex;gap:12px;margin-top:6px;padding-top:6px;border-top:1px solid #D6DEE3;">
+                  <div><div style="font-size:0.65rem;color:#576671;text-transform:uppercase;">Revenue</div><div style="font-size:0.8rem;font-weight:600;color:#1E98D5;">${revenue}</div></div>
+                  <div><div style="font-size:0.65rem;color:#576671;text-transform:uppercase;">Last Order</div><div style="font-size:0.75rem;font-weight:500;color:#1C3C6E;">${lastOrder}</div></div>
                 </div>
               </div>
             `).addTo(map)

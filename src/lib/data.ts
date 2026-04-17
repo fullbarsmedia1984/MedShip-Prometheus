@@ -497,7 +497,7 @@ async function getLiveSalesReps(): Promise<SeedSalesRep[]> {
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]
 
   // Deterministic color from sf_id hash
-  const COLORS = ['#452B90', '#3A9B94', '#F8B940', '#58BAD7', '#FF9F00', '#FF5E5E', '#22C55E', '#6B4BC4']
+  const COLORS = ['#1E98D5', '#0FA62C', '#1C3C6E', '#A0007E', '#E89C0C', '#D93025', '#B5C8CD', '#3AACE3']
   function colorFromId(sfId: string): string {
     let hash = 0
     for (let i = 0; i < sfId.length; i++) hash = ((hash << 5) - hash + sfId.charCodeAt(i)) | 0
@@ -624,7 +624,7 @@ export async function getPipelineSnapshot(): Promise<SeedPipelineStage[]> {
     if (opps && opps.length > 0) {
       const stageColors: Record<string, string> = {
         'Prospecting': '#93C5FD', 'Qualification': '#60A5FA', 'Proposal': '#3B82F6',
-        'Negotiation': '#2563EB', 'Closed Won': '#3A9B94', 'Closed Lost': '#FF5E5E',
+        'Negotiation': '#1E98D5', 'Closed Won': '#0FA62C', 'Closed Lost': '#D93025',
       }
       const byStage = new Map<string, { count: number; value: number }>()
       for (const o of opps) {
@@ -1065,11 +1065,11 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
     if (calls && calls.length > 0) {
       const total = calls.length
       const outcomeColors: Record<string, string> = {
-        'Interested - Next Steps': '#3A9B94',
-        'Scheduled Demo': '#452B90',
-        'Quote Requested': '#22C55E',
-        'Needs Follow-Up': '#F8B940',
-        'Not Interested': '#FF5E5E',
+        'Interested - Next Steps': '#0FA62C',
+        'Scheduled Demo': '#1E98D5',
+        'Quote Requested': '#B5C8CD',
+        'Needs Follow-Up': '#1C3C6E',
+        'Not Interested': '#D93025',
       }
       const counts = new Map<string, number>()
       for (const c of calls) {
@@ -1091,11 +1091,11 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
   const calls = seedProfileCalls.filter((c) => c.activityDate >= '2026-03-01')
   const total = calls.length
   const outcomeColors: Record<string, string> = {
-    'Interested - Next Steps': '#3A9B94',
-    'Scheduled Demo': '#452B90',
-    'Quote Requested': '#22C55E',
-    'Needs Follow-Up': '#F8B940',
-    'Not Interested': '#FF5E5E',
+    'Interested - Next Steps': '#0FA62C',
+    'Scheduled Demo': '#1E98D5',
+    'Quote Requested': '#B5C8CD',
+    'Needs Follow-Up': '#1C3C6E',
+    'Not Interested': '#D93025',
   }
   const counts = new Map<string, number>()
   for (const call of calls) {

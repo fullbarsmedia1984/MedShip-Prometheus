@@ -13,11 +13,11 @@ interface TerritoryListProps {
 }
 
 const REP_COLORS: Record<string, string> = {
-  'Sarah Mitchell': '#452B90',
-  'James Thornton': '#3A9B94',
-  'Maria Gonzalez': '#F8B940',
-  'David Kim': '#58BAD7',
-  'Lisa Chen': '#FF9F00',
+  'Sarah Mitchell': '#1E98D5',
+  'James Thornton': '#0FA62C',
+  'Maria Gonzalez': '#1C3C6E',
+  'David Kim': '#A0007E',
+  'Lisa Chen': '#E89C0C',
 }
 
 type FilterStatus = 'all' | 'active' | 'inactive' | 'prospect'
@@ -83,7 +83,7 @@ export function TerritoryList({ customers, onCustomerClick, selectedCustomerId }
       <div className="flex-1 overflow-y-auto">
         <div className="space-y-1">
           {filtered.map((customer) => {
-            const repColor = REP_COLORS[customer.assignedRep] || '#888'
+            const repColor = REP_COLORS[customer.assignedRep] || '#576671'
             const isSelected = customer.id === selectedCustomerId
 
             return (

@@ -784,31 +784,31 @@ export interface SeedSalesRep {
 export const seedEnhancedSalesReps: SeedSalesRep[] = [
   {
     id: 'REP-001', name: 'Sarah Mitchell', email: 'sarah.mitchell@medshipllc.com', region: 'Midwest',
-    color: '#452B90', revenueMTD: 167420, revenueQTD: 412800, revenueYTD: 1284500,
+    color: '#1E98D5', revenueMTD: 167420, revenueQTD: 412800, revenueYTD: 1284500,
     dealsClosed: 14, dealsLost: 3, quotesSent: 28, profileCalls: 26, profileCallsChange: 30.0, connectRate: 85, avgDealSize: 11958, avgDaysToClose: 18,
     pipelineValue: 245000, winRate: 82.4, activityScore: 'hot',
   },
   {
     id: 'REP-002', name: 'James Thornton', email: 'james.thornton@medshipllc.com', region: 'Northeast',
-    color: '#3A9B94', revenueMTD: 89200, revenueQTD: 248600, revenueYTD: 876300,
+    color: '#0FA62C', revenueMTD: 89200, revenueQTD: 248600, revenueYTD: 876300,
     dealsClosed: 9, dealsLost: 4, quotesSent: 19, profileCalls: 15, profileCallsChange: 15.4, connectRate: 70, avgDealSize: 9911, avgDaysToClose: 22,
     pipelineValue: 178000, winRate: 69.2, activityScore: 'active',
   },
   {
     id: 'REP-003', name: 'Maria Gonzalez', email: 'maria.gonzalez@medshipllc.com', region: 'Southeast',
-    color: '#F8B940', revenueMTD: 72850, revenueQTD: 198400, revenueYTD: 724100,
+    color: '#1C3C6E', revenueMTD: 72850, revenueQTD: 198400, revenueYTD: 724100,
     dealsClosed: 7, dealsLost: 5, quotesSent: 16, profileCalls: 14, profileCallsChange: 16.7, connectRate: 75, avgDealSize: 10407, avgDaysToClose: 25,
     pipelineValue: 132000, winRate: 58.3, activityScore: 'active',
   },
   {
     id: 'REP-004', name: 'David Kim', email: 'david.kim@medshipllc.com', region: 'West',
-    color: '#58BAD7', revenueMTD: 31400, revenueQTD: 85200, revenueYTD: 312600,
+    color: '#A0007E', revenueMTD: 31400, revenueQTD: 85200, revenueYTD: 312600,
     dealsClosed: 3, dealsLost: 8, quotesSent: 9, profileCalls: 10, profileCallsChange: -30.0, connectRate: 40, avgDealSize: 10467, avgDaysToClose: 34,
     pipelineValue: 64000, winRate: 27.3, activityScore: 'cold',
   },
   {
     id: 'REP-005', name: 'Lisa Chen', email: 'lisa.chen@medshipllc.com', region: 'South Central',
-    color: '#FF9F00', revenueMTD: 42600, revenueQTD: 42600, revenueYTD: 42600,
+    color: '#E89C0C', revenueMTD: 42600, revenueQTD: 42600, revenueYTD: 42600,
     dealsClosed: 4, dealsLost: 1, quotesSent: 22, profileCalls: 13, profileCallsChange: 0, connectRate: 65, avgDealSize: 10650, avgDaysToClose: 15,
     pipelineValue: 198000, winRate: 80.0, activityScore: 'hot',
   },
@@ -829,9 +829,9 @@ export const seedPipelineStages: SeedPipelineStage[] = [
   { stage: 'Prospecting', count: 12, value: 284000, color: '#93C5FD' },
   { stage: 'Qualification', count: 8, value: 196000, color: '#60A5FA' },
   { stage: 'Proposal', count: 6, value: 168000, color: '#3B82F6' },
-  { stage: 'Negotiation', count: 4, value: 125000, color: '#2563EB' },
-  { stage: 'Closed Won', count: 37, value: 403470, color: '#3A9B94' },
-  { stage: 'Closed Lost', count: 9, value: 87000, color: '#FF5E5E' },
+  { stage: 'Negotiation', count: 4, value: 125000, color: '#1E98D5' },
+  { stage: 'Closed Won', count: 37, value: 403470, color: '#0FA62C' },
+  { stage: 'Closed Lost', count: 9, value: 87000, color: '#D93025' },
 ]
 
 // =============================================================================
