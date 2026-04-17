@@ -43,30 +43,40 @@ function loadConfig(): SFConnectionConfig {
 export class SalesforceClient implements ISalesforceClient {
   private connection: Connection | null = null
   private connected = false
-  private config: SFConnectionConfig
+  private config: SFConnectionConfig | null = null
 
-  constructor() {
-    this.config = loadConfig()
+  private getConfig(): SFConnectionConfig {
+    if (!this.config) {
+      this.config = loadConfig()
+    }
+    return this.config
   }
 
   async connect(): Promise<void> {
-    const oauthOptions =
-      this.config.clientId && this.config.clientSecret
-        ? {
-            clientId: this.config.clientId,
-            clientSecret: this.config.clientSecret,
-            loginUrl: this.config.loginUrl,
-          }
-        : undefined
+    const config = this.getConfig()
+    // Only use OAuth2 if real client credentials are provided (not placeholders)
+    const hasRealClientCreds =
+      config.clientId &&
+      config.clientSecret &&
+      config.clientId.length > 10 &&
+      !config.clientId.includes('none') &&
+      !config.clientId.includes('placeholder')
+    const oauthOptions = hasRealClientCreds
+      ? {
+          clientId: config.clientId!,
+          clientSecret: config.clientSecret!,
+          loginUrl: config.loginUrl,
+        }
+      : undefined
 
     this.connection = new jsforce.Connection({
-      loginUrl: this.config.loginUrl,
+      loginUrl: config.loginUrl,
       ...(oauthOptions ? { oauth2: oauthOptions } : {}),
     })
 
     await this.connection.login(
-      this.config.username,
-      this.config.password + this.config.securityToken
+      config.username,
+      config.password + config.securityToken
     )
 
     this.connected = true
