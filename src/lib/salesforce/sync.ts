@@ -282,10 +282,10 @@ export async function syncOpportunityLineItems(sf: SalesforceClient, supabase: S
   }
 }
 
-// Profile call fields shared by both Task and Event queries
-const PROFILE_CALL_FIELDS = `
+// Shared profile call fields (minus Status which only exists on Task, not Event)
+const PROFILE_CALL_FIELDS_BASE = `
   Id, Subject, OwnerId, AccountId, WhoId, Who.Name,
-  ActivityDate, Status, CreatedDate, LastModifiedDate,
+  ActivityDate, CreatedDate, LastModifiedDate,
   Profile_Call_Type__c, Profile_Call_Outcome__c, Products_Discussed__c,
   Program_Size__c, Current_Supplier__c, Budget_Available__c,
   Budget_Timeframe__c, Follow_Up_Date__c, Converted_to_Opp__c,
@@ -298,6 +298,9 @@ const PROFILE_CALL_FIELDS = `
   ringdna__Call_Disposition__c,
   Calendly__IsNoShow__c, Calendly__IsRescheduled__c
 `
+// Task has Status; Event does not
+const TASK_PROFILE_CALL_FIELDS = `Status, ${PROFILE_CALL_FIELDS_BASE}`
+const EVENT_PROFILE_CALL_FIELDS = PROFILE_CALL_FIELDS_BASE
 
 function mapProfileCallRow(r: Record<string, any>, activityType: string) {
   return {
@@ -346,13 +349,13 @@ export async function syncProfileCalls(sf: SalesforceClient, supabase: SupabaseC
     const conn = sf.getConnection()
     const whereClause = "RecordType.DeveloperName = 'Profile_Call'"
 
-    // Query Task and Event in parallel
+    // Query Task and Event in parallel (Task has Status field, Event does not)
     const [taskResults, eventResults] = await Promise.all([
       conn.query<Record<string, any>>(
-        `SELECT ${PROFILE_CALL_FIELDS} FROM Task WHERE ${whereClause} ORDER BY ActivityDate DESC`
+        `SELECT ${TASK_PROFILE_CALL_FIELDS} FROM Task WHERE ${whereClause} ORDER BY ActivityDate DESC`
       ),
       conn.query<Record<string, any>>(
-        `SELECT ${PROFILE_CALL_FIELDS} FROM Event WHERE ${whereClause} ORDER BY ActivityDate DESC`
+        `SELECT ${EVENT_PROFILE_CALL_FIELDS} FROM Event WHERE ${whereClause} ORDER BY ActivityDate DESC`
       ),
     ])
 
@@ -460,8 +463,8 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
     const start = Date.now()
     const where = `RecordType.DeveloperName = 'Profile_Call' AND LastModifiedDate >= ${callsWm}`
     const [taskResults, eventResults] = await Promise.all([
-      conn.query<Record<string, any>>(`SELECT ${PROFILE_CALL_FIELDS} FROM Task WHERE ${where}`),
-      conn.query<Record<string, any>>(`SELECT ${PROFILE_CALL_FIELDS} FROM Event WHERE ${where}`),
+      conn.query<Record<string, any>>(`SELECT ${TASK_PROFILE_CALL_FIELDS} FROM Task WHERE ${where}`),
+      conn.query<Record<string, any>>(`SELECT ${EVENT_PROFILE_CALL_FIELDS} FROM Event WHERE ${where}`),
     ])
     const rows = [
       ...taskResults.records.map((r) => mapProfileCallRow(r, 'Task')),

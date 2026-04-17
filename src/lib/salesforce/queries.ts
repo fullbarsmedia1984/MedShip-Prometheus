@@ -102,10 +102,10 @@ export async function getProductsByCode(
 
 // --- Profile Call Queries ---
 
-// Common fields for both Task and Event queries
-const PROFILE_CALL_FIELDS = `
+// Shared fields (minus Status which only exists on Task, not Event)
+const PROFILE_CALL_FIELDS_BASE = `
   Id, Subject, OwnerId, Owner.Name, AccountId, Account.Name,
-  WhoId, Who.Name, ActivityDate, Status, CreatedDate,
+  WhoId, Who.Name, ActivityDate, CreatedDate,
   Profile_Call_Type__c, Profile_Call_Outcome__c, Products_Discussed__c,
   Program_Size__c, Current_Supplier__c, Budget_Available__c,
   Budget_Timeframe__c, Follow_Up_Date__c, Converted_to_Opp__c,
@@ -118,6 +118,8 @@ const PROFILE_CALL_FIELDS = `
   ringdna__Call_Disposition__c,
   Calendly__IsNoShow__c, Calendly__IsRescheduled__c
 `
+const TASK_FIELDS = `Status, ${PROFILE_CALL_FIELDS_BASE}`
+const EVENT_FIELDS = PROFILE_CALL_FIELDS_BASE
 
 /**
  * Helper to map raw SF response to SFProfileCall shape.
@@ -194,8 +196,8 @@ export async function getProfileCalls(
 
       // Query Task and Event in parallel
       const [taskResults, eventResults] = await Promise.all([
-        conn.query<Record<string, any>>(`SELECT ${PROFILE_CALL_FIELDS} FROM Task WHERE ${whereClause} ORDER BY ActivityDate DESC LIMIT ${limit}`),
-        conn.query<Record<string, any>>(`SELECT ${PROFILE_CALL_FIELDS} FROM Event WHERE ${whereClause} ORDER BY ActivityDate DESC LIMIT ${limit}`),
+        conn.query<Record<string, any>>(`SELECT ${TASK_FIELDS} FROM Task WHERE ${whereClause} ORDER BY ActivityDate DESC LIMIT ${limit}`),
+        conn.query<Record<string, any>>(`SELECT ${EVENT_FIELDS} FROM Event WHERE ${whereClause} ORDER BY ActivityDate DESC LIMIT ${limit}`),
       ])
 
       // Map to unified shape with ActivityType marker
