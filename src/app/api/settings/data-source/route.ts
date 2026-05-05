@@ -19,15 +19,15 @@ export async function GET() {
 }
 
 // POST /api/settings/data-source — updates the mode
-// Body: { mode: 'seed' | 'live' }
+// Body: { mode: 'live' }
 export async function POST(req: Request) {
   try {
     const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const body = await req.json()
-    if (body.mode !== 'seed' && body.mode !== 'live') {
-      return NextResponse.json({ error: 'Invalid mode. Must be "seed" or "live".' }, { status: 400 })
+    if (body.mode !== 'live') {
+      return NextResponse.json({ error: 'Seed data mode is no longer available. Use "live".' }, { status: 400 })
     }
 
     await setDataSourceMode(body.mode)

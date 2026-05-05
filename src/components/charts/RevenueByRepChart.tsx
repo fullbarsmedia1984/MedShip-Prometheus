@@ -11,6 +11,7 @@ import {
   Legend,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import type { SeedMonthlyRepRevenue } from '@/lib/seed-data'
 
 interface RevenueByRepChartProps {
@@ -57,9 +58,19 @@ export function RevenueByRepChart({ data }: RevenueByRepChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Monthly Revenue by Rep</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Monthly Revenue by Rep
+          {data.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
       </CardHeader>
       <CardContent>
+        {data.length === 0 ? (
+          <ComingSoonPanel
+            title="Revenue by rep"
+            description="Live Salesforce opportunity history is not available yet."
+            className="h-[350px]"
+          />
+        ) : (
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#D6DEE3" />
@@ -92,6 +103,7 @@ export function RevenueByRepChart({ data }: RevenueByRepChartProps) {
             ))}
           </BarChart>
         </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   )

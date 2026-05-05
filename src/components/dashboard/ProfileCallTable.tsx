@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CallOutcomeBadge } from '@/components/dashboard/CallOutcomeBadge'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import {
   CheckCircle,
   ChevronDown,
@@ -126,6 +127,7 @@ export function ProfileCallTable({ calls, reps, keywordFilter, onClearKeywordFil
               <Phone className="h-4 w-4 text-medship-primary" />
             </span>
             Profile Call Log
+            {calls.length === 0 && <ComingSoonBadge />}
           </CardTitle>
           <div className="flex items-center gap-2">
             {keywordFilter && (
@@ -197,6 +199,12 @@ export function ProfileCallTable({ calls, reps, keywordFilter, onClearKeywordFil
         </div>
       </CardHeader>
       <CardContent className="overflow-x-auto p-0">
+        {calls.length === 0 ? (
+          <ComingSoonPanel
+            title="Profile call log"
+            description="Live Salesforce profile-call records are not available yet."
+          />
+        ) : (
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -439,6 +447,7 @@ export function ProfileCallTable({ calls, reps, keywordFilter, onClearKeywordFil
             })}
           </TableBody>
         </Table>
+        )}
       </CardContent>
     </Card>
   )

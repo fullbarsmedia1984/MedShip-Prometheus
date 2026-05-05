@@ -8,6 +8,7 @@ import { SalesLeaderboard } from '@/components/dashboard/SalesLeaderboard'
 import { SalesActivityFeed } from '@/components/dashboard/SalesActivityFeed'
 import { PipelineSnapshot } from '@/components/dashboard/PipelineSnapshot'
 import { ClientMapPreview } from '@/components/dashboard/ClientMapPreview'
+import { EmptyState } from '@/components/dashboard/EmptyState'
 import { RevenueChart } from '@/components/charts/RevenueChart'
 import { CategoryPieChart } from '@/components/charts/CategoryPieChart'
 import { Header } from '@/components/layout/Header'
@@ -26,7 +27,6 @@ import {
   CheckCircle,
   Clock,
   FileText,
-  TrendingUp,
   Phone,
   ArrowRight,
 } from 'lucide-react'
@@ -184,9 +184,7 @@ export default function DashboardPage() {
           />
           <KpiCard
             title="Quotes Sent (MTD)"
-            value={salesKpis.quotesSentMTD}
-            change={12.4}
-            changeLabel="vs last month"
+            value="Coming Soon"
             icon={FileText}
             iconColor="text-medship-secondary"
           />
@@ -244,6 +242,13 @@ export default function DashboardPage() {
                 </Link>
               </CardHeader>
               <CardContent>
+                {recentOrders.length === 0 ? (
+                  <EmptyState
+                    icon={ShoppingCart}
+                    title="No live orders found"
+                    description="Run a Salesforce sync to populate recent order data."
+                  />
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -274,6 +279,7 @@ export default function DashboardPage() {
                     ))}
                   </TableBody>
                 </Table>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -292,6 +298,13 @@ export default function DashboardPage() {
                 </Link>
               </CardHeader>
               <CardContent>
+                {inventoryAlerts.length === 0 ? (
+                  <EmptyState
+                    icon={CheckCircle}
+                    title="No live inventory alerts"
+                    description="Fishbowl inventory is live and no low-stock products matched the alert threshold."
+                  />
+                ) : (
                 <div className="space-y-3">
                   {inventoryAlerts.map((product) => {
                     const isOutOfStock = product.qtyAvailable <= 0
@@ -331,6 +344,7 @@ export default function DashboardPage() {
                     )
                   })}
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -349,6 +363,13 @@ export default function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
+            {integrations.length === 0 ? (
+              <EmptyState
+                icon={Clock}
+                title="No live integration status found"
+                description="Run a sync or configure schedules to populate integration health."
+              />
+            ) : (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
               {integrations.map((integration) => (
                 <SyncStatusCard
@@ -373,6 +394,7 @@ export default function DashboardPage() {
                 />
               ))}
             </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { ClientMap } from './ClientMap'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import type { Customer, SeedRegionSummary } from '@/lib/seed-data'
 
 interface ClientMapPreviewProps {
@@ -23,7 +24,10 @@ export function ClientMapPreview({ customers, regionSummaries }: ClientMapPrevie
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle>Client Locations</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Client Locations
+          {customers.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
         <Link
           href="/dashboard/territory"
           className="flex items-center gap-1 text-sm text-medship-primary hover:underline"
@@ -33,6 +37,13 @@ export function ClientMapPreview({ customers, regionSummaries }: ClientMapPrevie
         </Link>
       </CardHeader>
       <CardContent className="space-y-4">
+        {customers.length === 0 ? (
+          <ComingSoonPanel
+            title="Client map"
+            description="Live geocoded Salesforce account locations are not available yet."
+          />
+        ) : (
+          <>
         <ClientMap
           customers={customers}
           height="350px"
@@ -56,6 +67,8 @@ export function ClientMapPreview({ customers, regionSummaries }: ClientMapPrevie
             </div>
           ))}
         </div>
+          </>
+        )}
       </CardContent>
     </Card>
   )

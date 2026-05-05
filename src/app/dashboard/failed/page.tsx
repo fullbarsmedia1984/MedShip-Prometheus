@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Header } from '@/components/layout/Header'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { EmptyState } from '@/components/dashboard/EmptyState'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils'
 // ---------------------------------------------------------------------------
 
 function formatRelativeTime(isoString: string): string {
-  const now = new Date('2026-03-31T12:00:00Z')
+  const now = new Date()
   const then = new Date(isoString)
   const diffMs = now.getTime() - then.getTime()
   if (diffMs < 0) return 'just now'

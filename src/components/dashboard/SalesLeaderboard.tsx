@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import {
   Table,
   TableBody,
@@ -53,11 +54,18 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </span>
-            Sales Leaderboard &mdash; March 2026
+            Sales Leaderboard
+            {sorted.length === 0 && <ComingSoonBadge />}
           </CardTitle>
         </div>
       </CardHeader>
       <CardContent className="p-0">
+        {sorted.length === 0 ? (
+          <ComingSoonPanel
+            title="Sales leaderboard"
+            description="Live Salesforce sales rep performance data is not available yet."
+          />
+        ) : (
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -68,7 +76,12 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
               <TableHead className="hidden text-center md:table-cell">Deals Closed</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Profile Calls</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Connect Rate</TableHead>
-              <TableHead className="hidden text-center md:table-cell">Quotes Sent</TableHead>
+              <TableHead className="hidden text-center md:table-cell">
+                <span className="inline-flex items-center justify-center gap-2">
+                  Quotes Sent
+                  <ComingSoonBadge />
+                </span>
+              </TableHead>
               <TableHead className="hidden text-right xl:table-cell">Avg Deal Size</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Win Rate</TableHead>
               <TableHead className="text-center">Activity</TableHead>
@@ -149,7 +162,9 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
                       <span className="text-muted-foreground/30">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden text-center font-medium md:table-cell">{rep.quotesSent}</TableCell>
+                  <TableCell className="hidden text-center font-medium md:table-cell">
+                    <ComingSoonBadge />
+                  </TableCell>
                   <TableCell className="hidden text-right tabular-nums xl:table-cell">
                     ${rep.avgDealSize.toLocaleString()}
                   </TableCell>
@@ -162,6 +177,7 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
             })}
           </TableBody>
         </Table>
+        )}
       </CardContent>
     </Card>
   )

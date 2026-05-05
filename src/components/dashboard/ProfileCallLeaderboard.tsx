@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table'
 import { Phone } from 'lucide-react'
 import { ConnectRateBadge } from '@/components/dashboard/ConnectRateBadge'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import type { SeedSalesRep } from '@/lib/seed-data'
 import type { ProfileCallMetricsResult } from '@/lib/data'
 
@@ -34,7 +35,8 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-success/10">
               <Phone className="h-4 w-4 text-medship-success" />
             </span>
-            Profile Call Leaderboard &mdash; March 2026
+            Profile Call Leaderboard
+            {sorted.length === 0 && <ComingSoonBadge />}
           </CardTitle>
           <div className="flex items-center gap-4 text-sm">
             <div className="text-right">
@@ -57,6 +59,12 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
         </div>
       </CardHeader>
       <CardContent className="p-0">
+        {sorted.length === 0 ? (
+          <ComingSoonPanel
+            title="Profile call leaderboard"
+            description="Live Salesforce profile-call records are not available yet."
+          />
+        ) : (
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -139,6 +147,7 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
             })}
           </TableBody>
         </Table>
+        )}
       </CardContent>
     </Card>
   )

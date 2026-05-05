@@ -52,6 +52,7 @@ export function KpiCard({
     'text-medship-secondary': 'bg-medship-secondary/10',
   }
   const iconBg = bgMap[iconColor] || 'bg-medship-primary/10'
+  const isLongTextValue = typeof value === 'string' && value.length > 10
 
   return (
     <div className="overflow-hidden rounded-[0.625rem] border border-[#D6DEE3] bg-card shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)] dark:border-[rgba(255,255,255,0.1)] dark:shadow-none">
@@ -69,7 +70,12 @@ export function KpiCard({
 
         {/* Content */}
         <div className="flex flex-col">
-          <span className="text-[2rem] font-semibold leading-tight text-card-foreground">
+          <span
+            className={cn(
+              'font-semibold leading-tight text-card-foreground',
+              isLongTextValue ? 'text-xl' : 'text-[2rem]'
+            )}
+          >
             {formatValue(value)}
           </span>
           <span className="mt-0.5 text-[0.875rem] font-medium uppercase text-muted-foreground">

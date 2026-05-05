@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { QuoteStatusBadge } from '@/components/dashboard/QuoteStatusBadge'
+import { EmptyState } from '@/components/dashboard/EmptyState'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import { RevenueByRepChart } from '@/components/charts/RevenueByRepChart'
 import { PipelineByRepChart } from '@/components/charts/PipelineByRepChart'
 import { Header } from '@/components/layout/Header'
@@ -154,40 +156,30 @@ export default function SalesPage() {
           <KpiCard
             title="Revenue MTD"
             value={`$${kpis.revenueMTD.toLocaleString()}`}
-            change={14.2}
-            changeLabel="vs last month"
             icon={DollarSign}
             iconColor="text-medship-primary"
           />
           <KpiCard
             title="Revenue QTD"
             value={`$${kpis.revenueQTD.toLocaleString()}`}
-            change={8.6}
-            changeLabel="vs last quarter"
             icon={TrendingUp}
             iconColor="text-medship-success"
           />
           <KpiCard
             title="Revenue YTD"
             value={`$${kpis.revenueYTD.toLocaleString()}`}
-            change={22.1}
-            changeLabel="vs last year"
             icon={Award}
             iconColor="text-medship-secondary"
           />
           <KpiCard
             title="Quotes Sent MTD"
-            value={kpis.quotesSentMTD}
-            change={12.4}
-            changeLabel="vs last month"
+            value="Coming Soon"
             icon={FileText}
             iconColor="text-medship-info"
           />
           <KpiCard
             title="Deals Closed MTD"
             value={kpis.dealsClosedMTD}
-            change={5.8}
-            changeLabel="vs last month"
             icon={Target}
             iconColor="text-medship-danger"
           />
@@ -209,6 +201,13 @@ export default function SalesPage() {
             <CardTitle>Sales Rep Performance</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
+            {reps.length === 0 ? (
+              <EmptyState
+                icon={Award}
+                title="No live sales reps found"
+                description="Force a Salesforce sync after the Salesforce credentials are corrected."
+              />
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -219,9 +218,19 @@ export default function SalesPage() {
                   <SortHeader label="Deals Closed" field="dealsClosed" className="text-center" />
                   <SortHeader label="Deals Lost" field="dealsLost" className="hidden text-center lg:table-cell" />
                   <SortHeader label="Win Rate" field="winRate" className="text-center" />
-                  <SortHeader label="Quotes Sent" field="quotesSent" className="hidden text-center md:table-cell" />
+                  <TableHead className="hidden text-center md:table-cell">
+                    <span className="inline-flex items-center justify-center gap-2">
+                      Quotes Sent
+                      <ComingSoonBadge />
+                    </span>
+                  </TableHead>
                   <SortHeader label="Avg Deal Size" field="avgDealSize" className="hidden text-right lg:table-cell" />
-                  <SortHeader label="Avg Days" field="avgDaysToClose" className="hidden text-center lg:table-cell" />
+                  <TableHead className="hidden text-center lg:table-cell">
+                    <span className="inline-flex items-center justify-center gap-2">
+                      Avg Days
+                      <ComingSoonBadge />
+                    </span>
+                  </TableHead>
                   <SortHeader label="Pipeline" field="pipelineValue" className="hidden text-right md:table-cell" />
                 </TableRow>
               </TableHeader>
@@ -255,15 +264,20 @@ export default function SalesPage() {
                       <TableCell className="text-center font-medium">{rep.dealsClosed}</TableCell>
                       <TableCell className="hidden text-center font-medium lg:table-cell">{rep.dealsLost}</TableCell>
                       <TableCell className={cn('text-center font-semibold', winRateColor)}>{rep.winRate.toFixed(1)}%</TableCell>
-                      <TableCell className="hidden text-center font-medium md:table-cell">{rep.quotesSent}</TableCell>
+                      <TableCell className="hidden text-center font-medium md:table-cell">
+                        <ComingSoonBadge />
+                      </TableCell>
                       <TableCell className="hidden text-right tabular-nums lg:table-cell">${rep.avgDealSize.toLocaleString()}</TableCell>
-                      <TableCell className="hidden text-center lg:table-cell">{rep.avgDaysToClose}d</TableCell>
+                      <TableCell className="hidden text-center lg:table-cell">
+                        <ComingSoonBadge />
+                      </TableCell>
                       <TableCell className="hidden text-right tabular-nums md:table-cell">${rep.pipelineValue.toLocaleString()}</TableCell>
                     </TableRow>
                   )
                 })}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -345,9 +359,18 @@ export default function SalesPage() {
         {/* Quote Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Quote Activity</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Quote Activity
+              {quotes.length === 0 && <ComingSoonBadge />}
+            </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
+            {quotes.length === 0 ? (
+              <ComingSoonPanel
+                title="Quote activity"
+                description="A live Salesforce quote source is not mapped into Prometheus yet."
+              />
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -372,6 +395,7 @@ export default function SalesPage() {
                 ))}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
       </div>

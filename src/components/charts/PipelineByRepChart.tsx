@@ -11,6 +11,7 @@ import {
   Legend,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import type { SeedPipelineByRep } from '@/lib/seed-data'
 
 interface PipelineByRepChartProps {
@@ -59,9 +60,19 @@ export function PipelineByRepChart({ data }: PipelineByRepChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Pipeline by Rep</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Pipeline by Rep
+          {data.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
       </CardHeader>
       <CardContent>
+        {data.length === 0 ? (
+          <ComingSoonPanel
+            title="Pipeline by rep"
+            description="Live Salesforce opportunity pipeline data is not available yet."
+            className="h-[350px]"
+          />
+        ) : (
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#D6DEE3" />
@@ -93,6 +104,7 @@ export function PipelineByRepChart({ data }: PipelineByRepChartProps) {
             ))}
           </BarChart>
         </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   )

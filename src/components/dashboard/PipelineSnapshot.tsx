@@ -1,6 +1,7 @@
 'use client'
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import type { SeedPipelineStage } from '@/lib/seed-data'
 
 interface PipelineSnapshotProps {
@@ -16,9 +17,20 @@ export function PipelineSnapshot({ stages }: PipelineSnapshotProps) {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle>Pipeline Snapshot</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Pipeline Snapshot
+          {stages.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between">
+        {stages.length === 0 ? (
+          <ComingSoonPanel
+            title="Pipeline snapshot"
+            description="Live Salesforce opportunity pipeline data is not available yet."
+            className="h-[420px]"
+          />
+        ) : (
+          <>
         {/* Pipeline funnel bars */}
         <div className="space-y-3">
           {openStages.map((stage) => {
@@ -68,6 +80,8 @@ export function PipelineSnapshot({ stages }: PipelineSnapshotProps) {
             )}
           </div>
         </div>
+          </>
+        )}
       </CardContent>
     </Card>
   )

@@ -18,7 +18,6 @@ import { List, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
 import { getSyncEvents, getEventKpis } from '@/lib/data'
 import type { SyncEvent } from '@/types'
 import { AUTOMATION_INFO, type AutomationType } from '@/types'
-import { cn } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 
 // ---------------------------------------------------------------------------
@@ -26,7 +25,7 @@ import { useSearchParams } from 'next/navigation'
 // ---------------------------------------------------------------------------
 
 function formatRelativeTime(isoString: string): string {
-  const now = new Date('2026-03-31T12:00:00Z')
+  const now = new Date()
   const then = new Date(isoString)
   const diffMs = now.getTime() - then.getTime()
   if (diffMs < 0) return 'just now'

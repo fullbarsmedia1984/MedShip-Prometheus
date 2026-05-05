@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Radar, Phone } from 'lucide-react'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 
 interface KeywordData {
   keyword: string
@@ -56,7 +57,6 @@ const typeConfig: Record<KeywordData['type'], {
 export function CompetitorKeywordCard({ keywords, onKeywordClick }: CompetitorKeywordCardProps) {
   const maxMentions = keywords.length > 0 ? keywords[0].mentions : 1
   const totalMentions = keywords.reduce((s, k) => s + k.mentions, 0)
-  const totalCalls = new Set(keywords.flatMap((k) => Array.from({ length: k.calls }, (_, i) => `${k.keyword}-${i}`))).size
 
   return (
     <Card className="overflow-hidden border-medship-danger/20 shadow-lg">
@@ -68,6 +68,7 @@ export function CompetitorKeywordCard({ keywords, onKeywordClick }: CompetitorKe
                 <Radar className="h-4 w-4 text-medship-danger" />
               </span>
               Competitor Intelligence
+              {keywords.length === 0 && <ComingSoonBadge />}
             </CardTitle>
             <p className="mt-1.5 text-xs text-muted-foreground">
               Top keywords from RingDNA call recordings
@@ -166,9 +167,11 @@ export function CompetitorKeywordCard({ keywords, onKeywordClick }: CompetitorKe
         </div>
 
         {keywords.length === 0 && (
-          <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-            No keyword data available
-          </div>
+          <ComingSoonPanel
+            title="Competitor intelligence"
+            description="Live RingDNA keyword data is not available yet."
+            className="m-5 min-h-40"
+          />
         )}
       </CardContent>
     </Card>

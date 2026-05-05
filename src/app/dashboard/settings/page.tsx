@@ -20,7 +20,6 @@ import {
   ChevronDown,
   ChevronRight,
   Zap,
-  Leaf,
 } from 'lucide-react'
 import type { ConnectionConfig } from '@/types'
 import { toast } from 'sonner'
@@ -136,8 +135,8 @@ export default function SettingsPage() {
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
   const [resetConfirm, setResetConfirm] = useState('')
 
-  // Data source state
-  const [dataSourceMode, setDataSourceMode] = useState<'seed' | 'live'>('seed')
+  // Live cache state
+  const [dataSourceMode, setDataSourceMode] = useState<'live'>('live')
   const [pendingMode, setPendingMode] = useState<'live' | null>(null)
   const [syncState, setSyncState] = useState<SyncTableState[]>([])
   const [syncing, setSyncing] = useState(false)
@@ -179,11 +178,11 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/settings/data-source')
       if (res.ok) {
-        const data = await res.json()
-        setDataSourceMode(data.mode ?? 'seed')
+        await res.json()
+        setDataSourceMode('live')
       }
     } catch {
-      // Supabase may not be configured — default to seed
+      // Supabase may not be configured; the dashboard remains live-only.
     }
   }, [])
 
@@ -324,20 +323,13 @@ export default function SettingsPage() {
   // Data source handlers
   // ---------------------------------------------------------------------------
 
-  const handleModeToggle = async (mode: 'seed' | 'live') => {
+  const handleModeToggle = async (mode: 'live') => {
     if (mode === dataSourceMode) return
 
-    if (mode === 'live') {
-      // Show inline confirmation
-      setPendingMode('live')
-      return
-    }
-
-    // Switching to seed — no confirmation needed
-    await applyMode('seed')
+    setPendingMode('live')
   }
 
-  const applyMode = async (mode: 'seed' | 'live') => {
+  const applyMode = async (mode: 'live') => {
     try {
       const res = await fetch('/api/settings/data-source', {
         method: 'POST',
@@ -347,10 +339,8 @@ export default function SettingsPage() {
       if (res.ok) {
         setDataSourceMode(mode)
         setPendingMode(null)
-        toast.success(`Switched to ${mode === 'live' ? 'Live Data' : 'Seed Data'}`, {
-          description: mode === 'live'
-            ? 'Dashboard will now show live Salesforce data from the cache.'
-            : 'Dashboard will now show demo data.',
+        toast.success('Live data enabled', {
+          description: 'Dashboard modules will show live Salesforce and Fishbowl cache data.',
         })
       } else {
         toast.error('Failed to switch data source')
@@ -455,7 +445,7 @@ export default function SettingsPage() {
                   <div>
                     <CardTitle className="text-base">Data Source</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Choose whether the dashboard reads from demo data or live Salesforce
+                      Dashboard modules read from live Salesforce and Fishbowl cache data
                     </p>
                   </div>
                 </div>
@@ -466,38 +456,17 @@ export default function SettingsPage() {
                   <div className="space-y-4">
                     <div>
                       <p className="mb-2.5 text-sm font-medium text-card-foreground">Active Mode</p>
-                      {/* Segmented control */}
-                      <div className="inline-flex rounded-lg border border-border/60 bg-muted/30 p-1">
-                        <button
-                          onClick={() => handleModeToggle('seed')}
-                          className={cn(
-                            'relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-all',
-                            dataSourceMode === 'seed'
-                              ? 'bg-amber-500/15 text-amber-600 shadow-sm'
-                              : 'text-muted-foreground hover:text-card-foreground'
-                          )}
-                        >
-                          <Leaf className="h-4 w-4" />
-                          Seed Data
-                        </button>
-                        <button
-                          onClick={() => handleModeToggle('live')}
-                          className={cn(
-                            'relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-all',
-                            dataSourceMode === 'live'
-                              ? 'bg-emerald-500/15 text-emerald-600 shadow-sm'
-                              : 'text-muted-foreground hover:text-card-foreground'
-                          )}
-                        >
-                          <Zap className="h-4 w-4" />
-                          Live Data
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleModeToggle('live')}
+                        className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-600"
+                      >
+                        <Zap className="h-4 w-4" />
+                        Live Data Only
+                      </button>
 
                       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                        {isLive
-                          ? 'Using live Salesforce data cached in Supabase. Data refreshes via scheduled syncs every 15 minutes.'
-                          : 'Using demo data for testing and demonstrations. No Salesforce queries are made.'}
+                        Dashboard modules use live Salesforce and Fishbowl cache data only. Modules without a live source are flagged as Coming Soon.
                       </p>
                     </div>
 

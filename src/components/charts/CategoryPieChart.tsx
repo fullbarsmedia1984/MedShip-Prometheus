@@ -14,6 +14,7 @@ import {
   CardTitle,
   CardContent,
 } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 
 interface CategoryPieChartProps {
   data: { category: string; revenue: number; percentage: number }[]
@@ -89,9 +90,19 @@ export function CategoryPieChart({ data }: CategoryPieChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sales by Category</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Sales by Category
+          {data.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
       </CardHeader>
       <CardContent>
+        {data.length === 0 ? (
+          <ComingSoonPanel
+            title="Sales by category"
+            description="Live Salesforce opportunity line-item category sales are not available yet."
+            className="h-[300px]"
+          />
+        ) : (
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
             <Pie
@@ -123,6 +134,7 @@ export function CategoryPieChart({ data }: CategoryPieChartProps) {
             />
           </PieChart>
         </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   )

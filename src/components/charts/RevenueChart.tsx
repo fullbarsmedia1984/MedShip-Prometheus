@@ -15,6 +15,7 @@ import {
   CardTitle,
   CardContent,
 } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 
 interface RevenueChartProps {
   data: { month: string; revenue: number; orderCount: number }[]
@@ -60,9 +61,19 @@ export function RevenueChart({ data }: RevenueChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Revenue Trend</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Revenue Trend
+          {data.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
       </CardHeader>
       <CardContent>
+        {data.length === 0 ? (
+          <ComingSoonPanel
+            title="Revenue trend"
+            description="Live Salesforce closed-won opportunity revenue is not available yet."
+            className="h-[300px]"
+          />
+        ) : (
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
             <defs>
@@ -96,6 +107,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
             />
           </AreaChart>
         </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   )

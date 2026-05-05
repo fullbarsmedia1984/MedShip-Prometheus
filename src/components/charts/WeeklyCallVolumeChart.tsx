@@ -11,6 +11,7 @@ import {
   Legend,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import type { SeedWeeklyCallVolume, SeedSalesRep } from '@/lib/seed-data'
 
 interface WeeklyCallVolumeChartProps {
@@ -39,10 +40,18 @@ export function WeeklyCallVolumeChart({ data, reps }: WeeklyCallVolumeChartProps
             </svg>
           </span>
           Profile Call Volume
+          {data.length === 0 && <ComingSoonBadge />}
         </CardTitle>
         <p className="text-xs text-muted-foreground">Weekly profile calls per rep — last 8 weeks</p>
       </CardHeader>
       <CardContent>
+        {data.length === 0 ? (
+          <ComingSoonPanel
+            title="Profile call volume"
+            description="Live Salesforce profile-call activity is not available yet."
+            className="h-[280px]"
+          />
+        ) : (
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
@@ -89,6 +98,7 @@ export function WeeklyCallVolumeChart({ data, reps }: WeeklyCallVolumeChartProps
             </LineChart>
           </ResponsiveContainer>
         </div>
+        )}
       </CardContent>
     </Card>
   )

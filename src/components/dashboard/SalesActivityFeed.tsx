@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { CheckCircle, Send, PlusCircle, XCircle, PhoneCall } from 'lucide-react'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import type { SeedSalesActivity, SeedSalesRep } from '@/lib/seed-data'
 
 interface SalesActivityFeedProps {
@@ -11,7 +12,7 @@ interface SalesActivityFeedProps {
 }
 
 function relativeTime(timestamp: string): string {
-  const now = new Date('2026-03-31T12:00:00Z')
+  const now = new Date()
   const then = new Date(timestamp)
   const diffMs = now.getTime() - then.getTime()
   const diffMin = Math.floor(diffMs / 60000)
@@ -64,9 +65,19 @@ export function SalesActivityFeed({ activities, reps }: SalesActivityFeedProps) 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle>Recent Sales Activity</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Recent Sales Activity
+          {activities.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden">
+        {activities.length === 0 ? (
+          <ComingSoonPanel
+            title="Sales activity feed"
+            description="Live Salesforce activity events are not mapped into Prometheus yet."
+            className="h-[420px]"
+          />
+        ) : (
         <div className="h-[420px] space-y-1 overflow-y-auto pr-1">
           {activities.map((activity, idx) => {
             const config = typeConfig[activity.type]
@@ -139,6 +150,7 @@ export function SalesActivityFeed({ activities, reps }: SalesActivityFeedProps) 
             )
           })}
         </div>
+        )}
       </CardContent>
     </Card>
   )

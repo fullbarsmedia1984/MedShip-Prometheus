@@ -2,6 +2,7 @@
 
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 
 interface OutcomeData {
   outcome: string
@@ -14,7 +15,10 @@ interface CallOutcomeChartProps {
   data: OutcomeData[]
 }
 
-function CustomTooltip({ active, payload }: any) {
+function CustomTooltip({ active, payload }: {
+  active?: boolean
+  payload?: Array<{ payload: OutcomeData }>
+}) {
   if (!active || !payload?.[0]) return null
   const d = payload[0].payload as OutcomeData
   return (
@@ -40,10 +44,18 @@ export function CallOutcomeChart({ data }: CallOutcomeChartProps) {
             </svg>
           </span>
           Profile Call Outcomes
+          {data.length === 0 && <ComingSoonBadge />}
         </CardTitle>
         <p className="text-xs text-muted-foreground">Distribution this month — {total} total profile calls</p>
       </CardHeader>
       <CardContent>
+        {data.length === 0 ? (
+          <ComingSoonPanel
+            title="Profile call outcomes"
+            description="Live Salesforce profile-call outcome data is not available yet."
+            className="h-[220px]"
+          />
+        ) : (
         <div className="flex items-center gap-4">
           <div className="h-[220px] w-[220px] shrink-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -82,6 +94,7 @@ export function CallOutcomeChart({ data }: CallOutcomeChartProps) {
             ))}
           </div>
         </div>
+        )}
       </CardContent>
     </Card>
   )

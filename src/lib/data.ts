@@ -1,29 +1,9 @@
 // =============================================================================
 // Data Access Layer
-// Routes queries to seed data or Supabase cache based on app_settings mode.
+// Dashboard reads live Salesforce/Fishbowl cache only. Seed data remains typed
+// fixture data, but user-facing dashboard modules must not fall back to it.
 // =============================================================================
 
-import {
-  seedProducts,
-  seedCustomers,
-  seedOrders,
-  seedMonthlyRevenue,
-  seedCategorySales,
-  seedSyncEvents,
-  seedIntegrationStatus,
-  seedFieldMappings,
-  seedConnectionConfigs,
-  seedSalesReps,
-  seedEnhancedSalesReps,
-  seedPipelineStages,
-  seedSalesActivities,
-  seedQuotes,
-  seedMonthlyRepRevenue,
-  seedPipelineByRep,
-  seedRegionSummaries,
-  seedProfileCalls,
-  seedWeeklyCallVolume,
-} from '@/lib/seed-data'
 import type {
   Product,
   Customer,
@@ -191,40 +171,6 @@ type SfProductCategoryRow = {
   family: string | null
 }
 
-/**
- * Try live data first; if it returns empty, fall back to seed.
- * Protects against toggling to live mode before any sync has run.
- */
-async function liveOrSeed<T>(
-  liveFn: () => Promise<T[]>,
-  seedFn: () => T[]
-): Promise<T[]> {
-  try {
-    const result = await liveFn()
-    if (result.length === 0) {
-      console.warn('Live data returned empty, falling back to seed')
-      return seedFn()
-    }
-    return result
-  } catch (error) {
-    console.error('Live data query failed, falling back to seed:', error)
-    return seedFn()
-  }
-}
-
-async function liveOrSeedValue<T>(
-  liveFn: () => Promise<T | null>,
-  seedFn: () => T
-): Promise<T> {
-  try {
-    const result = await liveFn()
-    return result ?? seedFn()
-  } catch (error) {
-    console.error('Live data query failed, falling back to seed:', error)
-    return seedFn()
-  }
-}
-
 function sortByCreatedDesc<T extends { created_at: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => b.created_at.localeCompare(a.created_at))
 }
@@ -320,11 +266,10 @@ function roundCurrency(value: number): number {
 }
 
 function warnEmptyLiveTable(tableName: string, surface: string): void {
-  console.warn(`${tableName} returned no live rows; ${surface} is using seed fallback`)
+  console.warn(`${tableName} returned no live rows; ${surface} is returning an empty live result`)
 }
 
-function inferCategory(partNumber: string, seedMatch?: Product): Product['category'] {
-  if (seedMatch) return seedMatch.category
+function inferCategory(partNumber: string): Product['category'] {
   if (partNumber.startsWith('CE-')) return 'Capital Equipment'
   if (partNumber.startsWith('SIM-')) return 'Simulation'
   if (partNumber.startsWith('SUP-')) return 'Supplies'
@@ -336,16 +281,15 @@ function inferCategory(partNumber: string, seedMatch?: Product): Product['catego
 
 function mapInventorySnapshotToProduct(
   row: InventorySnapshotRow,
-  reorderPoint: number,
-  seedMatch?: Product
+  reorderPoint: number
 ): Product {
   return {
     id: row.id,
     sku: row.part_number,
-    name: row.part_description ?? seedMatch?.name ?? row.part_number,
-    category: inferCategory(row.part_number, seedMatch),
-    price: seedMatch?.price ?? 0,
-    cost: seedMatch?.cost ?? 0,
+    name: row.part_description ?? row.part_number,
+    category: inferCategory(row.part_number),
+    price: 0,
+    cost: 0,
     qtyOnHand: toNumber(row.qty_on_hand),
     qtyAllocated: toNumber(row.qty_allocated),
     qtyAvailable: toNumber(row.qty_available),
@@ -381,12 +325,9 @@ async function getLiveInventoryProducts(): Promise<Product[]> {
       .filter((rule) => rule.is_active !== false)
       .map((rule) => [rule.part_number, toNumber(rule.reorder_point)])
   )
-  const seedBySku = new Map(seedProducts.map((product) => [product.sku, product]))
-
   return (inventory as InventorySnapshotRow[]).map((row) => {
-    const seedMatch = seedBySku.get(row.part_number)
-    const reorderPoint = rulesByPart.get(row.part_number) ?? seedMatch?.reorderPoint ?? 0
-    return mapInventorySnapshotToProduct(row, reorderPoint, seedMatch)
+    const reorderPoint = rulesByPart.get(row.part_number) ?? 0
+    return mapInventorySnapshotToProduct(row, reorderPoint)
   })
 }
 
@@ -558,42 +499,8 @@ export interface RevenueMetrics {
 }
 
 export async function getRevenueMetrics(): Promise<RevenueMetrics> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') return getLiveRevenueMetrics()
-  return getSeedRevenueMetrics()
-}
-
-function getSeedRevenueMetrics(): RevenueMetrics {
-  const currentMonth = seedMonthlyRevenue[seedMonthlyRevenue.length - 1]
-  const prevMonth = seedMonthlyRevenue[seedMonthlyRevenue.length - 2]
-
-  const mtdRevenue = currentMonth.revenue
-  const mtdRevenueChange = prevMonth.revenue > 0
-    ? Math.round(((mtdRevenue - prevMonth.revenue) / prevMonth.revenue) * 1000) / 10
-    : 0
-
-  const openOrders = seedOrders.filter(
-    (o) => o.status === 'Pending' || o.status === 'Closed Won'
-  ).length
-  const prevMonthOpenOrders = 18
-  const openOrdersChange = Math.round(((openOrders - prevMonthOpenOrders) / prevMonthOpenOrders) * 1000) / 10
-
-  const shippedOrDelivered = seedOrders.filter(
-    (o) => o.status === 'Shipped' || o.status === 'Delivered'
-  )
-  const total = seedOrders.filter((o) => o.status !== 'Cancelled').length
-  const fulfillmentRate = Math.round((shippedOrDelivered.length / total) * 1000) / 10
-
-  return {
-    mtdRevenue,
-    mtdRevenueChange,
-    openOrders,
-    openOrdersChange,
-    fulfillmentRate,
-    fulfillmentRateChange: 2.3,
-    avgShipDays: 2.8,
-    avgShipDaysChange: -0.4,
-  }
+  void await getDataSourceMode()
+  return getLiveRevenueMetrics()
 }
 
 async function getLiveRevenueMetrics(): Promise<RevenueMetrics> {
@@ -664,14 +571,8 @@ async function getLiveRevenueMetrics(): Promise<RevenueMetrics> {
 // ---------------------------------------------------------------------------
 
 export async function getMonthlyRevenue(): Promise<MonthlyRevenue[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const live = await getLiveMonthlyRevenue()
-    if (live.length > 0 && live.some((m) => m.revenue > 0)) {
-      return live
-    }
-  }
-  return seedMonthlyRevenue
+  void await getDataSourceMode()
+  return getLiveMonthlyRevenue()
 }
 
 async function getLiveMonthlyRevenue(): Promise<MonthlyRevenue[]> {
@@ -690,6 +591,10 @@ async function getLiveMonthlyRevenue(): Promise<MonthlyRevenue[]> {
 
   if (error || !opps) {
     console.error('getLiveMonthlyRevenue query failed:', error)
+    return []
+  }
+  if (opps.length === 0) {
+    warnEmptyLiveTable('sf_opportunities', 'monthly revenue')
     return []
   }
 
@@ -882,12 +787,8 @@ async function getLiveOrders(): Promise<Order[]> {
 // ---------------------------------------------------------------------------
 
 export async function getCategorySales(): Promise<CategorySales[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const live = await getLiveCategorySales()
-    if (live.length > 0) return live
-  }
-  return seedCategorySales
+  void await getDataSourceMode()
+  return getLiveCategorySales()
 }
 
 async function getLiveCategorySales(): Promise<CategorySales[]> {
@@ -951,19 +852,15 @@ async function getLiveCategorySales(): Promise<CategorySales[]> {
 // ---------------------------------------------------------------------------
 
 export async function getOrders(filters: OrderFilters = {}): Promise<PaginatedResult<Order>> {
-  const mode = await getDataSourceMode()
-  const orders = mode === 'live'
-    ? await liveOrSeed(getLiveOrders, () => seedOrders)
-    : seedOrders
+  void await getDataSourceMode()
+  const orders = await getLiveOrders()
   const items = applyOrderFilters(orders, filters)
   return paginate(items, filters.page, filters.pageSize)
 }
 
 export async function getRecentOrders(limit = 10): Promise<Order[]> {
-  const mode = await getDataSourceMode()
-  const orders = mode === 'live'
-    ? await liveOrSeed(getLiveOrders, () => seedOrders)
-    : seedOrders
+  void await getDataSourceMode()
+  const orders = await getLiveOrders()
 
   return [...orders]
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -971,12 +868,8 @@ export async function getRecentOrders(limit = 10): Promise<Order[]> {
 }
 
 export async function getSalesReps(): Promise<SalesRep[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const live = await getLiveSalesRepOptions()
-    if (live.length > 0) return live
-  }
-  return seedSalesReps
+  void await getDataSourceMode()
+  return getLiveSalesRepOptions()
 }
 
 async function getLiveSalesRepOptions(): Promise<SalesRep[]> {
@@ -1001,10 +894,8 @@ async function getLiveSalesRepOptions(): Promise<SalesRep[]> {
 // ---------------------------------------------------------------------------
 
 export async function getInventory(filters: InventoryFilters = {}): Promise<PaginatedResult<Product>> {
-  const mode = await getDataSourceMode()
-  const products = mode === 'live'
-    ? await liveOrSeed(getLiveInventoryProducts, () => seedProducts)
-    : seedProducts
+  void await getDataSourceMode()
+  const products = await getLiveInventoryProducts()
   const items = applyInventoryFilters(products, filters)
 
   return paginate(items, filters.page, filters.pageSize)
@@ -1018,22 +909,14 @@ export interface InventoryKpis {
 }
 
 export async function getInventoryKpis(): Promise<InventoryKpis> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    return liveOrSeedValue(async () => {
-      const products = await getLiveInventoryProducts()
-      return products.length > 0 ? getInventoryKpisFromProducts(products) : null
-    }, () => getInventoryKpisFromProducts(seedProducts))
-  }
-
-  return getInventoryKpisFromProducts(seedProducts)
+  void await getDataSourceMode()
+  const products = await getLiveInventoryProducts()
+  return getInventoryKpisFromProducts(products)
 }
 
 export async function getInventoryAlerts(limit = 5): Promise<Product[]> {
-  const mode = await getDataSourceMode()
-  const products = mode === 'live'
-    ? await liveOrSeed(getLiveInventoryProducts, () => seedProducts)
-    : seedProducts
+  void await getDataSourceMode()
+  const products = await getLiveInventoryProducts()
 
   return products
     .filter((p) => p.qtyAvailable <= p.reorderPoint)
@@ -1046,10 +929,8 @@ export async function getInventoryAlerts(limit = 5): Promise<Product[]> {
 // ---------------------------------------------------------------------------
 
 export async function getSyncEvents(filters: EventFilters = {}): Promise<PaginatedResult<SyncEvent>> {
-  const mode = await getDataSourceMode()
-  const events = mode === 'live'
-    ? await liveOrSeed(getLiveSyncEvents, () => seedSyncEvents)
-    : seedSyncEvents
+  void await getDataSourceMode()
+  const events = await getLiveSyncEvents()
   const items = applyEventFilters(events, filters)
 
   return paginate(items, filters.page, filters.pageSize || 25)
@@ -1063,17 +944,9 @@ export interface EventKpis {
 }
 
 export async function getEventKpis(): Promise<EventKpis> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    return liveOrSeedValue(async () => {
-      const events = await getLiveSyncEvents()
-      return events.length > 0
-        ? getEventKpisFromEvents(events, new Date().toISOString().slice(0, 10))
-        : null
-    }, () => getEventKpisFromEvents(seedSyncEvents, '2026-03-31'))
-  }
-
-  return getEventKpisFromEvents(seedSyncEvents, '2026-03-31')
+  void await getDataSourceMode()
+  const events = await getLiveSyncEvents()
+  return getEventKpisFromEvents(events, new Date().toISOString().slice(0, 10))
 }
 
 // ---------------------------------------------------------------------------
@@ -1081,10 +954,8 @@ export async function getEventKpis(): Promise<EventKpis> {
 // ---------------------------------------------------------------------------
 
 export async function getFailedSyncs(): Promise<SyncEvent[]> {
-  const mode = await getDataSourceMode()
-  const events = mode === 'live'
-    ? await liveOrSeed(getLiveSyncEvents, () => seedSyncEvents)
-    : seedSyncEvents
+  void await getDataSourceMode()
+  const events = await getLiveSyncEvents()
 
   return sortByCreatedDesc(events).filter(
     (e) => e.status === 'failed' || e.status === 'retrying'
@@ -1096,12 +967,8 @@ export async function getFailedSyncs(): Promise<SyncEvent[]> {
 // ---------------------------------------------------------------------------
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusData[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    return liveOrSeed(getLiveIntegrationStatus, () => seedIntegrationStatus)
-  }
-
-  return seedIntegrationStatus
+  void await getDataSourceMode()
+  return getLiveIntegrationStatus()
 }
 
 // ---------------------------------------------------------------------------
@@ -1109,10 +976,8 @@ export async function getIntegrationStatus(): Promise<IntegrationStatusData[]> {
 // ---------------------------------------------------------------------------
 
 export async function getFieldMappings(automation?: string): Promise<FieldMapping[]> {
-  const mode = await getDataSourceMode()
-  const mappings = mode === 'live'
-    ? await liveOrSeed(getLiveFieldMappings, () => seedFieldMappings)
-    : seedFieldMappings
+  void await getDataSourceMode()
+  const mappings = await getLiveFieldMappings()
 
   if (automation && automation !== 'all') {
     return mappings.filter((m) => m.automation === automation)
@@ -1125,12 +990,8 @@ export async function getFieldMappings(automation?: string): Promise<FieldMappin
 // ---------------------------------------------------------------------------
 
 export async function getConnectionConfigs(): Promise<ConnectionConfig[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    return liveOrSeed(getLiveConnectionConfigs, () => seedConnectionConfigs.map(redactConnectionConfig))
-  }
-
-  return seedConnectionConfigs.map(redactConnectionConfig)
+  void await getDataSourceMode()
+  return getLiveConnectionConfigs()
 }
 
 // ---------------------------------------------------------------------------
@@ -1138,7 +999,8 @@ export async function getConnectionConfigs(): Promise<ConnectionConfig[]> {
 // ---------------------------------------------------------------------------
 
 export async function getCustomers(): Promise<Customer[]> {
-  return seedCustomers
+  void await getDataSourceMode()
+  return []
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,21 +1008,14 @@ export async function getCustomers(): Promise<Customer[]> {
 // ---------------------------------------------------------------------------
 
 export async function getSalesLeaderboard(): Promise<SeedSalesRep[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const liveReps = await getLiveSalesReps()
-    if (liveReps.length > 0) return liveReps.sort((a, b) => b.revenueMTD - a.revenueMTD)
-  }
-  return [...seedEnhancedSalesReps].sort((a, b) => b.revenueMTD - a.revenueMTD)
+  void await getDataSourceMode()
+  const liveReps = await getLiveSalesReps()
+  return liveReps.sort((a, b) => b.revenueMTD - a.revenueMTD)
 }
 
 export async function getEnhancedSalesReps(): Promise<SeedSalesRep[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const liveReps = await getLiveSalesReps()
-    if (liveReps.length > 0) return liveReps
-  }
-  return seedEnhancedSalesReps
+  void await getDataSourceMode()
+  return getLiveSalesReps()
 }
 
 /**
@@ -1299,42 +1154,42 @@ async function getLiveSalesReps(): Promise<SeedSalesRep[]> {
 }
 
 export async function getPipelineSnapshot(): Promise<SeedPipelineStage[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const supabase = createAdminClient()
-    const { data: opps } = await supabase
-      .from('sf_opportunities')
-      .select('stage_name, amount')
-      .eq('is_closed', false)
+  void await getDataSourceMode()
+  const supabase = createAdminClient()
+  const { data: opps } = await supabase
+    .from('sf_opportunities')
+    .select('stage_name, amount')
+    .eq('is_closed', false)
 
-    if (opps && opps.length > 0) {
-      const stageColors: Record<string, string> = {
-        'Prospecting': '#93C5FD', 'Qualification': '#60A5FA', 'Proposal': '#3B82F6',
-        'Negotiation': '#1E98D5', 'Closed Won': '#0FA62C', 'Closed Lost': '#D93025',
-      }
-      const byStage = new Map<string, { count: number; value: number }>()
-      for (const o of opps) {
-        const s = o.stage_name ?? 'Unknown'
-        const existing = byStage.get(s) ?? { count: 0, value: 0 }
-        existing.count++
-        existing.value += Number(o.amount) || 0
-        byStage.set(s, existing)
-      }
-      return Array.from(byStage.entries()).map(([stage, data]) => ({
-        stage,
-        count: data.count,
-        value: Math.round(data.value),
-        color: stageColors[stage] ?? '#94A3B8',
-      }))
+  if (opps && opps.length > 0) {
+    const stageColors: Record<string, string> = {
+      'Prospecting': '#93C5FD', 'Qualification': '#60A5FA', 'Proposal': '#3B82F6',
+      'Negotiation': '#1E98D5', 'Closed Won': '#0FA62C', 'Closed Lost': '#D93025',
     }
+    const byStage = new Map<string, { count: number; value: number }>()
+    for (const o of opps) {
+      const s = o.stage_name ?? 'Unknown'
+      const existing = byStage.get(s) ?? { count: 0, value: 0 }
+      existing.count++
+      existing.value += Number(o.amount) || 0
+      byStage.set(s, existing)
+    }
+    return Array.from(byStage.entries()).map(([stage, data]) => ({
+      stage,
+      count: data.count,
+      value: Math.round(data.value),
+      color: stageColors[stage] ?? '#94A3B8',
+    }))
   }
-  return seedPipelineStages
+
+  warnEmptyLiveTable('sf_opportunities', 'pipeline snapshot')
+  return []
 }
 
 export async function getSalesActivity(limit = 10): Promise<SeedSalesActivity[]> {
-  return [...seedSalesActivities]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, limit)
+  void limit
+  void await getDataSourceMode()
+  return []
 }
 
 export interface QuoteFilters {
@@ -1345,40 +1200,18 @@ export interface QuoteFilters {
 }
 
 export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedResult<SeedQuote>> {
-  let items = [...seedQuotes]
-
-  if (filters.status && filters.status !== 'all') {
-    items = items.filter((q) => q.status === filters.status)
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase()
-    items = items.filter(
-      (quote) =>
-        quote.repName.toLowerCase().includes(q) ||
-        quote.customerName.toLowerCase().includes(q)
-    )
-  }
-
-  items.sort((a, b) => b.date.localeCompare(a.date))
-  return paginate(items, filters.page, filters.pageSize)
+  void await getDataSourceMode()
+  return paginate([], filters.page, filters.pageSize)
 }
 
 export async function getMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const live = await getLiveMonthlyRepRevenue()
-    if (live.length > 0) return live
-  }
-  return seedMonthlyRepRevenue
+  void await getDataSourceMode()
+  return getLiveMonthlyRepRevenue()
 }
 
 export async function getPipelineByRep(): Promise<SeedPipelineByRep[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const live = await getLivePipelineByRep()
-    if (live.length > 0) return live
-  }
-  return seedPipelineByRep
+  void await getDataSourceMode()
+  return getLivePipelineByRep()
 }
 
 async function getLiveMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {
@@ -1509,29 +1342,15 @@ export interface SalesKpis {
 }
 
 export async function getSalesKpis(): Promise<SalesKpis> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const reps = await getLiveSalesReps()
-    if (reps.length > 0) {
-      return {
-        revenueMTD: reps.reduce((s, r) => s + r.revenueMTD, 0),
-        revenueQTD: reps.reduce((s, r) => s + r.revenueQTD, 0),
-        revenueYTD: reps.reduce((s, r) => s + r.revenueYTD, 0),
-        quotesSentMTD: reps.reduce((s, r) => s + r.quotesSent, 0),
-        dealsClosedMTD: reps.reduce((s, r) => s + r.dealsClosed, 0),
-        avgDaysToClose: reps.length > 0 ? Math.round(reps.reduce((s, r) => s + r.avgDaysToClose, 0) / reps.length) : 0,
-        pipelineValue: reps.reduce((s, r) => s + r.pipelineValue, 0),
-      }
-    }
-  }
-  const reps = seedEnhancedSalesReps
+  void await getDataSourceMode()
+  const reps = await getLiveSalesReps()
   return {
     revenueMTD: reps.reduce((s, r) => s + r.revenueMTD, 0),
     revenueQTD: reps.reduce((s, r) => s + r.revenueQTD, 0),
     revenueYTD: reps.reduce((s, r) => s + r.revenueYTD, 0),
     quotesSentMTD: reps.reduce((s, r) => s + r.quotesSent, 0),
     dealsClosedMTD: reps.reduce((s, r) => s + r.dealsClosed, 0),
-    avgDaysToClose: Math.round(reps.reduce((s, r) => s + r.avgDaysToClose, 0) / reps.length),
+    avgDaysToClose: reps.length > 0 ? Math.round(reps.reduce((s, r) => s + r.avgDaysToClose, 0) / reps.length) : 0,
     pipelineValue: reps.reduce((s, r) => s + r.pipelineValue, 0),
   }
 }
@@ -1541,17 +1360,19 @@ export async function getSalesKpis(): Promise<SalesKpis> {
 // ---------------------------------------------------------------------------
 
 export async function getCustomersWithLocations(): Promise<Customer[]> {
-  // Known limitation: live SF accounts don't have lat/lng.
-  // Geocoding is a Phase 2 enhancement.
-  return seedCustomers
+  void await getDataSourceMode()
+  return []
 }
 
 export async function getRegionSummaries(): Promise<SeedRegionSummary[]> {
-  return seedRegionSummaries
+  void await getDataSourceMode()
+  return []
 }
 
 export async function getCustomersByRegion(region: string): Promise<Customer[]> {
-  return seedCustomers.filter((c) => c.region === region)
+  void region
+  void await getDataSourceMode()
+  return []
 }
 
 export interface ClientMapStats {
@@ -1562,15 +1383,12 @@ export interface ClientMapStats {
 }
 
 export async function getClientMapStats(): Promise<ClientMapStats> {
-  const customers = seedCustomers
-  const active = customers.filter((c) => c.customerStatus === 'active')
-  const states = new Set(customers.map((c) => c.state))
-  const totalRevenue = active.reduce((s, c) => s + c.totalRevenue, 0)
+  void await getDataSourceMode()
   return {
-    totalClients: customers.length,
-    activeClients: active.length,
-    statesCovered: states.size,
-    avgRevenuePerClient: active.length > 0 ? Math.round(totalRevenue / active.length) : 0,
+    totalClients: 0,
+    activeClients: 0,
+    statesCovered: 0,
+    avgRevenuePerClient: 0,
   }
 }
 
@@ -1593,60 +1411,8 @@ export interface ProfileCallFilters {
 }
 
 export async function getProfileCalls(filters: ProfileCallFilters = {}): Promise<PaginatedResult<SeedProfileCall>> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const liveCalls = await getLiveProfileCalls(filters)
-    if (liveCalls.total > 0) return liveCalls
-  }
-  return getSeedProfileCalls(filters)
-}
-
-function getSeedProfileCalls(filters: ProfileCallFilters): PaginatedResult<SeedProfileCall> {
-  let items = [...seedProfileCalls]
-
-  if (filters.repId && filters.repId !== 'all') {
-    items = items.filter((c) => c.repId === filters.repId)
-  }
-  if (filters.startDate) {
-    items = items.filter((c) => c.activityDate >= filters.startDate!)
-  }
-  if (filters.endDate) {
-    items = items.filter((c) => c.activityDate <= filters.endDate!)
-  }
-  if (filters.outcome && filters.outcome !== 'all') {
-    items = items.filter((c) => c.profileCallOutcome === filters.outcome)
-  }
-  if (filters.convertedOnly) {
-    items = items.filter((c) => c.convertedToOpp)
-  }
-  if (filters.activityType && filters.activityType !== 'all') {
-    items = items.filter((c) => c.activityType === filters.activityType)
-  }
-  if (filters.keyword) {
-    const kw = filters.keyword.toLowerCase()
-    items = items.filter(
-      (c) =>
-        c.ringdnaKeywords?.toLowerCase().includes(kw) ||
-        c.subject.toLowerCase().includes(kw) ||
-        c.callNotesSummary.toLowerCase().includes(kw) ||
-        c.competitorIntel?.toLowerCase().includes(kw)
-    )
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase()
-    items = items.filter(
-      (c) =>
-        c.accountName.toLowerCase().includes(q) ||
-        c.contactName.toLowerCase().includes(q) ||
-        c.subject.toLowerCase().includes(q) ||
-        c.callNotesSummary.toLowerCase().includes(q) ||
-        c.competitorIntel?.toLowerCase().includes(q) ||
-        c.ringdnaKeywords?.toLowerCase().includes(q)
-    )
-  }
-
-  items.sort((a, b) => b.activityDate.localeCompare(a.activityDate))
-  return paginate(items, filters.page, filters.pageSize)
+  void await getDataSourceMode()
+  return getLiveProfileCalls(filters)
 }
 
 async function getLiveProfileCalls(filters: ProfileCallFilters): Promise<PaginatedResult<SeedProfileCall>> {
@@ -1733,56 +1499,8 @@ export interface ProfileCallMetricsResult {
 }
 
 export async function getProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const result = await getLiveProfileCallMetrics()
-    if (result.totalMTD > 0) return result
-  }
-  return getSeedProfileCallMetrics()
-}
-
-function getSeedProfileCallMetrics(): ProfileCallMetricsResult {
-  const calls = seedProfileCalls
-  const mtdCalls = calls.filter((c) => c.activityDate >= '2026-03-01')
-  const lastMonthCalls = calls.filter((c) => c.activityDate >= '2026-02-01' && c.activityDate < '2026-03-01')
-  const converted = mtdCalls.filter((c) => c.convertedToOpp)
-  const connected = mtdCalls.filter((c) => c.ringdnaConnected)
-  const withDuration = mtdCalls.filter((c) => c.ringdnaDurationMin > 0)
-
-  const byRepMap = new Map<string, {
-    calls: number; converted: number; connected: number;
-    totalDuration: number; totalRating: number; ratingCount: number
-  }>()
-  for (const call of mtdCalls) {
-    const existing = byRepMap.get(call.repName) ?? { calls: 0, converted: 0, connected: 0, totalDuration: 0, totalRating: 0, ratingCount: 0 }
-    existing.calls++
-    if (call.convertedToOpp) existing.converted++
-    if (call.ringdnaConnected) existing.connected++
-    existing.totalDuration += call.ringdnaDurationMin
-    if (call.ringdnaRating !== null) {
-      existing.totalRating += call.ringdnaRating
-      existing.ratingCount++
-    }
-    byRepMap.set(call.repName, existing)
-  }
-
-  return {
-    totalMTD: mtdCalls.length,
-    totalLastMonth: lastMonthCalls.length,
-    conversionRate: mtdCalls.length > 0 ? Math.round((converted.length / mtdCalls.length) * 1000) / 10 : 0,
-    connectRate: mtdCalls.length > 0 ? Math.round((connected.length / mtdCalls.length) * 1000) / 10 : 0,
-    avgDuration: withDuration.length > 0 ? Math.round(withDuration.reduce((s, c) => s + c.ringdnaDurationMin, 0) / withDuration.length) : 0,
-    byRep: Array.from(byRepMap.entries()).map(([repName, data]) => ({
-      repName,
-      calls: data.calls,
-      converted: data.converted,
-      conversionRate: data.calls > 0 ? Math.round((data.converted / data.calls) * 1000) / 10 : 0,
-      connectedCalls: data.connected,
-      connectRate: data.calls > 0 ? Math.round((data.connected / data.calls) * 1000) / 10 : 0,
-      avgDuration: data.calls > 0 ? Math.round(data.totalDuration / data.calls) : 0,
-      avgRating: data.ratingCount > 0 ? Math.round((data.totalRating / data.ratingCount) * 10) / 10 : null,
-    })),
-  }
+  void await getDataSourceMode()
+  return getLiveProfileCallMetrics()
 }
 
 async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
@@ -1856,7 +1574,59 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
 }
 
 export async function getWeeklyCallVolume(): Promise<SeedWeeklyCallVolume[]> {
-  return seedWeeklyCallVolume
+  void await getDataSourceMode()
+  const supabase = createAdminClient()
+  const now = new Date()
+  const weekStarts = Array.from({ length: 8 }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - now.getDay() - (7 - index) * 7)
+    date.setHours(0, 0, 0, 0)
+    return date.toISOString().split('T')[0]
+  })
+  const startDate = weekStarts[0]
+
+  const [callsRes, usersRes] = await Promise.all([
+    supabase
+      .from('sf_profile_calls')
+      .select('owner_sf_id, activity_date')
+      .gte('activity_date', startDate),
+    supabase
+      .from('sf_users')
+      .select('sf_id, name')
+      .eq('is_active', true),
+  ])
+
+  if (callsRes.error) throw callsRes.error
+  if (usersRes.error) throw usersRes.error
+  if (!callsRes.data || callsRes.data.length === 0) {
+    warnEmptyLiveTable('sf_profile_calls', 'weekly call volume')
+    return []
+  }
+
+  const userNames = new Map(
+    ((usersRes.data ?? []) as LookupNameRow[]).map((user) => [user.sf_id, user.name ?? user.sf_id])
+  )
+  const rows = weekStarts.map((weekStart) => ({ weekStart } as SeedWeeklyCallVolume))
+
+  for (const row of rows) {
+    for (const repName of userNames.values()) {
+      row[repName] = 0
+    }
+  }
+
+  for (const call of callsRes.data as Array<{ owner_sf_id: string | null; activity_date: string | null }>) {
+    if (!call.activity_date) continue
+    const activityDate = new Date(call.activity_date + 'T00:00:00')
+    activityDate.setDate(activityDate.getDate() - activityDate.getDay())
+    const weekStart = activityDate.toISOString().split('T')[0]
+    const row = rows.find((candidate) => candidate.weekStart === weekStart)
+    if (!row) continue
+
+    const repName = call.owner_sf_id ? userNames.get(call.owner_sf_id) ?? call.owner_sf_id : 'Unassigned'
+    row[repName] = toNumber(row[repName] as number | string | null) + 1
+  }
+
+  return rows
 }
 
 export async function getCallOutcomeBreakdown(): Promise<Array<{
@@ -1865,45 +1635,20 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
   percentage: number
   color: string
 }>> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const supabase = createAdminClient()
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    const { data: calls } = await supabase
-      .from('sf_profile_calls')
-      .select('profile_call_outcome')
-      .gte('activity_date', monthStart)
+  void await getDataSourceMode()
+  const supabase = createAdminClient()
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  const { data: calls } = await supabase
+    .from('sf_profile_calls')
+    .select('profile_call_outcome')
+    .gte('activity_date', monthStart)
 
-    if (calls && calls.length > 0) {
-      const total = calls.length
-      const outcomeColors: Record<string, string> = {
-        'Interested - Next Steps': '#0FA62C',
-        'Scheduled Demo': '#1E98D5',
-        'Quote Requested': '#B5C8CD',
-        'Needs Follow-Up': '#1C3C6E',
-        'Not Interested': '#D93025',
-      }
-      const counts = new Map<string, number>()
-      for (const c of calls) {
-        const o = c.profile_call_outcome ?? 'Unknown'
-        counts.set(o, (counts.get(o) ?? 0) + 1)
-      }
-      return Array.from(counts.entries())
-        .map(([outcome, count]) => ({
-          outcome,
-          count,
-          percentage: Math.round((count / total) * 1000) / 10,
-          color: outcomeColors[outcome] ?? '#94A3B8',
-        }))
-        .sort((a, b) => b.count - a.count)
-    }
-
+  if (!calls || calls.length === 0) {
     warnEmptyLiveTable('sf_profile_calls', 'call outcome breakdown')
+    return []
   }
 
-  // Seed fallback
-  const calls = seedProfileCalls.filter((c) => c.activityDate >= '2026-03-01')
   const total = calls.length
   const outcomeColors: Record<string, string> = {
     'Interested - Next Steps': '#0FA62C',
@@ -1914,7 +1659,8 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
   }
   const counts = new Map<string, number>()
   for (const call of calls) {
-    counts.set(call.profileCallOutcome, (counts.get(call.profileCallOutcome) ?? 0) + 1)
+    const outcome = call.profile_call_outcome ?? 'Unknown'
+    counts.set(outcome, (counts.get(outcome) ?? 0) + 1)
   }
   return Array.from(counts.entries())
     .map(([outcome, count]) => ({
@@ -1934,40 +1680,8 @@ export interface KeywordResult {
 }
 
 export async function getTopCompetitorKeywords(limit: number = 10): Promise<KeywordResult[]> {
-  const mode = await getDataSourceMode()
-  if (mode === 'live') {
-    const result = await getLiveTopKeywords(limit)
-    if (result.length > 0) return result
-  }
-  return getSeedTopKeywords(limit)
-}
-
-function getSeedTopKeywords(limit: number): KeywordResult[] {
-  const calls = seedProfileCalls.filter((c) => c.activityDate >= '2026-01-01')
-
-  const keywordMentions = new Map<string, number>()
-  const keywordCalls = new Map<string, Set<string>>()
-
-  for (const call of calls) {
-    if (!call.ringdnaKeywords) continue
-    const words = call.ringdnaKeywords.split(/[,;]/).map((w) => w.trim()).filter(Boolean)
-    for (const word of words) {
-      keywordMentions.set(word, (keywordMentions.get(word) ?? 0) + 1)
-      const callSet = keywordCalls.get(word) ?? new Set()
-      callSet.add(call.id)
-      keywordCalls.set(word, callSet)
-    }
-  }
-
-  return Array.from(keywordMentions.entries())
-    .map(([keyword, mentions]) => ({
-      keyword,
-      mentions,
-      calls: keywordCalls.get(keyword)?.size ?? 0,
-      type: classifyKeyword(keyword),
-    }))
-    .sort((a, b) => b.mentions - a.mentions)
-    .slice(0, limit)
+  void await getDataSourceMode()
+  return getLiveTopKeywords(limit)
 }
 
 async function getLiveTopKeywords(limit: number): Promise<KeywordResult[]> {

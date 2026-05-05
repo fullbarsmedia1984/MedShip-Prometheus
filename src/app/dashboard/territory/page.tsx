@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { ClientMap } from '@/components/dashboard/ClientMap'
 import { TerritoryList } from '@/components/dashboard/TerritoryList'
+import { ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import { RevenueByRegionChart } from '@/components/charts/RevenueByRegionChart'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -141,6 +142,24 @@ export default function TerritoryPage() {
         <Header title="Territory" />
         <div className="flex h-64 items-center justify-center">
           <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (customers.length === 0) {
+    return (
+      <div className="flex flex-col">
+        <Header title="Territory" />
+        <div className="p-6">
+          <Card>
+            <CardContent>
+              <ComingSoonPanel
+                title="Territory mapping"
+                description="Live geocoded Salesforce account locations are not available yet."
+              />
+            </CardContent>
+          </Card>
         </div>
       </div>
     )

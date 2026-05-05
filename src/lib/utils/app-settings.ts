@@ -1,14 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export type DataSourceMode = 'seed' | 'live'
+export type DataSourceMode = 'live'
 
 // Cache the setting in memory for 30 seconds to avoid hammering the DB
 let cachedMode: { value: DataSourceMode; expires: number } | null = null
 
 /**
  * Parse the JSONB value which may be:
- * - A raw string: "seed" or "live" (Supabase auto-parses JSONB)
- * - A quoted JSON string: "\"seed\"" (if double-encoded on write)
+ * - A raw string: "live" (Supabase auto-parses JSONB)
+ * - A quoted JSON string: "\"live\"" (if double-encoded on write)
  */
 function parseMode(raw: unknown): DataSourceMode {
   if (typeof raw === 'string') {
@@ -16,7 +16,7 @@ function parseMode(raw: unknown): DataSourceMode {
     const cleaned = raw.replace(/^"|"$/g, '')
     if (cleaned === 'live') return 'live'
   }
-  return 'seed'
+  return 'live'
 }
 
 export async function getDataSourceMode(): Promise<DataSourceMode> {
@@ -36,8 +36,8 @@ export async function getDataSourceMode(): Promise<DataSourceMode> {
     cachedMode = { value: mode, expires: Date.now() + 30_000 }
     return mode
   } catch {
-    // If Supabase is not configured or table doesn't exist, default to seed
-    return 'seed'
+    // If Supabase is not configured or table doesn't exist, never fall back to demo data.
+    return 'live'
   }
 }
 
