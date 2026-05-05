@@ -28,6 +28,7 @@ import type {
   Product,
   Customer,
   Order,
+  OrderItem,
   MonthlyRevenue,
   CategorySales,
   IntegrationStatusData,
@@ -42,6 +43,7 @@ import type {
   SeedProfileCall,
   SeedWeeklyCallVolume,
 } from '@/lib/seed-data'
+import { AUTOMATION_INFO } from '@/types'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
 import { getDataSourceMode } from '@/lib/utils/app-settings'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -103,6 +105,92 @@ function paginate<T>(items: T[], page = 1, pageSize = 20): PaginatedResult<T> {
   }
 }
 
+type InventorySnapshotRow = {
+  id: string
+  part_number: string
+  part_description: string | null
+  qty_on_hand: number | string | null
+  qty_allocated: number | string | null
+  qty_available: number | string | null
+  uom: string | null
+  location: string | null
+  fishbowl_part_id: number | null
+  last_synced_at: string | null
+  sf_product_id: string | null
+}
+
+type ReorderRuleRow = {
+  part_number: string
+  reorder_point: number | string
+  is_active: boolean | null
+}
+
+type SyncScheduleRow = {
+  id: string
+  automation: AutomationType
+  cron_expression: string
+  is_active: boolean | null
+  last_run_at: string | null
+  next_run_at: string | null
+  last_run_status: string | null
+  last_run_duration_ms: number | null
+  records_processed: number | null
+}
+
+type AmountRow = {
+  amount: number | string | null
+}
+
+type LookupNameRow = {
+  sf_id: string
+  name: string | null
+}
+
+type SfAccountRow = {
+  sf_id: string
+  name: string | null
+  billing_state: string | null
+}
+
+type SfUserRow = {
+  sf_id: string
+  name: string | null
+  email: string | null
+}
+
+type SfOpportunityRow = {
+  sf_id: string
+  name: string
+  account_sf_id: string | null
+  owner_sf_id: string | null
+  stage_name: string | null
+  amount: number | string | null
+  close_date: string | null
+  is_closed: boolean | null
+  is_won: boolean | null
+  fishbowl_so_number: string | null
+  fulfillment_status: string | null
+  fulfillment_error: string | null
+  created_date: string | null
+  last_modified_date: string | null
+}
+
+type SfOpportunityLineItemRow = {
+  sf_id: string
+  opportunity_sf_id: string
+  product_sf_id: string | null
+  product_code: string | null
+  product_name: string | null
+  quantity: number | string | null
+  unit_price: number | string | null
+  total_price: number | string | null
+}
+
+type SfProductCategoryRow = {
+  sf_id: string
+  family: string | null
+}
+
 /**
  * Try live data first; if it returns empty, fall back to seed.
  * Protects against toggling to live mode before any sync has run.
@@ -122,6 +210,336 @@ async function liveOrSeed<T>(
     console.error('Live data query failed, falling back to seed:', error)
     return seedFn()
   }
+}
+
+async function liveOrSeedValue<T>(
+  liveFn: () => Promise<T | null>,
+  seedFn: () => T
+): Promise<T> {
+  try {
+    const result = await liveFn()
+    return result ?? seedFn()
+  } catch (error) {
+    console.error('Live data query failed, falling back to seed:', error)
+    return seedFn()
+  }
+}
+
+function sortByCreatedDesc<T extends { created_at: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => b.created_at.localeCompare(a.created_at))
+}
+
+function applyInventoryFilters(items: Product[], filters: InventoryFilters): Product[] {
+  let filtered = [...items]
+
+  if (filters.category && filters.category !== 'all') {
+    filtered = filtered.filter((p) => p.category === filters.category)
+  }
+  if (filters.stockStatus && filters.stockStatus !== 'all') {
+    if (filters.stockStatus === 'out_of_stock') {
+      filtered = filtered.filter((p) => p.qtyAvailable <= 0)
+    } else if (filters.stockStatus === 'low') {
+      filtered = filtered.filter((p) => p.qtyAvailable > 0 && p.qtyAvailable <= p.reorderPoint)
+    } else if (filters.stockStatus === 'in_stock') {
+      filtered = filtered.filter((p) => p.qtyAvailable > p.reorderPoint)
+    }
+  }
+  if (filters.search) {
+    const q = filters.search.toLowerCase()
+    filtered = filtered.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
+    )
+  }
+
+  return filtered
+}
+
+function getInventoryKpisFromProducts(products: Product[]): InventoryKpis {
+  return {
+    totalSkus: products.length,
+    inStock: products.filter((p) => p.qtyAvailable > p.reorderPoint).length,
+    lowStock: products.filter((p) => p.qtyAvailable > 0 && p.qtyAvailable <= p.reorderPoint).length,
+    outOfStock: products.filter((p) => p.qtyAvailable <= 0).length,
+  }
+}
+
+function applyEventFilters(items: SyncEvent[], filters: EventFilters): SyncEvent[] {
+  let filtered = [...items]
+
+  if (filters.automation && filters.automation !== 'all') {
+    filtered = filtered.filter((e) => e.automation === filters.automation)
+  }
+  if (filters.status && filters.status !== 'all') {
+    filtered = filtered.filter((e) => e.status === filters.status)
+  }
+  if (filters.search) {
+    const q = filters.search.toLowerCase()
+    filtered = filtered.filter(
+      (e) =>
+        e.source_record_id?.toLowerCase().includes(q) ||
+        e.target_record_id?.toLowerCase().includes(q) ||
+        e.error_message?.toLowerCase().includes(q)
+    )
+  }
+  if (filters.dateFrom) {
+    filtered = filtered.filter((e) => e.created_at >= filters.dateFrom!)
+  }
+  if (filters.dateTo) {
+    filtered = filtered.filter((e) => e.created_at <= filters.dateTo!)
+  }
+
+  return sortByCreatedDesc(filtered)
+}
+
+function getEventKpisFromEvents(events: SyncEvent[], today: string): EventKpis {
+  const total = events.length
+  const successes = events.filter((e) => e.status === 'success').length
+  const successRate = total > 0 ? Math.round((successes / total) * 1000) / 10 : 0
+
+  const completed = events.filter((e) => e.completed_at)
+  const totalDuration = completed.reduce((sum, e) => {
+    const dur = new Date(e.completed_at!).getTime() - new Date(e.created_at).getTime()
+    return sum + Math.max(dur, 0)
+  }, 0)
+  const avgDurationMs = completed.length > 0 ? Math.round(totalDuration / completed.length) : 0
+
+  const failuresToday = events.filter(
+    (e) => e.status === 'failed' && e.created_at.startsWith(today)
+  ).length
+
+  return { total, successRate, avgDurationMs, failuresToday }
+}
+
+function toNumber(value: number | string | null | undefined): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+function warnEmptyLiveTable(tableName: string, surface: string): void {
+  console.warn(`${tableName} returned no live rows; ${surface} is using seed fallback`)
+}
+
+function inferCategory(partNumber: string, seedMatch?: Product): Product['category'] {
+  if (seedMatch) return seedMatch.category
+  if (partNumber.startsWith('CE-')) return 'Capital Equipment'
+  if (partNumber.startsWith('SIM-')) return 'Simulation'
+  if (partNumber.startsWith('SUP-')) return 'Supplies'
+  if (partNumber.startsWith('KIT-')) return 'Kits'
+  if (partNumber.startsWith('DX-')) return 'Diagnostics'
+  if (partNumber.startsWith('CON-')) return 'Consumables'
+  return 'Supplies'
+}
+
+function mapInventorySnapshotToProduct(
+  row: InventorySnapshotRow,
+  reorderPoint: number,
+  seedMatch?: Product
+): Product {
+  return {
+    id: row.id,
+    sku: row.part_number,
+    name: row.part_description ?? seedMatch?.name ?? row.part_number,
+    category: inferCategory(row.part_number, seedMatch),
+    price: seedMatch?.price ?? 0,
+    cost: seedMatch?.cost ?? 0,
+    qtyOnHand: toNumber(row.qty_on_hand),
+    qtyAllocated: toNumber(row.qty_allocated),
+    qtyAvailable: toNumber(row.qty_available),
+    reorderPoint,
+    lastSyncedAt: row.last_synced_at ?? new Date().toISOString(),
+  }
+}
+
+async function getLiveInventoryProducts(): Promise<Product[]> {
+  const supabase = createAdminClient()
+
+  const { data: inventory, error } = await supabase
+    .from('inventory_snapshot')
+    .select('id, part_number, part_description, qty_on_hand, qty_allocated, qty_available, uom, location, fishbowl_part_id, last_synced_at, sf_product_id')
+    .order('part_number')
+
+  if (error) throw error
+  if (!inventory || inventory.length === 0) {
+    warnEmptyLiveTable('inventory_snapshot', 'inventory')
+    return []
+  }
+
+  const { data: reorderRules, error: rulesError } = await supabase
+    .from('reorder_rules')
+    .select('part_number, reorder_point, is_active')
+
+  if (rulesError) {
+    console.warn('Live reorder rules query failed; using product metadata defaults:', rulesError)
+  }
+
+  const rulesByPart = new Map(
+    ((reorderRules as ReorderRuleRow[] | null) ?? [])
+      .filter((rule) => rule.is_active !== false)
+      .map((rule) => [rule.part_number, toNumber(rule.reorder_point)])
+  )
+  const seedBySku = new Map(seedProducts.map((product) => [product.sku, product]))
+
+  return (inventory as InventorySnapshotRow[]).map((row) => {
+    const seedMatch = seedBySku.get(row.part_number)
+    const reorderPoint = rulesByPart.get(row.part_number) ?? seedMatch?.reorderPoint ?? 0
+    return mapInventorySnapshotToProduct(row, reorderPoint, seedMatch)
+  })
+}
+
+async function getLiveSyncEvents(): Promise<SyncEvent[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('sync_events')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1000)
+
+  if (error) throw error
+  return (data ?? []) as SyncEvent[]
+}
+
+async function getLiveFieldMappings(): Promise<FieldMapping[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('field_mappings')
+    .select('*')
+    .order('automation')
+    .order('source_field')
+
+  if (error) throw error
+  return (data ?? []) as FieldMapping[]
+}
+
+function redactConnectionConfig(row: ConnectionConfig): ConnectionConfig {
+  return {
+    ...row,
+    config: {},
+  }
+}
+
+async function getLiveConnectionConfigs(): Promise<ConnectionConfig[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('connection_configs')
+    .select('*')
+    .order('system_name')
+
+  if (error) throw error
+  return ((data ?? []) as ConnectionConfig[]).map(redactConnectionConfig)
+}
+
+function cronToScheduleLabel(cronExpression: string | null | undefined): string {
+  if (!cronExpression) return 'On-demand'
+  const map: Record<string, string> = {
+    '*/2 * * * *': 'Every 2 minutes',
+    '*/15 * * * *': 'Every 15 minutes',
+    '0 * * * *': 'Every 1 hour',
+  }
+  return map[cronExpression] ?? cronExpression
+}
+
+function getEventDurationMs(event: SyncEvent | undefined): number {
+  if (!event?.completed_at) return 0
+  const duration = new Date(event.completed_at).getTime() - new Date(event.created_at).getTime()
+  return Math.max(duration, 0)
+}
+
+function buildLast7Days(events: SyncEvent[]): { date: string; success: number; failed: number }[] {
+  const now = new Date()
+  const days: { date: string; success: number; failed: number }[] = []
+
+  for (let offset = 6; offset >= 0; offset--) {
+    const day = new Date(now)
+    day.setDate(now.getDate() - offset)
+    const date = day.toISOString().slice(0, 10)
+    const dayEvents = events.filter((event) => event.created_at.startsWith(date))
+    days.push({
+      date,
+      success: dayEvents.filter((event) => event.status === 'success').length,
+      failed: dayEvents.filter((event) => event.status === 'failed').length,
+    })
+  }
+
+  return days
+}
+
+function getIntegrationHealth(
+  schedule: SyncScheduleRow | undefined,
+  events: SyncEvent[],
+  successRate: number
+): IntegrationStatusData['status'] {
+  if (!schedule && events.length === 0) return 'warning'
+  if (schedule?.is_active === false) return 'warning'
+  if (schedule?.last_run_status === 'failed') return 'error'
+  if (events.some((event) => event.status === 'failed' && event.retry_count >= event.max_retries)) {
+    return 'error'
+  }
+  if (events.some((event) => event.status === 'failed' || event.status === 'retrying')) {
+    return 'warning'
+  }
+  if (events.length > 0 && successRate < 80) return 'error'
+  if (events.length > 0 && successRate < 95) return 'warning'
+  return 'healthy'
+}
+
+async function getLiveIntegrationStatus(): Promise<IntegrationStatusData[]> {
+  const supabase = createAdminClient()
+  const { data: schedules, error } = await supabase
+    .from('sync_schedules')
+    .select('*')
+    .order('automation')
+
+  if (error) throw error
+
+  const events = await getLiveSyncEvents()
+  if ((!schedules || schedules.length === 0) && events.length === 0) return []
+
+  const scheduleRows = ((schedules ?? []) as SyncScheduleRow[])
+  const schedulesByAutomation = new Map(
+    scheduleRows.map((schedule) => [schedule.automation, schedule])
+  )
+  const automationSet = new Set<AutomationType>([
+    ...(Object.keys(AUTOMATION_INFO) as AutomationType[]),
+    ...scheduleRows.map((schedule) => schedule.automation),
+    ...events.map((event) => event.automation),
+  ])
+
+  return Array.from(automationSet).map((automation) => {
+    const schedule = schedulesByAutomation.get(automation)
+    const automationEvents = sortByCreatedDesc(events.filter((event) => event.automation === automation))
+    const latestEvent = automationEvents[0]
+    const successful = automationEvents.filter((event) => event.status === 'success').length
+    const completed = automationEvents.filter((event) => event.status === 'success' || event.status === 'failed')
+    const successRate = completed.length > 0
+      ? Math.round((successful / completed.length) * 1000) / 10
+      : schedule?.last_run_status === 'success'
+        ? 100
+        : 0
+    const info = AUTOMATION_INFO[automation]
+    const hasObservedData = Boolean(schedule || latestEvent)
+
+    return {
+      automation,
+      name: info?.name ?? automation,
+      description: info?.description ?? 'Integration automation',
+      status: getIntegrationHealth(schedule, automationEvents, successRate),
+      lastRunAt: schedule?.last_run_at ?? latestEvent?.created_at ?? '',
+      lastRunDurationMs: schedule?.last_run_duration_ms ?? getEventDurationMs(latestEvent),
+      recordsProcessed: schedule?.records_processed ?? completed.length,
+      successRate,
+      schedule: schedule
+        ? cronToScheduleLabel(schedule.cron_expression)
+        : latestEvent
+          ? 'Event-driven'
+          : 'Not scheduled',
+      isActive: schedule?.is_active ?? hasObservedData,
+      last7Days: buildLast7Days(automationEvents),
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +726,224 @@ async function getLiveMonthlyRevenue(): Promise<MonthlyRevenue[]> {
     })
 }
 
+async function getLookupMaps(
+  accountIds: string[],
+  ownerIds: string[]
+): Promise<{
+  accountsById: Map<string, SfAccountRow>
+  usersById: Map<string, SfUserRow>
+}> {
+  const supabase = createAdminClient()
+  const uniqueAccountIds = [...new Set(accountIds.filter(Boolean))]
+  const uniqueOwnerIds = [...new Set(ownerIds.filter(Boolean))]
+
+  const [accountsRes, usersRes] = await Promise.all([
+    uniqueAccountIds.length > 0
+      ? supabase.from('sf_accounts').select('sf_id, name, billing_state').in('sf_id', uniqueAccountIds)
+      : { data: [] },
+    uniqueOwnerIds.length > 0
+      ? supabase.from('sf_users').select('sf_id, name, email').in('sf_id', uniqueOwnerIds)
+      : { data: [] },
+  ])
+
+  return {
+    accountsById: new Map(((accountsRes.data ?? []) as SfAccountRow[]).map((row) => [row.sf_id, row])),
+    usersById: new Map(((usersRes.data ?? []) as SfUserRow[]).map((row) => [row.sf_id, row])),
+  }
+}
+
+function mapOpportunityStatus(row: SfOpportunityRow): Order['status'] {
+  if (row.is_closed && row.is_won) return 'Closed Won'
+  if (row.is_closed && row.is_won === false) return 'Cancelled'
+  return 'Pending'
+}
+
+function mapFulfillmentStatus(row: SfOpportunityRow): Order['fulfillmentStatus'] {
+  if (row.is_closed && row.is_won === false) return 'N/A'
+
+  const status = row.fulfillment_status?.toLowerCase() ?? ''
+  if (row.fulfillment_error || status.includes('fail') || status.includes('error')) return 'Failed'
+  if (row.fishbowl_so_number || status.includes('sync') || status.includes('fulfilled')) return 'Synced'
+  return 'Pending'
+}
+
+function mapOpportunityToOrder(
+  row: SfOpportunityRow,
+  items: OrderItem[],
+  account?: SfAccountRow,
+  owner?: SfUserRow
+): Order {
+  const lineTotal = items.reduce((sum, item) => sum + item.total, 0)
+  const subtotal = lineTotal > 0 ? lineTotal : toNumber(row.amount)
+
+  return {
+    id: row.sf_id,
+    orderNumber: row.fishbowl_so_number ?? row.sf_id,
+    customerId: row.account_sf_id ?? '',
+    customerName: account?.name ?? row.account_sf_id ?? 'Unknown Account',
+    salesRepId: row.owner_sf_id ?? '',
+    salesRepName: owner?.name ?? row.owner_sf_id ?? 'Unassigned',
+    date: row.close_date ?? row.created_date?.slice(0, 10) ?? row.last_modified_date?.slice(0, 10) ?? '',
+    status: mapOpportunityStatus(row),
+    fulfillmentStatus: mapFulfillmentStatus(row),
+    items,
+    subtotal: roundCurrency(subtotal),
+  }
+}
+
+function applyOrderFilters(items: Order[], filters: OrderFilters): Order[] {
+  let filtered = [...items]
+
+  if (filters.status && filters.status !== 'all') {
+    filtered = filtered.filter((o) => o.status === filters.status)
+  }
+  if (filters.salesRepId && filters.salesRepId !== 'all') {
+    filtered = filtered.filter((o) => o.salesRepId === filters.salesRepId)
+  }
+  if (filters.search) {
+    const q = filters.search.toLowerCase()
+    filtered = filtered.filter(
+      (o) =>
+        o.orderNumber.toLowerCase().includes(q) ||
+        o.customerName.toLowerCase().includes(q) ||
+        o.salesRepName.toLowerCase().includes(q)
+    )
+  }
+  if (filters.dateFrom) {
+    filtered = filtered.filter((o) => o.date >= filters.dateFrom!)
+  }
+  if (filters.dateTo) {
+    filtered = filtered.filter((o) => o.date <= filters.dateTo!)
+  }
+
+  return filtered.sort((a, b) => b.date.localeCompare(a.date))
+}
+
+async function getLiveOrders(): Promise<Order[]> {
+  const supabase = createAdminClient()
+  const { data: opportunities, error } = await supabase
+    .from('sf_opportunities')
+    .select('sf_id, name, account_sf_id, owner_sf_id, stage_name, amount, close_date, is_closed, is_won, fishbowl_so_number, fulfillment_status, fulfillment_error, created_date, last_modified_date')
+    .order('close_date', { ascending: false })
+    .limit(1000)
+
+  if (error) throw error
+  if (!opportunities || opportunities.length === 0) return []
+
+  const opportunityRows = opportunities as SfOpportunityRow[]
+  const opportunityIds = new Set(opportunityRows.map((row) => row.sf_id))
+
+  const [{ data: lineItems, error: lineItemsError }, lookups] = await Promise.all([
+    supabase
+      .from('sf_opportunity_line_items')
+      .select('sf_id, opportunity_sf_id, product_sf_id, product_code, product_name, quantity, unit_price, total_price')
+      .limit(5000),
+    getLookupMaps(
+      opportunityRows.map((row) => row.account_sf_id ?? ''),
+      opportunityRows.map((row) => row.owner_sf_id ?? '')
+    ),
+  ])
+
+  if (lineItemsError) {
+    console.warn('Live opportunity line item query failed; orders will use opportunity totals only:', lineItemsError)
+  }
+
+  const itemsByOpportunity = new Map<string, OrderItem[]>()
+  for (const item of ((lineItems ?? []) as SfOpportunityLineItemRow[])) {
+    if (!opportunityIds.has(item.opportunity_sf_id)) continue
+
+    const items = itemsByOpportunity.get(item.opportunity_sf_id) ?? []
+    const quantity = toNumber(item.quantity)
+    const unitPrice = toNumber(item.unit_price)
+    const total = toNumber(item.total_price) || quantity * unitPrice
+    items.push({
+      productId: item.product_sf_id ?? item.product_code ?? item.sf_id,
+      productName: item.product_name ?? item.product_code ?? 'Unknown Product',
+      sku: item.product_code ?? '',
+      quantity,
+      unitPrice: roundCurrency(unitPrice),
+      total: roundCurrency(total),
+    })
+    itemsByOpportunity.set(item.opportunity_sf_id, items)
+  }
+
+  return opportunityRows.map((row) =>
+    mapOpportunityToOrder(
+      row,
+      itemsByOpportunity.get(row.sf_id) ?? [],
+      row.account_sf_id ? lookups.accountsById.get(row.account_sf_id) : undefined,
+      row.owner_sf_id ? lookups.usersById.get(row.owner_sf_id) : undefined
+    )
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Category Sales
 // ---------------------------------------------------------------------------
 
 export async function getCategorySales(): Promise<CategorySales[]> {
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    const live = await getLiveCategorySales()
+    if (live.length > 0) return live
+  }
   return seedCategorySales
+}
+
+async function getLiveCategorySales(): Promise<CategorySales[]> {
+  const supabase = createAdminClient()
+  const [{ data: wonOpps, error: wonOppsError }, { data: lineItems, error }] = await Promise.all([
+    supabase
+      .from('sf_opportunities')
+      .select('sf_id')
+      .eq('is_won', true),
+    supabase
+      .from('sf_opportunity_line_items')
+      .select('opportunity_sf_id, product_sf_id, total_price')
+      .limit(5000),
+  ])
+
+  if (wonOppsError) throw wonOppsError
+  if (error) throw error
+  if (!wonOpps || wonOpps.length === 0 || !lineItems || lineItems.length === 0) return []
+
+  const wonOpportunityIds = new Set(((wonOpps ?? []) as Array<Pick<SfOpportunityRow, 'sf_id'>>).map((opp) => opp.sf_id))
+  const itemRows = (lineItems as Array<Pick<SfOpportunityLineItemRow, 'opportunity_sf_id' | 'product_sf_id' | 'total_price'>>)
+    .filter((item) => wonOpportunityIds.has(item.opportunity_sf_id))
+
+  if (itemRows.length === 0) return []
+
+  const productIds = [...new Set(itemRows.map((item) => item.product_sf_id).filter(Boolean))] as string[]
+  const { data: products, error: productsError } = productIds.length > 0
+    ? await supabase.from('sf_products').select('sf_id, family').in('sf_id', productIds)
+    : { data: [], error: null }
+
+  if (productsError) {
+    console.warn('Live product family query failed; category sales will group uncategorized:', productsError)
+  }
+
+  const familyByProduct = new Map(
+    ((products ?? []) as SfProductCategoryRow[]).map((product) => [product.sf_id, product.family])
+  )
+  const totals = new Map<string, number>()
+
+  for (const item of itemRows) {
+    const category = item.product_sf_id
+      ? familyByProduct.get(item.product_sf_id) || 'Uncategorized'
+      : 'Uncategorized'
+    totals.set(category, (totals.get(category) ?? 0) + toNumber(item.total_price))
+  }
+
+  const totalRevenue = Array.from(totals.values()).reduce((sum, value) => sum + value, 0)
+  if (totalRevenue <= 0) return []
+
+  return Array.from(totals.entries())
+    .map(([category, revenue]) => ({
+      category,
+      revenue: roundCurrency(revenue),
+      percentage: Math.round((revenue / totalRevenue) * 1000) / 10,
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
 }
 
 // ---------------------------------------------------------------------------
@@ -321,43 +951,49 @@ export async function getCategorySales(): Promise<CategorySales[]> {
 // ---------------------------------------------------------------------------
 
 export async function getOrders(filters: OrderFilters = {}): Promise<PaginatedResult<Order>> {
-  // Live data: sf_opportunities joined with sf_accounts
-  // For now, route to seed (order data shape is different from sf_opportunities)
-  let items = [...seedOrders]
-
-  if (filters.status && filters.status !== 'all') {
-    items = items.filter((o) => o.status === filters.status)
-  }
-  if (filters.salesRepId && filters.salesRepId !== 'all') {
-    items = items.filter((o) => o.salesRepId === filters.salesRepId)
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase()
-    items = items.filter(
-      (o) =>
-        o.orderNumber.toLowerCase().includes(q) ||
-        o.customerName.toLowerCase().includes(q)
-    )
-  }
-  if (filters.dateFrom) {
-    items = items.filter((o) => o.date >= filters.dateFrom!)
-  }
-  if (filters.dateTo) {
-    items = items.filter((o) => o.date <= filters.dateTo!)
-  }
-
-  items.sort((a, b) => b.date.localeCompare(a.date))
+  const mode = await getDataSourceMode()
+  const orders = mode === 'live'
+    ? await liveOrSeed(getLiveOrders, () => seedOrders)
+    : seedOrders
+  const items = applyOrderFilters(orders, filters)
   return paginate(items, filters.page, filters.pageSize)
 }
 
 export async function getRecentOrders(limit = 10): Promise<Order[]> {
-  return [...seedOrders]
+  const mode = await getDataSourceMode()
+  const orders = mode === 'live'
+    ? await liveOrSeed(getLiveOrders, () => seedOrders)
+    : seedOrders
+
+  return [...orders]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, limit)
 }
 
 export async function getSalesReps(): Promise<SalesRep[]> {
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    const live = await getLiveSalesRepOptions()
+    if (live.length > 0) return live
+  }
   return seedSalesReps
+}
+
+async function getLiveSalesRepOptions(): Promise<SalesRep[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('sf_users')
+    .select('sf_id, name, email')
+    .eq('is_active', true)
+    .order('name')
+
+  if (error) throw error
+  return ((data ?? []) as SfUserRow[]).map((user) => ({
+    id: user.sf_id,
+    name: user.name ?? user.sf_id,
+    email: user.email ?? '',
+    region: '',
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -365,26 +1001,11 @@ export async function getSalesReps(): Promise<SalesRep[]> {
 // ---------------------------------------------------------------------------
 
 export async function getInventory(filters: InventoryFilters = {}): Promise<PaginatedResult<Product>> {
-  let items = [...seedProducts]
-
-  if (filters.category && filters.category !== 'all') {
-    items = items.filter((p) => p.category === filters.category)
-  }
-  if (filters.stockStatus && filters.stockStatus !== 'all') {
-    if (filters.stockStatus === 'out_of_stock') {
-      items = items.filter((p) => p.qtyAvailable <= 0)
-    } else if (filters.stockStatus === 'low') {
-      items = items.filter((p) => p.qtyAvailable > 0 && p.qtyAvailable <= p.reorderPoint)
-    } else if (filters.stockStatus === 'in_stock') {
-      items = items.filter((p) => p.qtyAvailable > p.reorderPoint)
-    }
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase()
-    items = items.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
-    )
-  }
+  const mode = await getDataSourceMode()
+  const products = mode === 'live'
+    ? await liveOrSeed(getLiveInventoryProducts, () => seedProducts)
+    : seedProducts
+  const items = applyInventoryFilters(products, filters)
 
   return paginate(items, filters.page, filters.pageSize)
 }
@@ -397,17 +1018,24 @@ export interface InventoryKpis {
 }
 
 export async function getInventoryKpis(): Promise<InventoryKpis> {
-  const products = seedProducts
-  return {
-    totalSkus: products.length,
-    inStock: products.filter((p) => p.qtyAvailable > p.reorderPoint).length,
-    lowStock: products.filter((p) => p.qtyAvailable > 0 && p.qtyAvailable <= p.reorderPoint).length,
-    outOfStock: products.filter((p) => p.qtyAvailable <= 0).length,
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    return liveOrSeedValue(async () => {
+      const products = await getLiveInventoryProducts()
+      return products.length > 0 ? getInventoryKpisFromProducts(products) : null
+    }, () => getInventoryKpisFromProducts(seedProducts))
   }
+
+  return getInventoryKpisFromProducts(seedProducts)
 }
 
 export async function getInventoryAlerts(limit = 5): Promise<Product[]> {
-  return seedProducts
+  const mode = await getDataSourceMode()
+  const products = mode === 'live'
+    ? await liveOrSeed(getLiveInventoryProducts, () => seedProducts)
+    : seedProducts
+
+  return products
     .filter((p) => p.qtyAvailable <= p.reorderPoint)
     .sort((a, b) => a.qtyAvailable - b.qtyAvailable)
     .slice(0, limit)
@@ -418,23 +1046,11 @@ export async function getInventoryAlerts(limit = 5): Promise<Product[]> {
 // ---------------------------------------------------------------------------
 
 export async function getSyncEvents(filters: EventFilters = {}): Promise<PaginatedResult<SyncEvent>> {
-  let items = [...seedSyncEvents]
-
-  if (filters.automation && filters.automation !== 'all') {
-    items = items.filter((e) => e.automation === filters.automation)
-  }
-  if (filters.status && filters.status !== 'all') {
-    items = items.filter((e) => e.status === filters.status)
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase()
-    items = items.filter(
-      (e) =>
-        e.source_record_id?.toLowerCase().includes(q) ||
-        e.target_record_id?.toLowerCase().includes(q) ||
-        e.error_message?.toLowerCase().includes(q)
-    )
-  }
+  const mode = await getDataSourceMode()
+  const events = mode === 'live'
+    ? await liveOrSeed(getLiveSyncEvents, () => seedSyncEvents)
+    : seedSyncEvents
+  const items = applyEventFilters(events, filters)
 
   return paginate(items, filters.page, filters.pageSize || 25)
 }
@@ -447,24 +1063,17 @@ export interface EventKpis {
 }
 
 export async function getEventKpis(): Promise<EventKpis> {
-  const events = seedSyncEvents
-  const total = events.length
-  const successes = events.filter((e) => e.status === 'success').length
-  const successRate = total > 0 ? Math.round((successes / total) * 1000) / 10 : 0
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    return liveOrSeedValue(async () => {
+      const events = await getLiveSyncEvents()
+      return events.length > 0
+        ? getEventKpisFromEvents(events, new Date().toISOString().slice(0, 10))
+        : null
+    }, () => getEventKpisFromEvents(seedSyncEvents, '2026-03-31'))
+  }
 
-  const completed = events.filter((e) => e.completed_at)
-  const totalDuration = completed.reduce((sum, e) => {
-    const dur = new Date(e.completed_at!).getTime() - new Date(e.created_at).getTime()
-    return sum + dur
-  }, 0)
-  const avgDurationMs = completed.length > 0 ? Math.round(totalDuration / completed.length) : 0
-
-  const today = '2026-03-31'
-  const failuresToday = events.filter(
-    (e) => e.status === 'failed' && e.created_at.startsWith(today)
-  ).length
-
-  return { total, successRate, avgDurationMs, failuresToday }
+  return getEventKpisFromEvents(seedSyncEvents, '2026-03-31')
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +1081,12 @@ export async function getEventKpis(): Promise<EventKpis> {
 // ---------------------------------------------------------------------------
 
 export async function getFailedSyncs(): Promise<SyncEvent[]> {
-  return seedSyncEvents.filter(
+  const mode = await getDataSourceMode()
+  const events = mode === 'live'
+    ? await liveOrSeed(getLiveSyncEvents, () => seedSyncEvents)
+    : seedSyncEvents
+
+  return sortByCreatedDesc(events).filter(
     (e) => e.status === 'failed' || e.status === 'retrying'
   )
 }
@@ -482,6 +1096,11 @@ export async function getFailedSyncs(): Promise<SyncEvent[]> {
 // ---------------------------------------------------------------------------
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusData[]> {
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    return liveOrSeed(getLiveIntegrationStatus, () => seedIntegrationStatus)
+  }
+
   return seedIntegrationStatus
 }
 
@@ -490,10 +1109,15 @@ export async function getIntegrationStatus(): Promise<IntegrationStatusData[]> {
 // ---------------------------------------------------------------------------
 
 export async function getFieldMappings(automation?: string): Promise<FieldMapping[]> {
+  const mode = await getDataSourceMode()
+  const mappings = mode === 'live'
+    ? await liveOrSeed(getLiveFieldMappings, () => seedFieldMappings)
+    : seedFieldMappings
+
   if (automation && automation !== 'all') {
-    return seedFieldMappings.filter((m) => m.automation === automation)
+    return mappings.filter((m) => m.automation === automation)
   }
-  return seedFieldMappings
+  return mappings
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +1125,12 @@ export async function getFieldMappings(automation?: string): Promise<FieldMappin
 // ---------------------------------------------------------------------------
 
 export async function getConnectionConfigs(): Promise<ConnectionConfig[]> {
-  return seedConnectionConfigs
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    return liveOrSeed(getLiveConnectionConfigs, () => seedConnectionConfigs.map(redactConnectionConfig))
+  }
+
+  return seedConnectionConfigs.map(redactConnectionConfig)
 }
 
 // ---------------------------------------------------------------------------
@@ -565,14 +1194,14 @@ async function getLiveSalesReps(): Promise<SeedSalesRep[]> {
     const sfId = user.sf_id
 
     // Revenue by period
-    const [mtdRes, qtdRes, ytdRes, lastMRes] = await Promise.all([
+    const [mtdRes, qtdRes, ytdRes] = await Promise.all([
       supabase.from('sf_opportunities').select('amount').eq('owner_sf_id', sfId).eq('is_won', true).gte('close_date', monthStart),
       supabase.from('sf_opportunities').select('amount').eq('owner_sf_id', sfId).eq('is_won', true).gte('close_date', qtrStart),
       supabase.from('sf_opportunities').select('amount').eq('owner_sf_id', sfId).eq('is_won', true).gte('close_date', yearStart),
-      supabase.from('sf_opportunities').select('amount').eq('owner_sf_id', sfId).eq('is_won', true).gte('close_date', lastMonthStart).lt('close_date', monthStart),
     ])
 
-    const sum = (rows: any[] | null) => (rows ?? []).reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    const sum = (rows: AmountRow[] | null | undefined) =>
+      (rows ?? []).reduce((s, r) => s + (Number(r.amount) || 0), 0)
     const revenueMTD = sum(mtdRes.data)
     const revenueQTD = sum(qtdRes.data)
     const revenueYTD = sum(ytdRes.data)
@@ -735,11 +1364,138 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
 }
 
 export async function getMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    const live = await getLiveMonthlyRepRevenue()
+    if (live.length > 0) return live
+  }
   return seedMonthlyRepRevenue
 }
 
 export async function getPipelineByRep(): Promise<SeedPipelineByRep[]> {
+  const mode = await getDataSourceMode()
+  if (mode === 'live') {
+    const live = await getLivePipelineByRep()
+    if (live.length > 0) return live
+  }
   return seedPipelineByRep
+}
+
+async function getLiveMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {
+  const supabase = createAdminClient()
+  const now = new Date()
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    return {
+      key,
+      label: date.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+    }
+  })
+  const startDate = `${months[0].key}-01`
+
+  const [oppsRes, usersRes] = await Promise.all([
+    supabase
+      .from('sf_opportunities')
+      .select('owner_sf_id, amount, close_date')
+      .eq('is_won', true)
+      .gte('close_date', startDate),
+    supabase
+      .from('sf_users')
+      .select('sf_id, name')
+      .eq('is_active', true)
+      .order('name'),
+  ])
+
+  if (oppsRes.error) throw oppsRes.error
+  if (usersRes.error) throw usersRes.error
+  if (!oppsRes.data || oppsRes.data.length === 0) return []
+
+  const repNamesById = new Map(
+    ((usersRes.data ?? []) as LookupNameRow[]).map((user) => [user.sf_id, user.name ?? user.sf_id])
+  )
+  const rows = months.map(({ label }) => ({ month: label } as SeedMonthlyRepRevenue))
+
+  for (const row of rows) {
+    for (const repName of repNamesById.values()) {
+      row[repName] = 0
+    }
+  }
+
+  for (const opp of oppsRes.data as Array<Pick<SfOpportunityRow, 'owner_sf_id' | 'amount' | 'close_date'>>) {
+    if (!opp.close_date || !opp.owner_sf_id) continue
+    const monthIndex = months.findIndex((month) => opp.close_date?.startsWith(month.key))
+    if (monthIndex === -1) continue
+
+    const repName = repNamesById.get(opp.owner_sf_id) ?? opp.owner_sf_id
+    rows[monthIndex][repName] = toNumber(rows[monthIndex][repName] as number | string | null) + toNumber(opp.amount)
+  }
+
+  return rows
+}
+
+function normalizePipelineStage(stageName: string | null): keyof Omit<SeedPipelineByRep, 'repName'> | null {
+  const stage = stageName?.toLowerCase() ?? ''
+  if (stage.includes('prospect')) return 'Prospecting'
+  if (stage.includes('qualif')) return 'Qualification'
+  if (stage.includes('proposal') || stage.includes('quote') || stage.includes('price')) return 'Proposal'
+  if (stage.includes('negotiat') || stage.includes('review')) return 'Negotiation'
+  return null
+}
+
+async function getLivePipelineByRep(): Promise<SeedPipelineByRep[]> {
+  const supabase = createAdminClient()
+  const [oppsRes, usersRes] = await Promise.all([
+    supabase
+      .from('sf_opportunities')
+      .select('owner_sf_id, stage_name, amount')
+      .eq('is_closed', false),
+    supabase
+      .from('sf_users')
+      .select('sf_id, name')
+      .eq('is_active', true)
+      .order('name'),
+  ])
+
+  if (oppsRes.error) throw oppsRes.error
+  if (usersRes.error) throw usersRes.error
+  if (!oppsRes.data || oppsRes.data.length === 0) return []
+
+  const repNamesById = new Map(
+    ((usersRes.data ?? []) as LookupNameRow[]).map((user) => [user.sf_id, user.name ?? user.sf_id])
+  )
+  const byRep = new Map<string, SeedPipelineByRep>()
+
+  for (const opp of oppsRes.data as Array<Pick<SfOpportunityRow, 'owner_sf_id' | 'stage_name' | 'amount'>>) {
+    const stage = normalizePipelineStage(opp.stage_name)
+    if (!stage) continue
+
+    const repName = opp.owner_sf_id ? repNamesById.get(opp.owner_sf_id) ?? opp.owner_sf_id : 'Unassigned'
+    const row = byRep.get(repName) ?? {
+      repName,
+      Prospecting: 0,
+      Qualification: 0,
+      Proposal: 0,
+      Negotiation: 0,
+    }
+
+    row[stage] += toNumber(opp.amount)
+    byRep.set(repName, row)
+  }
+
+  return Array.from(byRep.values())
+    .map((row) => ({
+      ...row,
+      Prospecting: roundCurrency(row.Prospecting),
+      Qualification: roundCurrency(row.Qualification),
+      Proposal: roundCurrency(row.Proposal),
+      Negotiation: roundCurrency(row.Negotiation),
+    }))
+    .sort((a, b) => {
+      const totalA = a.Prospecting + a.Qualification + a.Proposal + a.Negotiation
+      const totalB = b.Prospecting + b.Qualification + b.Proposal + b.Negotiation
+      return totalB - totalA
+    })
 }
 
 export interface SalesKpis {
@@ -895,21 +1651,16 @@ function getSeedProfileCalls(filters: ProfileCallFilters): PaginatedResult<SeedP
 
 async function getLiveProfileCalls(filters: ProfileCallFilters): Promise<PaginatedResult<SeedProfileCall>> {
   const supabase = createAdminClient()
-  let query = supabase
-    .from('sf_profile_calls')
-    .select('*, sf_accounts!sf_profile_calls_account_sf_id_fkey(name), sf_users!sf_profile_calls_owner_sf_id_fkey(name)')
-    .order('activity_date', { ascending: false })
-
-  // Note: Supabase joins may not work without foreign keys defined.
-  // Fallback: just query sf_profile_calls and resolve names separately.
-  // For robustness, use a simpler query.
   const { data: calls } = await supabase
     .from('sf_profile_calls')
     .select('*')
     .order('activity_date', { ascending: false })
     .limit(filters.pageSize ?? 50)
 
-  if (!calls || calls.length === 0) return { data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+  if (!calls || calls.length === 0) {
+    warnEmptyLiveTable('sf_profile_calls', 'profile call list')
+    return { data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+  }
 
   // Resolve owner and account names
   const ownerIds = [...new Set(calls.map((c) => c.owner_sf_id).filter(Boolean))]
@@ -920,8 +1671,12 @@ async function getLiveProfileCalls(filters: ProfileCallFilters): Promise<Paginat
     accountIds.length > 0 ? supabase.from('sf_accounts').select('sf_id, name').in('sf_id', accountIds) : { data: [] },
   ])
 
-  const userNames = new Map((usersRes.data ?? []).map((u: any) => [u.sf_id, u.name]))
-  const accountNames = new Map((accountsRes.data ?? []).map((a: any) => [a.sf_id, a.name]))
+  const userNames = new Map(
+    ((usersRes.data ?? []) as LookupNameRow[]).map((u) => [u.sf_id, u.name])
+  )
+  const accountNames = new Map(
+    ((accountsRes.data ?? []) as LookupNameRow[]).map((a) => [a.sf_id, a.name])
+  )
 
   const mapped: SeedProfileCall[] = calls.map((c) => ({
     id: c.sf_id,
@@ -1048,13 +1803,14 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
     .lt('activity_date', monthStart)
 
   if (!mtdCalls || mtdCalls.length === 0) {
+    warnEmptyLiveTable('sf_profile_calls', 'profile call metrics')
     return { totalMTD: 0, totalLastMonth: lastMonthCount ?? 0, conversionRate: 0, connectRate: 0, avgDuration: 0, byRep: [] }
   }
 
   // Resolve owner names
   const ownerIds = [...new Set(mtdCalls.map((c) => c.owner_sf_id).filter(Boolean))]
   const { data: users } = await supabase.from('sf_users').select('sf_id, name').in('sf_id', ownerIds)
-  const nameMap = new Map((users ?? []).map((u: any) => [u.sf_id, u.name]))
+  const nameMap = new Map(((users ?? []) as LookupNameRow[]).map((u) => [u.sf_id, u.name]))
 
   const totalMTD = mtdCalls.length
   const converted = mtdCalls.filter((c) => c.converted_to_opp).length
@@ -1142,6 +1898,8 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
         }))
         .sort((a, b) => b.count - a.count)
     }
+
+    warnEmptyLiveTable('sf_profile_calls', 'call outcome breakdown')
   }
 
   // Seed fallback
@@ -1219,7 +1977,10 @@ async function getLiveTopKeywords(limit: number): Promise<KeywordResult[]> {
     .select('sf_id, ringdna_keywords')
     .not('ringdna_keywords', 'is', null)
 
-  if (!calls || calls.length === 0) return []
+  if (!calls || calls.length === 0) {
+    warnEmptyLiveTable('sf_profile_calls', 'competitor keywords')
+    return []
+  }
 
   const keywordMentions = new Map<string, number>()
   const keywordCalls = new Map<string, Set<string>>()

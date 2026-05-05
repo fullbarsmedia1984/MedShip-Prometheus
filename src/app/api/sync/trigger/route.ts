@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { inngest } from '@/inngest'
-import { createClient } from '@/lib/supabase/server'
+import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 
 type Automation =
   | 'P1_OPP_TO_SO'
@@ -23,25 +23,8 @@ type Automation =
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
-    const supabase = await createClient()
-
-    // Dev bypass: skip auth when Supabase isn't configured
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    const devBypass =
-      process.env.NODE_ENV === 'development' &&
-      (!supabaseUrl || !supabaseAnonKey)
-
-    if (!devBypass) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-    }
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
+    if (!auth.authorized) return auth.response
 
     const body = await request.json()
     const { automation, params = {} } = body as {

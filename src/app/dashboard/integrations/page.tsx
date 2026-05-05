@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { SparklineChart } from '@/components/dashboard/SparklineChart'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Play, Eye, Clock, BarChart3, Zap, RefreshCw } from 'lucide-react'
+import { Play, Eye, Clock, Zap, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { getIntegrationStatus, getConnectionConfigs } from '@/lib/data'
 import type { IntegrationStatusData } from '@/lib/seed-data'
@@ -18,9 +18,13 @@ import { cn } from '@/lib/utils'
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatRelativeTime(isoString: string): string {
-  const now = new Date('2026-03-31T12:00:00Z')
+function formatRelativeTime(isoString?: string): string {
+  if (!isoString) return 'Never'
+
+  const now = new Date()
   const then = new Date(isoString)
+  if (Number.isNaN(then.getTime())) return 'Never'
+
   const diffMs = now.getTime() - then.getTime()
   if (diffMs < 0) return 'just now'
 

@@ -69,13 +69,15 @@ describe('FishbowlClient', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
     const [url, opts] = fetchSpy.mock.calls[0];
-    expect(url).toBe(`${MOCK_BASE_URL}/api/session`);
+    expect(url).toBe(`${MOCK_BASE_URL}/api/login`);
     expect(opts?.method).toBe('POST');
 
     const body = JSON.parse(opts?.body as string);
+    expect(body.appName).toBe('MedShip Prometheus');
+    expect(body.appDescription).toBe('Medical Shipment internal Zeus integration');
+    expect(body.appId).toBe(20260505);
     expect(body.username).toBe('testuser');
     expect(body.password).toBe('testpass');
-    expect(body.appName).toBeUndefined();
   });
 
   it('throws FishbowlAuthError on login failure', async () => {

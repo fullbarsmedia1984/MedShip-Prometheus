@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createSalesforceClient } from '@/lib/salesforce/client'
+import { requireApiAuth } from '@/lib/auth'
 
 export async function GET() {
+  const auth = await requireApiAuth()
+  if (!auth.authorized) return auth.response
+
   const client = createSalesforceClient()
 
   try {

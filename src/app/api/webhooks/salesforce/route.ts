@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { inngest } from '@/inngest'
 import { logger } from '@/lib/utils/logger'
+import { verifySharedSecretHeader } from '@/lib/webhooks/verification'
 
 /**
  * Salesforce Platform Event receiver
@@ -20,21 +21,25 @@ import { logger } from '@/lib/utils/logger'
  *   }
  * }
  *
- * TODO: Implement webhook signature verification in Phase 1
+ * TODO(webhook): Replace the shared-secret fallback with the final Salesforce
+ * signing contract once the producer is defined.
  */
 export async function POST(request: NextRequest) {
   try {
+    const webhookSecret = process.env.SALESFORCE_WEBHOOK_SECRET
+    if (webhookSecret && !verifySharedSecretHeader(request, webhookSecret)) {
+      return NextResponse.json({ error: 'Invalid webhook secret' }, { status: 401 })
+    }
+
     const body = await request.json()
 
     logger.log('info', 'P1_OPP_TO_SO', 'Received Salesforce webhook', {
       replayId: body.replayId,
     })
 
-    // TODO: Implement in Phase 1 - Verify webhook signature
-    // const signature = request.headers.get('x-salesforce-signature')
-    // if (!verifySignature(signature, body)) {
-    //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-    // }
+    // If SALESFORCE_WEBHOOK_SECRET is not configured, this route remains
+    // permissive to avoid breaking the production P1 callback before the
+    // final Salesforce signing contract is available.
 
     // Extract payload from Platform Event format
     const payload = body.payload || body

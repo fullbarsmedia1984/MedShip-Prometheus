@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/utils/logger'
 import type { EPWebhookEvent, EPTracker } from '@/lib/easypost/types'
+import { verifySharedSecretHeader } from '@/lib/webhooks/verification'
 
 /**
  * EasyPost tracking webhook receiver
@@ -8,22 +9,29 @@ import type { EPWebhookEvent, EPTracker } from '@/lib/easypost/types'
  * Receives tracking status updates from EasyPost when shipment
  * status changes (in_transit, delivered, etc.).
  *
- * TODO: Implement in Phase 4 Path B
+ * TODO(webhook): Replace this shared-secret gate with EasyPost's final
+ * webhook signing contract when Phase 4 is enabled.
  */
 export async function POST(request: NextRequest) {
   try {
+    const webhookSecret = process.env.EASYPOST_WEBHOOK_SECRET
+    if (!webhookSecret) {
+      return NextResponse.json(
+        { error: 'EasyPost webhook is not configured' },
+        { status: 503 }
+      )
+    }
+
+    if (!verifySharedSecretHeader(request, webhookSecret)) {
+      return NextResponse.json({ error: 'Invalid webhook secret' }, { status: 401 })
+    }
+
     const body = (await request.json()) as EPWebhookEvent
 
     logger.log('info', 'P4_SHIPMENT_TRACKING', 'Received EasyPost webhook', {
       eventId: body.id,
       description: body.description,
     })
-
-    // TODO: Implement in Phase 4 - Verify webhook signature
-    // const signature = request.headers.get('x-hmac-signature')
-    // if (!verifySignature(signature, body)) {
-    //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-    // }
 
     // Handle tracker updates
     if (body.description === 'tracker.updated') {

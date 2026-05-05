@@ -8,12 +8,16 @@ import { FishbowlApiError, FishbowlAuthError } from './types';
 import type { FBLoginResponse } from './types';
 
 const REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_APP_ID = 20260505;
 
 export class FishbowlClient implements IFishbowlClient {
   private token: string | null = null;
   private baseUrl: string;
   private username: string;
   private password: string;
+  private appName: string;
+  private appDescription: string;
+  private appId: number;
   private serverVersion: string | null = null;
   private cfAccessClientId: string | null;
   private cfAccessClientSecret: string | null;
@@ -29,6 +33,11 @@ export class FishbowlClient implements IFishbowlClient {
     this.baseUrl = apiUrl.replace(/\/+$/, '');
     this.username = process.env.FISHBOWL_USERNAME ?? '';
     this.password = process.env.FISHBOWL_PASSWORD ?? '';
+    this.appName = process.env.FISHBOWL_APP_NAME ?? 'MedShip Prometheus';
+    this.appDescription =
+      process.env.FISHBOWL_APP_DESCRIPTION ??
+      'Medical Shipment internal Zeus integration';
+    this.appId = Number(process.env.FISHBOWL_APP_ID ?? DEFAULT_APP_ID);
     this.cfAccessClientId = process.env.FISHBOWL_CF_ACCESS_CLIENT_ID ?? null;
     this.cfAccessClientSecret = process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET ?? null;
   }
@@ -38,7 +47,7 @@ export class FishbowlClient implements IFishbowlClient {
   // ---------------------------------------------------------------------------
 
   async authenticate(): Promise<void> {
-    const url = `${this.baseUrl}/api/session`;
+    const url = `${this.baseUrl}/api/login`;
 
     let response: Response;
     try {
@@ -49,6 +58,9 @@ export class FishbowlClient implements IFishbowlClient {
           ...this.getCfAccessHeaders(),
         },
         body: JSON.stringify({
+          appName: this.appName,
+          appDescription: this.appDescription,
+          appId: this.appId,
           username: this.username,
           password: this.password,
         }),
@@ -72,7 +84,7 @@ export class FishbowlClient implements IFishbowlClient {
       );
     }
     this.token = data.token;
-    this.serverVersion = data.serverVersion ?? null;
+    this.serverVersion = data.serverVersion ?? data.user?.serverVersion ?? null;
   }
 
   isAuthenticated(): boolean {

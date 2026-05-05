@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createFishbowlClient } from '@/lib/fishbowl/client';
+import { requireApiAuth } from '@/lib/auth';
 
 /**
  * GET /api/health/fishbowl
@@ -7,6 +8,9 @@ import { createFishbowlClient } from '@/lib/fishbowl/client';
  * Used by the Settings page "Test Connection" button.
  */
 export async function GET() {
+  const auth = await requireApiAuth();
+  if (!auth.authorized) return auth.response;
+
   const timestamp = new Date().toISOString();
 
   try {

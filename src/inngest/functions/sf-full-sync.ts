@@ -1,6 +1,7 @@
 import { inngest } from '../client'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { updateSyncSchedule } from '@/lib/utils/logger'
 import {
   syncUsers,
   syncAccounts,
@@ -23,6 +24,7 @@ export const sfFullSync = inngest.createFunction(
     triggers: [{ event: 'medship/sf.full-sync' }],
   },
   async ({ step }) => {
+    const startTime = Date.now()
     const sfClient = createSalesforceClient()
     const supabase = createAdminClient()
 
@@ -53,6 +55,16 @@ export const sfFullSync = inngest.createFunction(
     })
 
     await step.run('disconnect-sf', () => sfClient.disconnect())
+    const totalRecords = usersCount + accountsCount + productsCount + oppsCount + lineItemsCount + callsCount
+
+    await step.run('update-schedule', () =>
+      updateSyncSchedule('SF_FULL_SYNC', {
+        lastRunAt: new Date().toISOString(),
+        lastRunStatus: 'success',
+        lastRunDurationMs: Date.now() - startTime,
+        recordsProcessed: totalRecords,
+      })
+    )
 
     return {
       users: usersCount,
@@ -61,7 +73,7 @@ export const sfFullSync = inngest.createFunction(
       opportunities: oppsCount,
       lineItems: lineItemsCount,
       profileCalls: callsCount,
-      totalRecords: usersCount + accountsCount + productsCount + oppsCount + lineItemsCount + callsCount,
+      totalRecords,
     }
   }
 )

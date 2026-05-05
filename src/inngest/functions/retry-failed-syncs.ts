@@ -4,10 +4,8 @@ import { getRetryableEvents, updateSyncEvent } from '@/lib/utils/logger'
 import { calculateNextRetry } from '@/lib/utils/retry'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getOpportunityById } from '@/lib/salesforce/queries'
-import { updateOpportunityFulfillment } from '@/lib/salesforce/mutations'
 import { createFishbowlClient } from '@/lib/fishbowl/client'
-import { createSalesOrder, findCustomerByName, createCustomer } from '@/lib/fishbowl/sales-orders'
-import type { FBSalesOrderPayload } from '@/types'
+import { processP1Opportunity } from './sf-opportunity-closed'
 
 /**
  * Retry Failed Sync Events
@@ -37,10 +35,21 @@ export const retryFailedSyncs = inngest.createFunction(
         await updateSyncEvent(event.id!, {
           status: 'retrying',
           retryCount: currentRetryCount + 1,
+          nextRetryAt: null,
         })
 
         // P1: Re-process the specific opportunity
-        if (event.automation === 'P1_OPP_TO_SO' && event.source_record_id) {
+        if (event.automation === 'P1_OPP_TO_SO') {
+          if (!event.source_record_id) {
+            await updateSyncEvent(event.id!, {
+              status: 'failed',
+              errorMessage: 'Cannot retry P1 event without source_record_id',
+              nextRetryAt: null,
+              completedAt: new Date().toISOString(),
+            })
+            return
+          }
+
           try {
             const sfClient = createSalesforceClient()
             const fbClient = createFishbowlClient()
@@ -52,78 +61,69 @@ export const retryFailedSyncs = inngest.createFunction(
               await updateSyncEvent(event.id!, {
                 status: 'failed',
                 errorMessage: 'Opportunity not found in Salesforce',
+                nextRetryAt: null,
                 completedAt: new Date().toISOString(),
               })
               return
             }
 
-            const lineItems = opp.OpportunityLineItems?.records || []
-            const accountName = opp.Account?.Name || 'Unknown Customer'
+            const result = await processP1Opportunity({
+              opp,
+              sfClient,
+              fbClient,
+              existingEventId: event.id!,
+              retryCount: currentRetryCount + 1,
+              maxRetries: event.max_retries ?? 4,
+              notesPrefix: 'Retry sync from Salesforce Opportunity',
+              sourcePayload: event.payload,
+            })
 
-            // Ensure customer exists
-            let customer = await findCustomerByName(fbClient, accountName)
-            if (!customer) {
-              customer = await createCustomer(fbClient, {
-                name: accountName,
-                address: opp.Account?.ShippingStreet || undefined,
-                city: opp.Account?.ShippingCity || undefined,
-                state: opp.Account?.ShippingState || undefined,
-                zip: opp.Account?.ShippingPostalCode || undefined,
-                country: opp.Account?.ShippingCountry || undefined,
+            if (result.status === 'processed') {
+              retriedCount++
+            } else if (result.status === 'failed' && !result.errorMessage) {
+              await updateSyncEvent(event.id!, {
+                status: 'failed',
+                errorMessage: 'Retry failed without a reported error',
+                nextRetryAt: null,
+                completedAt: new Date().toISOString(),
               })
             }
 
-            const soPayload: FBSalesOrderPayload = {
-              customer: { name: accountName },
-              status: 'Issued',
-              shipTo: {
-                name: accountName,
-                address: opp.Account?.ShippingStreet || '',
-                city: opp.Account?.ShippingCity || '',
-                state: opp.Account?.ShippingState || '',
-                zip: opp.Account?.ShippingPostalCode || '',
-                country: opp.Account?.ShippingCountry || 'US',
-              },
-              items: lineItems.map((li) => ({
-                number: li.Product2.ProductCode,
-                quantity: li.Quantity,
-                unitPrice: li.UnitPrice,
-                description: li.Product2.Name,
-              })),
-              notes: `Retry sync from Salesforce Opportunity ${opp.Id}`,
+            if (
+              result.status === 'failed' &&
+              !result.nextRetryAt &&
+              currentRetryCount + 1 >= (event.max_retries ?? 4)
+            ) {
+              logger.log('error', 'P1_OPP_TO_SO', `Max retries exhausted for event ${event.id}`, {
+                sourceRecordId: event.source_record_id,
+              })
             }
 
-            const result = await createSalesOrder(fbClient, soPayload)
-
-            // Write SO number back to Salesforce
-            await updateOpportunityFulfillment(sfClient, opp.Id, {
-              fishbowlSONumber: result.number,
-              fulfillmentStatus: 'Pending',
-            })
-
-            await updateSyncEvent(event.id!, {
-              status: 'success',
-              targetRecordId: result.number,
-              response: result as unknown as Record<string, unknown>,
-              completedAt: new Date().toISOString(),
-            })
-
-            retriedCount++
+            if (result.status === 'failed' && result.nextRetryAt) {
+              logger.log('warn', 'P1_OPP_TO_SO', `Scheduled retry for event ${event.id}`, {
+                sourceRecordId: event.source_record_id,
+                retryCount: currentRetryCount + 1,
+              })
+            }
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error'
             const newRetryCount = currentRetryCount + 1
-            const nextRetry = calculateNextRetry(newRetryCount)
+            const nextRetry = calculateNextRetry(newRetryCount, event.max_retries ?? 4)
 
             await updateSyncEvent(event.id!, {
               status: 'failed',
               errorMessage,
               retryCount: newRetryCount,
               nextRetryAt: nextRetry?.toISOString() || null,
-              completedAt: nextRetry ? undefined : new Date().toISOString(),
+              completedAt: new Date().toISOString(),
             })
 
             if (!nextRetry) {
               logger.log('error', 'P1_OPP_TO_SO', `Max retries exhausted for event ${event.id}`, {
+                sourceRecordId: event.source_record_id,
+              })
+            } else {
+              logger.log('error', 'P1_OPP_TO_SO', `Retry failed before processing event ${event.id}`, {
                 sourceRecordId: event.source_record_id,
               })
             }

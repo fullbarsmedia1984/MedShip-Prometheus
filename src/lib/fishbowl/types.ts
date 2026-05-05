@@ -40,7 +40,7 @@ export class FishbowlCustomerNotFoundError extends FishbowlApiError {
 
 export class FishbowlAuthError extends FishbowlApiError {
   constructor(message: string = 'Fishbowl authentication failed') {
-    super(message, 401, '/api/session');
+    super(message, 401, '/api/login');
     this.name = 'FishbowlAuthError';
   }
 }
@@ -67,4 +67,10 @@ export interface FBLoginResponse {
   userId?: number;
   fullName?: string;
   serverVersion?: string;
+  user?: {
+    id?: number;
+    userFullName?: string;
+    serverVersion?: string;
+    moduleAccessList?: string[];
+  };
 }

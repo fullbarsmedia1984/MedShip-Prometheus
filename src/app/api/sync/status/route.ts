@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireApiAuth } from '@/lib/auth'
 
 /**
  * Sync status endpoint
@@ -11,24 +12,10 @@ import { createClient } from '@/lib/supabase/server'
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireApiAuth()
+    if (!auth.authorized) return auth.response
+
     const supabase = await createClient()
-
-    // Dev bypass: skip auth when Supabase isn't configured
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    const devBypass =
-      process.env.NODE_ENV === 'development' &&
-      (!supabaseUrl || !supabaseAnonKey)
-
-    if (!devBypass) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-    }
 
     const searchParams = request.nextUrl.searchParams
     const automation = searchParams.get('automation')

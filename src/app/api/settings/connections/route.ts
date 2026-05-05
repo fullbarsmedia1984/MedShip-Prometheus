@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import type { SystemName } from '@/types'
 
 const VALID_SYSTEMS: SystemName[] = ['salesforce', 'fishbowl', 'quickbooks', 'easypost']
 
+type ConnectionConfigRow = {
+  config?: unknown
+  [key: string]: unknown
+}
+
 /**
  * Fetch all saved connection configs from Supabase.
- * Returns configs with field names but masked values for password fields.
+ * Returns metadata only; raw credentials are never sent to the browser.
  */
 export async function GET() {
   try {
+    const auth = await requireApiAuth()
+    if (!auth.authorized) return auth.response
+
     const supabase = createAdminClient()
 
     const { data, error } = await supabase
@@ -25,7 +34,7 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json(data ?? [])
+    return NextResponse.json((data ?? []).map(redactConnectionConfig))
   } catch (error) {
     console.error('Settings API error:', error)
     return NextResponse.json(
@@ -41,6 +50,9 @@ export async function GET() {
  */
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
+    if (!auth.authorized) return auth.response
+
     const body = await request.json()
     const { system, config } = body as { system: string; config: Record<string, string> }
 
@@ -74,13 +86,21 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = createAdminClient()
+    const { data: existingConfig } = await supabase
+      .from('connection_configs')
+      .select('config')
+      .eq('system_name', system)
+      .maybeSingle()
 
     const { error } = await supabase
       .from('connection_configs')
       .upsert(
         {
           system_name: system,
-          config: filteredConfig,
+          config: {
+            ...toStringRecord(existingConfig?.config),
+            ...filteredConfig,
+          },
           is_active: true,
           updated_at: new Date().toISOString(),
         },
@@ -107,4 +127,28 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function redactConnectionConfig(row: ConnectionConfigRow) {
+  const config = toStringRecord(row.config)
+
+  return {
+    ...row,
+    config: {},
+    configured_fields: Object.keys(config).sort(),
+  }
+}
+
+function toStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  const record: Record<string, string> = {}
+  for (const [key, fieldValue] of Object.entries(value)) {
+    if (typeof fieldValue === 'string') {
+      record[key] = fieldValue
+    }
+  }
+  return record
 }

@@ -26,7 +26,7 @@ export interface SyncEvent {
   error_message?: string
   retry_count?: number
   max_retries?: number
-  next_retry_at?: string
+  next_retry_at?: string | null
   completed_at?: string
   idempotency_key?: string
 }
@@ -170,21 +170,25 @@ class Logger {
    * Get failed events for an automation (for retry queue)
    */
   async getFailedEvents(automation: Automation): Promise<SyncEvent[]> {
+    const scanLimit = 200
+    const returnLimit = 100
+
     const { data, error } = await this.supabase
       .from('sync_events')
       .select('*')
       .eq('automation', automation)
       .eq('status', 'failed')
-      .lt('retry_count', 4)
       .order('created_at', { ascending: true })
-      .limit(100)
+      .limit(scanLimit)
 
     if (error) {
       console.error('Failed to get failed events:', error)
       return []
     }
 
-    return data || []
+    return (data || [])
+      .filter((event) => (event.retry_count ?? 0) < (event.max_retries ?? 4))
+      .slice(0, returnLimit)
   }
 
   /**
@@ -192,21 +196,27 @@ class Logger {
    */
   async getRetryableEvents(): Promise<SyncEvent[]> {
     const now = new Date().toISOString()
+    const scanLimit = 200
+    const returnLimit = 50
 
     const { data, error } = await this.supabase
       .from('sync_events')
       .select('*')
-      .eq('status', 'retrying')
+      .or('status.eq.failed,status.eq.retrying')
       .lte('next_retry_at', now)
       .order('next_retry_at', { ascending: true })
-      .limit(50)
+      .limit(scanLimit)
 
     if (error) {
       console.error('Failed to get retryable events:', error)
       return []
     }
 
-    return data || []
+    // Supabase/PostgREST filters compare against literal values, not another
+    // column, so retry_count < max_retries is applied after a bounded fetch.
+    return (data || [])
+      .filter((event) => (event.retry_count ?? 0) < (event.max_retries ?? 4))
+      .slice(0, returnLimit)
   }
 
   /**
@@ -272,6 +282,11 @@ export async function logSyncEvent(input: {
       idempotency_key: input.idempotencyKey,
     })
   } catch (error) {
+    if (input.idempotencyKey) {
+      const existing = await logger.checkIdempotency(input.idempotencyKey)
+      if (existing?.id) return existing.id
+    }
+
     console.error('logSyncEvent failed, returning placeholder ID:', error)
     return `fallback-${Date.now()}`
   }
@@ -293,15 +308,20 @@ export async function updateSyncEvent(
   }
 ): Promise<void> {
   try {
-    await logger.updateEvent(eventId, {
+    const eventUpdates: Partial<SyncEvent> = {
       status: updates.status,
       target_record_id: updates.targetRecordId,
       response: updates.response,
       error_message: updates.errorMessage,
       completed_at: updates.completedAt,
       retry_count: updates.retryCount,
-      next_retry_at: updates.nextRetryAt ?? undefined,
-    })
+    }
+
+    if ('nextRetryAt' in updates) {
+      eventUpdates.next_retry_at = updates.nextRetryAt
+    }
+
+    await logger.updateEvent(eventId, eventUpdates)
   } catch (error) {
     console.error('updateSyncEvent failed:', error)
   }
@@ -322,8 +342,23 @@ export async function hasSuccessfulSync(idempotencyKey: string): Promise<boolean
 }
 
 /**
+ * Get a sync event by idempotency key.
+ * Used to reuse failed/manual retry rows instead of creating duplicates.
+ */
+export async function getSyncEventByIdempotencyKey(
+  idempotencyKey: string
+): Promise<SyncEvent | null> {
+  try {
+    return await logger.checkIdempotency(idempotencyKey)
+  } catch (error) {
+    console.error('getSyncEventByIdempotencyKey failed:', error)
+    return null
+  }
+}
+
+/**
  * Get failed events that are ready for retry.
- * (status = 'retrying', next_retry_at <= now)
+ * (status = 'failed' or 'retrying', next_retry_at <= now)
  */
 export async function getRetryableEvents(): Promise<SyncEvent[]> {
   try {
