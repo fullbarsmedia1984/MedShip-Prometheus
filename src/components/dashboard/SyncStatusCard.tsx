@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { StatusBadge } from './StatusBadge'
 import { ConnectionIndicator } from './ConnectionIndicator'
 import { Play, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import type { AutomationStats } from '@/types'
 import { AUTOMATION_INFO } from '@/types'
 
@@ -16,7 +15,11 @@ interface SyncStatusCardProps {
 }
 
 export function SyncStatusCard({ stats, onTrigger, compact = false }: SyncStatusCardProps) {
-  const info = AUTOMATION_INFO[stats.automation]
+  const info = AUTOMATION_INFO[stats.automation] ?? {
+    name: stats.automation,
+    description: 'Integration automation',
+    phase: 0,
+  }
 
   const getConnectionStatus = () => {
     if (!stats.lastRunStatus) return 'disconnected' as const

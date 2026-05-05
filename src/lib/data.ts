@@ -128,6 +128,8 @@ type SupabaseRangeQuery<T> = {
 
 const PAGE_FETCH_SIZE = 1000
 const LIVE_AUTOMATIONS = new Set<AutomationType>([
+  'SF_FULL_SYNC',
+  'SF_INCREMENTAL_SYNC',
   'P1_OPP_TO_SO',
   'P2_INVENTORY_SYNC',
   'P7_FB_SO_SYNC',

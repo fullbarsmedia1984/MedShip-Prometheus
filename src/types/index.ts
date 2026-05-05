@@ -90,6 +90,8 @@ export interface SyncSchedule {
 // --- Enums ---
 
 export type AutomationType =
+  | 'SF_FULL_SYNC'
+  | 'SF_INCREMENTAL_SYNC'
   | 'P1_OPP_TO_SO'
   | 'P2_INVENTORY_SYNC'
   | 'P3_QB_INVOICE_SYNC'
@@ -254,6 +256,16 @@ export const AUTOMATION_INFO: Record<
   AutomationType,
   { name: string; description: string; phase: number }
 > = {
+  SF_FULL_SYNC: {
+    name: 'Salesforce Full Sync',
+    description: 'Refreshes all Salesforce cache tables in Prometheus',
+    phase: 0,
+  },
+  SF_INCREMENTAL_SYNC: {
+    name: 'Salesforce Incremental Sync',
+    description: 'Refreshes changed Salesforce records on a schedule',
+    phase: 0,
+  },
   P1_OPP_TO_SO: {
     name: 'Opportunity \u2192 Sales Order',
     description: 'Creates Fishbowl SO when SF Opportunity closes',
