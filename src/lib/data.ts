@@ -119,6 +119,19 @@ type SyncScheduleRow = {
   records_processed: number | null
 }
 
+type SupabaseRangeQuery<T> = {
+  range(from: number, to: number): Promise<{
+    data: T[] | null
+    error: Error | null
+  }>
+}
+
+const PAGE_FETCH_SIZE = 1000
+const LIVE_AUTOMATIONS = new Set<AutomationType>([
+  'P1_OPP_TO_SO',
+  'P2_INVENTORY_SYNC',
+])
+
 type AmountRow = {
   amount: number | string | null
 }
@@ -209,6 +222,26 @@ function getInventoryKpisFromProducts(products: Product[]): InventoryKpis {
     lowStock: products.filter((p) => p.qtyAvailable > 0 && p.qtyAvailable <= p.reorderPoint).length,
     outOfStock: products.filter((p) => p.qtyAvailable <= 0).length,
   }
+}
+
+async function fetchAllRows<T>(
+  buildQuery: () => SupabaseRangeQuery<T>,
+  pageSize = PAGE_FETCH_SIZE
+): Promise<T[]> {
+  const rows: T[] = []
+
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1
+    const { data, error } = await buildQuery().range(from, to)
+    if (error) throw error
+
+    const batch = data ?? []
+    rows.push(...batch)
+
+    if (batch.length < pageSize) break
+  }
+
+  return rows
 }
 
 function applyEventFilters(items: SyncEvent[], filters: EventFilters): SyncEvent[] {
@@ -303,31 +336,36 @@ function mapInventorySnapshotToProduct(
 async function getLiveInventoryProducts(): Promise<Product[]> {
   const supabase = createAdminClient()
 
-  const { data: inventory, error } = await supabase
-    .from('inventory_snapshot')
-    .select('id, part_number, part_description, qty_on_hand, qty_allocated, qty_available, uom, location, fishbowl_part_id, last_synced_at, sf_product_id')
-    .order('part_number')
+  const inventory = await fetchAllRows<InventorySnapshotRow>(() =>
+    supabase
+      .from('inventory_snapshot')
+      .select('id, part_number, part_description, qty_on_hand, qty_allocated, qty_available, uom, location, fishbowl_part_id, last_synced_at, sf_product_id')
+      .order('part_number') as unknown as SupabaseRangeQuery<InventorySnapshotRow>
+  )
 
-  if (error) throw error
   if (!inventory || inventory.length === 0) {
     warnEmptyLiveTable('inventory_snapshot', 'inventory')
     return []
   }
 
-  const { data: reorderRules, error: rulesError } = await supabase
-    .from('reorder_rules')
-    .select('part_number, reorder_point, is_active')
+  let reorderRules: ReorderRuleRow[] = []
 
-  if (rulesError) {
-    console.warn('Live reorder rules query failed; using product metadata defaults:', rulesError)
+  try {
+    reorderRules = await fetchAllRows<ReorderRuleRow>(() =>
+      supabase
+        .from('reorder_rules')
+        .select('part_number, reorder_point, is_active') as unknown as SupabaseRangeQuery<ReorderRuleRow>
+    )
+  } catch (error) {
+    console.warn('Live reorder rules query failed; using product metadata defaults:', error)
   }
 
   const rulesByPart = new Map(
-    ((reorderRules as ReorderRuleRow[] | null) ?? [])
+    reorderRules
       .filter((rule) => rule.is_active !== false)
       .map((rule) => [rule.part_number, toNumber(rule.reorder_point)])
   )
-  return (inventory as InventorySnapshotRow[]).map((row) => {
+  return inventory.map((row) => {
     const reorderPoint = rulesByPart.get(row.part_number) ?? 0
     return mapInventorySnapshotToProduct(row, reorderPoint)
   })
@@ -335,14 +373,12 @@ async function getLiveInventoryProducts(): Promise<Product[]> {
 
 async function getLiveSyncEvents(): Promise<SyncEvent[]> {
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('sync_events')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(1000)
-
-  if (error) throw error
-  return (data ?? []) as SyncEvent[]
+  return fetchAllRows<SyncEvent>(() =>
+    supabase
+      .from('sync_events')
+      .select('*')
+      .order('created_at', { ascending: false }) as unknown as SupabaseRangeQuery<SyncEvent>
+  )
 }
 
 async function getLiveFieldMappings(): Promise<FieldMapping[]> {
@@ -418,6 +454,8 @@ function getIntegrationHealth(
   if (!schedule && events.length === 0) return 'warning'
   if (schedule?.is_active === false) return 'warning'
   if (schedule?.last_run_status === 'failed') return 'error'
+  if (schedule?.last_run_status === 'partial') return 'warning'
+  if (schedule?.last_run_status && schedule.last_run_status !== 'success') return 'warning'
   if (events.some((event) => event.status === 'failed' && event.retry_count >= event.max_retries)) {
     return 'error'
   }
@@ -446,7 +484,6 @@ async function getLiveIntegrationStatus(): Promise<IntegrationStatusData[]> {
     scheduleRows.map((schedule) => [schedule.automation, schedule])
   )
   const automationSet = new Set<AutomationType>([
-    ...(Object.keys(AUTOMATION_INFO) as AutomationType[]),
     ...scheduleRows.map((schedule) => schedule.automation),
     ...events.map((event) => event.automation),
   ])
@@ -464,23 +501,27 @@ async function getLiveIntegrationStatus(): Promise<IntegrationStatusData[]> {
         : 0
     const info = AUTOMATION_INFO[automation]
     const hasObservedData = Boolean(schedule || latestEvent)
+    const isComingSoon = !LIVE_AUTOMATIONS.has(automation)
 
     return {
       automation,
       name: info?.name ?? automation,
       description: info?.description ?? 'Integration automation',
-      status: getIntegrationHealth(schedule, automationEvents, successRate),
-      lastRunAt: schedule?.last_run_at ?? latestEvent?.created_at ?? '',
-      lastRunDurationMs: schedule?.last_run_duration_ms ?? getEventDurationMs(latestEvent),
-      recordsProcessed: schedule?.records_processed ?? completed.length,
-      successRate,
+      status: isComingSoon ? 'warning' : getIntegrationHealth(schedule, automationEvents, successRate),
+      lastRunAt: isComingSoon ? '' : schedule?.last_run_at ?? latestEvent?.created_at ?? '',
+      lastRunDurationMs: isComingSoon ? 0 : schedule?.last_run_duration_ms ?? getEventDurationMs(latestEvent),
+      recordsProcessed: isComingSoon ? 0 : schedule?.records_processed ?? completed.length,
+      successRate: isComingSoon ? 0 : successRate,
       schedule: schedule
         ? cronToScheduleLabel(schedule.cron_expression)
         : latestEvent
           ? 'Event-driven'
           : 'Not scheduled',
-      isActive: schedule?.is_active ?? hasObservedData,
-      last7Days: buildLast7Days(automationEvents),
+      isActive: isComingSoon ? false : schedule?.is_active ?? hasObservedData,
+      last7Days: isComingSoon ? [] : buildLast7Days(automationEvents),
+      isComingSoon,
+      observedEvents: automationEvents.length,
+      hasLiveSchedule: Boolean(schedule),
     }
   })
 }

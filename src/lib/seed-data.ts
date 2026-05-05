@@ -661,6 +661,9 @@ export interface IntegrationStatusData {
   schedule: string
   isActive: boolean
   last7Days: { date: string; success: number; failed: number }[]
+  isComingSoon?: boolean
+  observedEvents?: number
+  hasLiveSchedule?: boolean
 }
 
 function generateIntegrationStatus(): IntegrationStatusData[] {
