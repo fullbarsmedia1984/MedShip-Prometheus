@@ -7,6 +7,7 @@ import { bulkUpdateProductInventory } from '@/lib/salesforce/mutations'
 import { createFishbowlClient } from '@/lib/fishbowl/client'
 import { getAllInventory } from '@/lib/fishbowl/inventory'
 import type { SFProductUpdate } from '@/lib/salesforce/types'
+import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
 /**
  * P2: Fishbowl Inventory → Salesforce Products
@@ -34,7 +35,17 @@ export const inventorySync = inngest.createFunction(
 
     // Step 1: Connect to Fishbowl and fetch all inventory
     const fbClient = createFishbowlClient()
-    await step.run('connect-fishbowl', () => fbClient.authenticate())
+    await step.run('connect-fishbowl', () =>
+      runWithAuthCircuitBreaker(
+        {
+          system: 'fishbowl',
+          automation: 'P2_INVENTORY_SYNC',
+          sourceSystem: 'fishbowl',
+          targetSystem: 'prometheus',
+        },
+        () => fbClient.authenticate()
+      )
+    )
 
     const inventory = await step.run('fetch-all-inventory', () =>
       getAllInventory(fbClient)
@@ -69,7 +80,17 @@ export const inventorySync = inngest.createFunction(
 
     // Step 3: Update Salesforce Product2 records with stock levels
     const sfClient = createSalesforceClient()
-    await step.run('connect-salesforce', () => sfClient.connect())
+    await step.run('connect-salesforce', () =>
+      runWithAuthCircuitBreaker(
+        {
+          system: 'salesforce',
+          automation: 'P2_INVENTORY_SYNC',
+          sourceSystem: 'prometheus',
+          targetSystem: 'salesforce',
+        },
+        () => sfClient.connect()
+      )
+    )
 
     const updateResult = await step.run('update-sf-products', async () => {
       const products: SFProductUpdate[] = inventory.map((item) => ({
@@ -124,7 +145,7 @@ export const inventorySyncManual = inngest.createFunction(
     retries: 2,
     triggers: [{ event: 'fishbowl/inventory.sync' }],
   },
-  async ({ event, step }) => {
+  async ({ event }) => {
     const { fullSync } = event.data
 
     logger.log('info', 'P2_INVENTORY_SYNC', 'Starting manual inventory sync', {

@@ -6,6 +6,7 @@ import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getOpportunityById } from '@/lib/salesforce/queries'
 import { createFishbowlClient } from '@/lib/fishbowl/client'
 import { processP1Opportunity } from './sf-opportunity-closed'
+import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
 /**
  * Retry Failed Sync Events
@@ -53,8 +54,24 @@ export const retryFailedSyncs = inngest.createFunction(
           try {
             const sfClient = createSalesforceClient()
             const fbClient = createFishbowlClient()
-            await sfClient.connect()
-            await fbClient.authenticate()
+            await runWithAuthCircuitBreaker(
+              {
+                system: 'salesforce',
+                automation: 'P1_OPP_TO_SO',
+                sourceSystem: 'salesforce',
+                targetSystem: 'fishbowl',
+              },
+              () => sfClient.connect()
+            )
+            await runWithAuthCircuitBreaker(
+              {
+                system: 'fishbowl',
+                automation: 'P1_OPP_TO_SO',
+                sourceSystem: 'salesforce',
+                targetSystem: 'fishbowl',
+              },
+              () => fbClient.authenticate()
+            )
 
             const opp = await getOpportunityById(sfClient, event.source_record_id)
             if (!opp) {

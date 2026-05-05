@@ -10,6 +10,7 @@ import {
   syncOpportunityLineItems,
   syncProfileCalls,
 } from '@/lib/salesforce/sync'
+import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
 /**
  * Full Salesforce → Supabase cache sync.
@@ -28,7 +29,12 @@ export const sfFullSync = inngest.createFunction(
     const sfClient = createSalesforceClient()
     const supabase = createAdminClient()
 
-    await step.run('connect-sf', () => sfClient.connect())
+    await step.run('connect-sf', () =>
+      runWithAuthCircuitBreaker(
+        { system: 'salesforce', automation: 'SF_FULL_SYNC' },
+        () => sfClient.connect()
+      )
+    )
 
     const usersCount = await step.run('sync-users', async () => {
       return syncUsers(sfClient, supabase)

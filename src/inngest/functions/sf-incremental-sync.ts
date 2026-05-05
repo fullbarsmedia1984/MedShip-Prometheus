@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { syncIncremental } from '@/lib/salesforce/sync'
 import { getDataSourceMode } from '@/lib/utils/app-settings'
 import { updateSyncSchedule } from '@/lib/utils/logger'
+import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
 /**
  * Incremental Salesforce → Supabase cache sync.
@@ -40,7 +41,12 @@ export const sfIncrementalSync = inngest.createFunction(
     const sfClient = createSalesforceClient()
     const supabase = createAdminClient()
 
-    await step.run('connect-sf', () => sfClient.connect())
+    await step.run('connect-sf', () =>
+      runWithAuthCircuitBreaker(
+        { system: 'salesforce', automation: 'SF_INCREMENTAL_SYNC' },
+        () => sfClient.connect()
+      )
+    )
 
     const totalRecords = await step.run('sync-incremental', async () => {
       return syncIncremental(sfClient, supabase)

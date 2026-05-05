@@ -16,6 +16,7 @@ import { createSalesOrder, findCustomerByName, createCustomer } from '@/lib/fish
 import { validatePartNumbers } from '@/lib/fishbowl/inventory'
 import type { FBSalesOrderPayload } from '@/types'
 import type { SFOpportunity } from '@/lib/salesforce/types'
+import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
 type SalesforceClientInstance = ReturnType<typeof createSalesforceClient>
 type FishbowlClientInstance = ReturnType<typeof createFishbowlClient>
@@ -259,8 +260,24 @@ export const sfOpportunityClosed = inngest.createFunction(
     const fbClient = createFishbowlClient()
 
     await step.run('connect-systems', async () => {
-      await sfClient.connect()
-      await fbClient.authenticate()
+      await runWithAuthCircuitBreaker(
+        {
+          system: 'salesforce',
+          automation: 'P1_OPP_TO_SO',
+          sourceSystem: 'salesforce',
+          targetSystem: 'fishbowl',
+        },
+        () => sfClient.connect()
+      )
+      await runWithAuthCircuitBreaker(
+        {
+          system: 'fishbowl',
+          automation: 'P1_OPP_TO_SO',
+          sourceSystem: 'salesforce',
+          targetSystem: 'fishbowl',
+        },
+        () => fbClient.authenticate()
+      )
     })
 
     if (isOpportunityEvent) {
