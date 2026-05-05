@@ -12,6 +12,8 @@ import {
   quotePdfGenerate,
   lowStockCheck,
   lowStockCheckManual,
+  fishbowlSalesOrdersSync,
+  fishbowlSalesOrdersSyncManual,
   sfFullSync,
   sfIncrementalSync,
 } from '@/inngest'
@@ -45,6 +47,10 @@ export const { GET, POST, PUT } = serve({
     // P6: Low Stock Check
     lowStockCheck,
     lowStockCheckManual,
+
+    // P7: Fishbowl Sales Orders -> canonical quote/order cache
+    fishbowlSalesOrdersSync,
+    fishbowlSalesOrdersSyncManual,
 
     // SF → Supabase cache sync
     sfFullSync,

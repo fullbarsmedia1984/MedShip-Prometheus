@@ -9,6 +9,7 @@ type Automation =
   | 'P4_SHIPMENT_TRACKING'
   | 'P5_QUOTE_PDF'
   | 'P6_LOW_STOCK_CHECK'
+  | 'P7_FB_SO_SYNC'
 
 /**
  * Manual sync trigger endpoint
@@ -72,6 +73,13 @@ export async function POST(request: NextRequest) {
       P6_LOW_STOCK_CHECK: {
         name: 'inventory/low-stock.check',
         data: { triggeredBy: 'manual' },
+      },
+      P7_FB_SO_SYNC: {
+        name: 'fishbowl/sales-orders.sync',
+        data: {
+          fullSync: params.fullSync ?? true,
+          triggeredBy: 'manual',
+        },
       },
     }
 

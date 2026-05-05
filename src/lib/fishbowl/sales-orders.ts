@@ -4,11 +4,39 @@
 
 import type { FishbowlClient } from './client';
 import type { FBSalesOrderPayload, FBSalesOrderResult } from '@/types';
+import type { FBPaginatedResponse } from './types';
 import {
   FishbowlApiError,
   FishbowlPartNotFoundError,
   FishbowlCustomerNotFoundError,
 } from './types';
+
+const PAGE_SIZE = 100;
+
+export type FBRawSalesOrderItem = Record<string, unknown>;
+
+export type FBRawSalesOrder = Record<string, unknown> & {
+  id?: number | string;
+  number?: string;
+  status?: string;
+  customer?: { id?: number | string; name?: string };
+  customerName?: string;
+  customerPO?: string;
+  salesperson?: string | { name?: string };
+  salesPerson?: string | { name?: string };
+  dateCreated?: string;
+  dateScheduled?: string;
+  dateIssued?: string;
+  dateCompleted?: string;
+  total?: number | string;
+  subtotal?: number | string;
+  taxTotal?: number | string;
+  shippingTotal?: number | string;
+  currency?: string;
+  shipTo?: Record<string, unknown>;
+  items?: FBRawSalesOrderItem[];
+  lines?: FBRawSalesOrderItem[];
+}
 
 /**
  * Create a new Sales Order in Fishbowl.
@@ -47,18 +75,64 @@ export async function createSalesOrder(
 }
 
 /**
+ * Fetch every Fishbowl Sales Order visible to the REST API.
+ * Fishbowl's API has varied response keys across versions, so this accepts the
+ * standard paginated shape and a few common aliases.
+ */
+export async function getAllSalesOrders(
+  client: FishbowlClient
+): Promise<FBRawSalesOrder[]> {
+  const allOrders: FBRawSalesOrder[] = [];
+  let pageNumber = 1;
+  let totalPages = 1;
+
+  while (pageNumber <= totalPages) {
+    const page = await client.request<
+      FBPaginatedResponse<FBRawSalesOrder> & {
+        data?: FBRawSalesOrder[];
+        salesOrders?: FBRawSalesOrder[];
+      }
+    >(
+      'GET',
+      `/api/sales-orders?pageNumber=${pageNumber}&pageSize=${PAGE_SIZE}`
+    );
+
+    totalPages = Number(page.totalPages ?? 1);
+    allOrders.push(...(page.results ?? page.salesOrders ?? page.data ?? []));
+    pageNumber++;
+  }
+
+  return allOrders;
+}
+
+/**
  * Look up a Sales Order by its SO number (e.g., "SO-10045").
  * Returns the raw Fishbowl response or null if not found.
  */
 export async function getSalesOrderByNumber(
   client: FishbowlClient,
   soNumber: string
-): Promise<unknown | null> {
+): Promise<FBRawSalesOrder | null> {
   try {
-    return await client.request<unknown>(
+    const response = await client.request<
+      FBRawSalesOrder |
+      FBPaginatedResponse<FBRawSalesOrder> & {
+        data?: FBRawSalesOrder[];
+        salesOrders?: FBRawSalesOrder[];
+      }
+    >(
       'GET',
       `/api/sales-orders?number=${encodeURIComponent(soNumber)}`
     );
+    if ('results' in response || 'data' in response || 'salesOrders' in response) {
+      const page = response as {
+        results?: FBRawSalesOrder[];
+        salesOrders?: FBRawSalesOrder[];
+        data?: FBRawSalesOrder[];
+      };
+      return page.results?.[0] ?? page.salesOrders?.[0] ?? page.data?.[0] ?? null;
+    }
+    return response;
   } catch (err) {
     if (err instanceof FishbowlApiError && err.statusCode === 404) {
       return null;

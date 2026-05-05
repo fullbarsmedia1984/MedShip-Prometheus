@@ -26,6 +26,7 @@ const MAPPING_AUTOMATIONS: AutomationType[] = [
   'P1_OPP_TO_SO',
   'P2_INVENTORY_SYNC',
   'P4_SHIPMENT_TRACKING',
+  'P7_FB_SO_SYNC',
 ]
 
 type MappingsDashboardResponse = {

@@ -19,6 +19,10 @@ export {
   lowStockCheck,
   lowStockCheckManual,
 } from './functions/low-stock-check'
+export {
+  fishbowlSalesOrdersSync,
+  fishbowlSalesOrdersSyncManual,
+} from './functions/fishbowl-sales-orders-sync'
 export { sfFullSync } from './functions/sf-full-sync'
 export { sfIncrementalSync } from './functions/sf-incremental-sync'
 

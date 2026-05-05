@@ -95,7 +95,8 @@ export type AutomationType =
   | 'P3_QB_INVOICE_SYNC'
   | 'P4_SHIPMENT_TRACKING'
   | 'P5_QUOTE_PDF'
-  | 'P6_LOW_STOCK_CHECK';
+  | 'P6_LOW_STOCK_CHECK'
+  | 'P7_FB_SO_SYNC';
 
 export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'internal';
 
@@ -282,6 +283,11 @@ export const AUTOMATION_INFO: Record<
     name: 'Low Stock Alerts',
     description: 'Checks inventory against reorder points',
     phase: 6,
+  },
+  P7_FB_SO_SYNC: {
+    name: 'Fishbowl Sales Orders',
+    description: 'Syncs Fishbowl sales orders into canonical quotes/orders',
+    phase: 7,
   },
 };
 

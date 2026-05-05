@@ -8,11 +8,13 @@ import {
   updateSyncSchedule,
 } from '@/lib/utils/logger'
 import { calculateNextRetry } from '@/lib/utils/retry'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getOpportunityById, getUnsyncedClosedOpportunities } from '@/lib/salesforce/queries'
 import { updateOpportunityFulfillment } from '@/lib/salesforce/mutations'
 import { createFishbowlClient } from '@/lib/fishbowl/client'
-import { createSalesOrder, findCustomerByName, createCustomer } from '@/lib/fishbowl/sales-orders'
+import { createSalesOrder, findCustomerByName, createCustomer, getSalesOrderByNumber } from '@/lib/fishbowl/sales-orders'
+import { upsertSalesOrdersToCache } from '@/lib/fishbowl/sales-order-cache'
 import { validatePartNumbers } from '@/lib/fishbowl/inventory'
 import type { FBSalesOrderPayload } from '@/types'
 import type { SFOpportunity } from '@/lib/salesforce/types'
@@ -168,7 +170,7 @@ export async function processP1Opportunity({
 
     const soPayload: FBSalesOrderPayload = {
       customer: { name: accountName },
-      status: 'Issued',
+      status: 'Estimate',
       shipTo: {
         name: accountName,
         address: opp.Account?.ShippingStreet || '',
@@ -190,8 +192,18 @@ export async function processP1Opportunity({
 
     await updateOpportunityFulfillment(sfClient, opp.Id, {
       fishbowlSONumber: result.number,
-      fulfillmentStatus: 'Pending',
+      fulfillmentStatus: 'Quote Created',
     })
+
+    const createdOrder = await getSalesOrderByNumber(fbClient, result.number)
+    if (createdOrder && typeof createdOrder === 'object') {
+      await upsertSalesOrdersToCache(createAdminClient(), [
+        {
+          ...(createdOrder as Record<string, unknown>),
+          sfOpportunityId: opp.Id,
+        },
+      ])
+    }
 
     await updateSyncEvent(eventId, {
       status: 'success',

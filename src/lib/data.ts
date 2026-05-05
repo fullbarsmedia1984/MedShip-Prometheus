@@ -130,6 +130,7 @@ const PAGE_FETCH_SIZE = 1000
 const LIVE_AUTOMATIONS = new Set<AutomationType>([
   'P1_OPP_TO_SO',
   'P2_INVENTORY_SYNC',
+  'P7_FB_SO_SYNC',
 ])
 
 type AmountRow = {
@@ -176,6 +177,35 @@ type SfOpportunityLineItemRow = {
   product_sf_id: string | null
   product_code: string | null
   product_name: string | null
+  quantity: number | string | null
+  unit_price: number | string | null
+  total_price: number | string | null
+}
+
+type CanonicalSalesOrderRow = {
+  id: string
+  so_number: string
+  status: string
+  customer_name: string | null
+  customer_id: string | null
+  salesperson: string | null
+  date_created: string | null
+  date_scheduled: string | null
+  date_issued: string | null
+  date_completed: string | null
+  total_amount: number | string | null
+  subtotal_amount: number | string | null
+  sf_opportunity_id: string | null
+  canonical_state: 'quote' | 'order' | 'void' | 'unknown'
+  last_synced_at: string | null
+}
+
+type CanonicalSalesOrderItemRow = {
+  id: string
+  sales_order_number: string
+  part_number: string | null
+  part_description: string | null
+  sf_product_id: string | null
   quantity: number | string | null
   unit_price: number | string | null
   total_price: number | string | null
@@ -302,6 +332,11 @@ function roundCurrency(value: number): number {
 
 function warnEmptyLiveTable(tableName: string, surface: string): void {
   console.warn(`${tableName} returned no live rows; ${surface} is returning an empty live result`)
+}
+
+function isMissingRelationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('42P01') || message.toLowerCase().includes('could not find the table')
 }
 
 function inferCategory(partNumber: string): Product['category'] {
@@ -767,62 +802,85 @@ function applyOrderFilters(items: Order[], filters: OrderFilters): Order[] {
   return filtered.sort((a, b) => b.date.localeCompare(a.date))
 }
 
+function mapFishbowlOrderStatus(status: string): Order['status'] {
+  const normalized = status.toLowerCase()
+  if (['completed', 'fulfilled', 'closed', 'delivered'].includes(normalized)) return 'Delivered'
+  if (['issued', 'in progress', 'partial'].includes(normalized)) return 'Pending'
+  if (['shipped'].includes(normalized)) return 'Shipped'
+  if (['void', 'voided', 'cancelled', 'canceled'].includes(normalized)) return 'Cancelled'
+  return 'Pending'
+}
+
 async function getLiveOrders(): Promise<Order[]> {
   const supabase = createAdminClient()
-  const opportunityRows = await fetchAllRows<SfOpportunityRow>(() =>
-    supabase
-      .from('sf_opportunities')
-      .select('sf_id, name, account_sf_id, owner_sf_id, stage_name, amount, close_date, is_closed, is_won, fishbowl_so_number, fulfillment_status, fulfillment_error, created_date, last_modified_date')
-      .order('close_date', { ascending: false }) as unknown as SupabaseRangeQuery<SfOpportunityRow>
-  )
-
-  if (opportunityRows.length === 0) return []
-
-  const opportunityIds = new Set(opportunityRows.map((row) => row.sf_id))
-
-  const [lineItems, lookups] = await Promise.all([
-    fetchAllRows<SfOpportunityLineItemRow>(() =>
+  const orderRows = await fetchAllRows<CanonicalSalesOrderRow>(() =>
       supabase
-        .from('sf_opportunity_line_items')
-        .select('sf_id, opportunity_sf_id, product_sf_id, product_code, product_name, quantity, unit_price, total_price')
-        .order('opportunity_sf_id') as unknown as SupabaseRangeQuery<SfOpportunityLineItemRow>
+        .from('canonical_orders')
+        .select('id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at')
+        .order('date_issued', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
     ).catch((error) => {
-      console.warn('Live opportunity line item query failed; orders will use opportunity totals only:', error)
+      if (isMissingRelationError(error)) {
+        warnEmptyLiveTable('canonical_orders', 'orders')
+        return []
+      }
+      throw error
+    })
+
+  if (orderRows.length === 0) return []
+
+  const orderNumbers = new Set(orderRows.map((row) => row.so_number))
+
+  const lineItems = await fetchAllRows<CanonicalSalesOrderItemRow>(() =>
+      supabase
+        .from('fb_sales_order_items')
+        .select('id, sales_order_number, part_number, part_description, sf_product_id, quantity, unit_price, total_price')
+        .order('sales_order_number') as unknown as SupabaseRangeQuery<CanonicalSalesOrderItemRow>
+    ).catch((error) => {
+      console.warn('Live Fishbowl sales order item query failed; orders will use header totals only:', error)
       return []
-    }),
-    getLookupMaps(
-      opportunityRows.map((row) => row.account_sf_id ?? ''),
-      opportunityRows.map((row) => row.owner_sf_id ?? '')
-    ),
-  ])
+    })
 
-  const itemsByOpportunity = new Map<string, OrderItem[]>()
+  const itemsByOrder = new Map<string, OrderItem[]>()
   for (const item of lineItems) {
-    if (!opportunityIds.has(item.opportunity_sf_id)) continue
+    if (!orderNumbers.has(item.sales_order_number)) continue
 
-    const items = itemsByOpportunity.get(item.opportunity_sf_id) ?? []
+    const items = itemsByOrder.get(item.sales_order_number) ?? []
     const quantity = toNumber(item.quantity)
     const unitPrice = toNumber(item.unit_price)
     const total = toNumber(item.total_price) || quantity * unitPrice
     items.push({
-      productId: item.product_sf_id ?? item.product_code ?? item.sf_id,
-      productName: item.product_name ?? item.product_code ?? 'Unknown Product',
-      sku: item.product_code ?? '',
+      productId: item.sf_product_id ?? item.part_number ?? item.id,
+      productName: item.part_description ?? item.part_number ?? 'Unknown Product',
+      sku: item.part_number ?? '',
       quantity,
       unitPrice: roundCurrency(unitPrice),
       total: roundCurrency(total),
     })
-    itemsByOpportunity.set(item.opportunity_sf_id, items)
+    itemsByOrder.set(item.sales_order_number, items)
   }
 
-  return opportunityRows.map((row) =>
-    mapOpportunityToOrder(
-      row,
-      itemsByOpportunity.get(row.sf_id) ?? [],
-      row.account_sf_id ? lookups.accountsById.get(row.account_sf_id) : undefined,
-      row.owner_sf_id ? lookups.usersById.get(row.owner_sf_id) : undefined
-    )
-  )
+  return orderRows.map((row) => {
+    const items = itemsByOrder.get(row.so_number) ?? []
+    const subtotal = toNumber(row.subtotal_amount) ||
+      toNumber(row.total_amount) ||
+      items.reduce((sum, item) => sum + item.total, 0)
+    const date = row.date_issued ?? row.date_created ?? row.last_synced_at ?? new Date().toISOString()
+
+    return {
+      id: row.id,
+      orderNumber: row.so_number,
+      customerId: row.customer_id ?? '',
+      customerName: row.customer_name ?? 'Unknown Customer',
+      salesRepId: row.salesperson ?? '',
+      salesRepName: row.salesperson ?? 'Unassigned',
+      date: date.split('T')[0],
+      status: mapFishbowlOrderStatus(row.status),
+      fulfillmentStatus: 'Synced',
+      trackingNumber: undefined,
+      items,
+      subtotal: roundCurrency(subtotal),
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -1254,7 +1312,62 @@ export interface QuoteFilters {
 
 export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedResult<SeedQuote>> {
   void await getDataSourceMode()
-  return paginate([], filters.page, filters.pageSize)
+  const supabase = createAdminClient()
+  const rows = await fetchAllRows<CanonicalSalesOrderRow>(() =>
+      supabase
+        .from('canonical_quotes')
+        .select('id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at')
+        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+    ).catch((error) => {
+      if (isMissingRelationError(error)) {
+        warnEmptyLiveTable('canonical_quotes', 'quotes')
+        return []
+      }
+      throw error
+    })
+
+  const now = Date.now()
+  const quotes = rows.map((row): SeedQuote => {
+    const dateValue = row.date_created ?? row.last_synced_at ?? new Date().toISOString()
+    const created = new Date(dateValue)
+    const daysOpen = Number.isNaN(created.getTime())
+      ? 0
+      : Math.max(0, Math.floor((now - created.getTime()) / 86_400_000))
+
+    return {
+      id: row.so_number,
+      date: dateValue.split('T')[0],
+      repName: row.salesperson ?? 'Unassigned',
+      customerName: row.customer_name ?? 'Unknown Customer',
+      amount: roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount)),
+      status: mapFishbowlQuoteStatus(row.status),
+      daysOpen,
+    }
+  })
+
+  let filtered = quotes
+  if (filters.status && filters.status !== 'all') {
+    filtered = filtered.filter((quote) => quote.status === filters.status)
+  }
+  if (filters.search) {
+    const q = filters.search.toLowerCase()
+    filtered = filtered.filter((quote) =>
+      quote.id.toLowerCase().includes(q) ||
+      quote.customerName.toLowerCase().includes(q) ||
+      quote.repName.toLowerCase().includes(q)
+    )
+  }
+
+  return paginate(filtered, filters.page, filters.pageSize)
+}
+
+function mapFishbowlQuoteStatus(status: string): SeedQuote['status'] {
+  const normalized = status.toLowerCase()
+  if (['accepted', 'issued'].includes(normalized)) return 'accepted'
+  if (['expired'].includes(normalized)) return 'expired'
+  if (['rejected', 'void', 'voided', 'cancelled', 'canceled'].includes(normalized)) return 'rejected'
+  if (['viewed'].includes(normalized)) return 'viewed'
+  return 'sent'
 }
 
 export async function getMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {

@@ -1,0 +1,183 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { FBRawSalesOrder, FBRawSalesOrderItem } from './sales-orders'
+
+type CanonicalState = 'quote' | 'order' | 'void' | 'unknown'
+
+type NormalizedSalesOrder = {
+  header: Record<string, unknown> & {
+    so_number: string
+    status: string
+    canonical_state: CanonicalState
+  }
+  items: Array<Record<string, unknown>>
+}
+
+function valueAt(source: Record<string, unknown> | undefined, keys: string[]) {
+  if (!source) return undefined
+  for (const key of keys) {
+    const value = source[key]
+    if (value !== undefined && value !== null && value !== '') return value
+  }
+  return undefined
+}
+
+function toText(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null
+  return String(value)
+}
+
+function toNumber(value: unknown): number | null {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : null
+}
+
+function toDate(value: unknown): string | null {
+  return toText(value)
+}
+
+function toSalesperson(value: unknown): string | null {
+  if (!value) return null
+  if (typeof value === 'object' && 'name' in value) {
+    return toText((value as { name?: unknown }).name)
+  }
+  return toText(value)
+}
+
+function classifySalesOrder(statusValue: unknown): CanonicalState {
+  const status = String(statusValue ?? '').trim().toLowerCase()
+  if (!status) return 'unknown'
+  if (['issued', 'in progress', 'partial', 'fulfilled', 'completed', 'closed'].includes(status)) {
+    return 'order'
+  }
+  if (['void', 'voided', 'cancelled', 'canceled', 'deleted'].includes(status)) {
+    return 'void'
+  }
+  return 'quote'
+}
+
+function normalizeLineItem(
+  soNumber: string,
+  item: FBRawSalesOrderItem,
+  index: number
+): Record<string, unknown> {
+  const product = valueAt(item, ['product', 'part'])
+  const productRecord = product && typeof product === 'object'
+    ? product as Record<string, unknown>
+    : undefined
+  const partNumber = valueAt(item, ['partNumber', 'number', 'sku', 'productNumber']) ??
+    valueAt(productRecord, ['partNumber', 'number', 'sku'])
+  const quantity = valueAt(item, ['quantity', 'qty', 'quantityOrdered'])
+  const unitPrice = valueAt(item, ['unitPrice', 'price', 'unitCost'])
+  const totalPrice = valueAt(item, ['totalPrice', 'total', 'amount'])
+
+  return {
+    sales_order_number: soNumber,
+    fishbowl_line_id: toText(valueAt(item, ['id', 'lineId'])),
+    line_number: toNumber(valueAt(item, ['lineNumber', 'line', 'sortOrder'])) ?? index + 1,
+    part_number: toText(partNumber),
+    part_description: toText(
+      valueAt(item, ['partDescription', 'description', 'productName', 'name']) ??
+        valueAt(productRecord, ['description', 'name'])
+    ),
+    quantity: toNumber(quantity) ?? 0,
+    quantity_fulfilled: toNumber(valueAt(item, ['quantityFulfilled', 'qtyFulfilled'])),
+    quantity_uom: toText(valueAt(item, ['uom', 'uomCode'])),
+    unit_price: toNumber(unitPrice),
+    total_price: toNumber(totalPrice) ?? (
+      toNumber(quantity) !== null && toNumber(unitPrice) !== null
+        ? Number(toNumber(quantity)) * Number(toNumber(unitPrice))
+        : null
+    ),
+    raw_data: item,
+    last_synced_at: new Date().toISOString(),
+  }
+}
+
+export function normalizeSalesOrder(raw: FBRawSalesOrder): NormalizedSalesOrder | null {
+  const soNumber = toText(valueAt(raw, ['number', 'soNumber', 'salesOrderNumber']))
+  if (!soNumber) return null
+
+  const customer = valueAt(raw, ['customer'])
+  const customerRecord = customer && typeof customer === 'object'
+    ? customer as Record<string, unknown>
+    : undefined
+  const shipTo = valueAt(raw, ['shipTo', 'shippingAddress'])
+  const shipToRecord = shipTo && typeof shipTo === 'object'
+    ? shipTo as Record<string, unknown>
+    : undefined
+  const status = toText(valueAt(raw, ['status', 'statusName'])) ?? 'Unknown'
+  const rawItems = valueAt(raw, ['items', 'lines', 'salesOrderItems'])
+  const items = Array.isArray(rawItems) ? rawItems as FBRawSalesOrderItem[] : []
+
+  return {
+    header: {
+      fishbowl_id: toText(valueAt(raw, ['id'])),
+      so_number: soNumber,
+      status,
+      customer_name: toText(valueAt(raw, ['customerName']) ?? valueAt(customerRecord, ['name'])),
+      customer_id: toText(valueAt(customerRecord, ['id'])),
+      customer_po: toText(valueAt(raw, ['customerPO', 'customerPo', 'poNumber'])),
+      salesperson: toSalesperson(valueAt(raw, ['salesperson', 'salesPerson'])),
+      date_created: toDate(valueAt(raw, ['dateCreated', 'createdDate', 'createdAt'])),
+      date_scheduled: toDate(valueAt(raw, ['dateScheduled', 'scheduledDate'])),
+      date_issued: toDate(valueAt(raw, ['dateIssued', 'issuedDate'])),
+      date_completed: toDate(valueAt(raw, ['dateCompleted', 'completedDate'])),
+      total_amount: toNumber(valueAt(raw, ['total', 'totalAmount', 'grandTotal'])),
+      subtotal_amount: toNumber(valueAt(raw, ['subtotal', 'subTotal'])),
+      tax_amount: toNumber(valueAt(raw, ['taxTotal', 'taxAmount'])),
+      shipping_amount: toNumber(valueAt(raw, ['shippingTotal', 'shippingAmount'])),
+      currency: toText(valueAt(raw, ['currency'])) ?? 'USD',
+      ship_to_name: toText(valueAt(shipToRecord, ['name'])),
+      ship_to_street: toText(valueAt(shipToRecord, ['address', 'street'])),
+      ship_to_city: toText(valueAt(shipToRecord, ['city'])),
+      ship_to_state: toText(valueAt(shipToRecord, ['state'])),
+      ship_to_postal_code: toText(valueAt(shipToRecord, ['zip', 'postalCode'])),
+      ship_to_country: toText(valueAt(shipToRecord, ['country'])),
+      sf_opportunity_id: toText(valueAt(raw, ['sfOpportunityId', 'opportunityId'])),
+      quote_status: status,
+      canonical_state: classifySalesOrder(status),
+      raw_data: raw,
+      last_synced_at: new Date().toISOString(),
+    },
+    items: items.map((item, index) => normalizeLineItem(soNumber, item, index)),
+  }
+}
+
+export async function upsertSalesOrdersToCache(
+  supabase: SupabaseClient,
+  rawOrders: FBRawSalesOrder[]
+): Promise<{ orders: number; items: number; skipped: number }> {
+  const normalized = rawOrders
+    .map(normalizeSalesOrder)
+    .filter((order): order is NormalizedSalesOrder => Boolean(order))
+
+  if (normalized.length === 0) {
+    return { orders: 0, items: 0, skipped: rawOrders.length }
+  }
+
+  const { error: orderError } = await supabase
+    .from('fb_sales_orders')
+    .upsert(
+      normalized.map((order) => order.header),
+      { onConflict: 'so_number' }
+    )
+
+  if (orderError) throw new Error(`Supabase upsert error on fb_sales_orders: ${orderError.message}`)
+
+  const items = normalized.flatMap((order) => order.items)
+  if (items.length > 0) {
+    const { error: itemError } = await supabase
+      .from('fb_sales_order_items')
+      .upsert(items, { onConflict: 'sales_order_number,line_number' })
+
+    if (itemError) {
+      throw new Error(`Supabase upsert error on fb_sales_order_items: ${itemError.message}`)
+    }
+  }
+
+  return {
+    orders: normalized.length,
+    items: items.length,
+    skipped: rawOrders.length - normalized.length,
+  }
+}

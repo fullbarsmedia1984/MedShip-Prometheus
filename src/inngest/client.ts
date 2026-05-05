@@ -55,6 +55,14 @@ export type InngestEvents = {
     }
   }
 
+  // P7: Fishbowl Sales Orders -> Prometheus canonical quote/order cache
+  'fishbowl/sales-orders.sync': {
+    data: {
+      fullSync?: boolean
+      triggeredBy?: string
+    }
+  }
+
   // Manual retry trigger
   'sync/retry': {
     data: {
