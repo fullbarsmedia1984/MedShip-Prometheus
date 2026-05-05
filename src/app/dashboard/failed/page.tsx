@@ -15,7 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { AlertTriangle, RefreshCw, X, CheckCircle2, RotateCcw } from 'lucide-react'
-import { getFailedSyncs } from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import { AUTOMATION_INFO, type AutomationType } from '@/types'
 import type { SyncEvent } from '@/types'
 import { toast } from 'sonner'
@@ -50,6 +50,10 @@ function truncate(text: string, maxLen: number): string {
 // Page
 // ---------------------------------------------------------------------------
 
+type FailedDashboardResponse = {
+  failedSyncs: SyncEvent[]
+}
+
 export default function FailedPage() {
   const [failedEvents, setFailedEvents] = useState<SyncEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -57,8 +61,8 @@ export default function FailedPage() {
 
   const fetchFailed = useCallback(async () => {
     try {
-      const data = await getFailedSyncs()
-      setFailedEvents(data)
+      const data = await fetchJson<FailedDashboardResponse>('/api/dashboard/failed')
+      setFailedEvents(data.failedSyncs)
     } finally {
       setLoading(false)
     }

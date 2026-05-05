@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { List, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
-import { getSyncEvents, getEventKpis } from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
+import type { PaginatedResult } from '@/lib/data'
 import type { SyncEvent } from '@/types'
 import { AUTOMATION_INFO, type AutomationType } from '@/types'
 import { useSearchParams } from 'next/navigation'
@@ -52,6 +53,11 @@ const PAGE_SIZE = 25
 const automationKeys = Object.keys(AUTOMATION_INFO) as AutomationType[]
 const statusOptions = ['pending', 'success', 'failed', 'retrying'] as const
 
+type EventsDashboardResponse = {
+  result: PaginatedResult<SyncEvent>
+  kpis: { total: number; successRate: number; avgDurationMs: number; failuresToday: number }
+}
+
 export default function EventsPage() {
   const searchParams = useSearchParams()
 
@@ -85,19 +91,17 @@ export default function EventsPage() {
   // Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const [eventsResult, kpisResult] = await Promise.all([
-        getSyncEvents({
-          automation: automationFilter !== 'all' ? automationFilter : undefined,
-          status: statusFilter !== 'all' ? statusFilter : undefined,
-          search: searchQuery || undefined,
-          page,
-          pageSize: PAGE_SIZE,
-        }),
-        getEventKpis(),
-      ])
-      setEvents(eventsResult.data)
-      setTotalItems(eventsResult.total)
-      setKpis(kpisResult)
+      const params = new URLSearchParams({
+        automation: automationFilter,
+        status: statusFilter,
+        search: searchQuery,
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      })
+      const data = await fetchJson<EventsDashboardResponse>(`/api/dashboard/events?${params}`)
+      setEvents(data.result.data)
+      setTotalItems(data.result.total)
+      setKpis(data.kpis)
       setLastRefreshed(new Date())
     } finally {
       setLoading(false)

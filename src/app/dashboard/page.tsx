@@ -31,24 +31,26 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import Link from 'next/link'
-import {
-  getRevenueMetrics,
-  getMonthlyRevenue,
-  getCategorySales,
-  getRecentOrders,
-  getInventoryAlerts,
-  getIntegrationStatus,
-  getSalesLeaderboard,
-  getSalesActivity,
-  getPipelineSnapshot,
-  getSalesKpis,
-  getCustomersWithLocations,
-  getRegionSummaries,
-  getProfileCallMetrics,
-} from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import type { RevenueMetrics, SalesKpis } from '@/lib/data'
 import type { MonthlyRevenue, CategorySales, Order, Product, IntegrationStatusData, SeedSalesRep, SeedSalesActivity, SeedPipelineStage, Customer, SeedRegionSummary } from '@/lib/seed-data'
 import type { AutomationType } from '@/types'
+
+type DashboardOverviewResponse = {
+  metrics: RevenueMetrics
+  salesKpis: SalesKpis
+  monthlyRevenue: MonthlyRevenue[]
+  categorySales: CategorySales[]
+  recentOrders: Order[]
+  inventoryAlerts: Product[]
+  integrations: IntegrationStatusData[]
+  leaderboard: SeedSalesRep[]
+  activities: SeedSalesActivity[]
+  pipeline: SeedPipelineStage[]
+  mapCustomers: Customer[]
+  regionSummaries: SeedRegionSummary[]
+  profileCallData: { totalMTD: number; totalLastMonth: number; conversionRate: number }
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + 'T00:00:00')
@@ -78,49 +80,21 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [
-          metricsData,
-          salesKpisData,
-          revenueData,
-          categoryData,
-          ordersData,
-          alertsData,
-          integrationsData,
-          leaderboardData,
-          activitiesData,
-          pipelineData,
-          customersData,
-          regionsData,
-          profileCallsData,
-        ] = await Promise.all([
-          getRevenueMetrics(),
-          getSalesKpis(),
-          getMonthlyRevenue(),
-          getCategorySales(),
-          getRecentOrders(10),
-          getInventoryAlerts(5),
-          getIntegrationStatus(),
-          getSalesLeaderboard(),
-          getSalesActivity(10),
-          getPipelineSnapshot(),
-          getCustomersWithLocations(),
-          getRegionSummaries(),
-          getProfileCallMetrics(),
-        ])
+        const data = await fetchJson<DashboardOverviewResponse>('/api/dashboard/overview')
 
-        setMetrics(metricsData)
-        setSalesKpis(salesKpisData)
-        setMonthlyRevenue(revenueData)
-        setCategorySales(categoryData)
-        setRecentOrders(ordersData)
-        setInventoryAlerts(alertsData)
-        setIntegrations(integrationsData)
-        setLeaderboard(leaderboardData)
-        setActivities(activitiesData)
-        setPipeline(pipelineData)
-        setMapCustomers(customersData)
-        setRegionSummaries(regionsData)
-        setProfileCallData(profileCallsData)
+        setMetrics(data.metrics)
+        setSalesKpis(data.salesKpis)
+        setMonthlyRevenue(data.monthlyRevenue)
+        setCategorySales(data.categorySales)
+        setRecentOrders(data.recentOrders)
+        setInventoryAlerts(data.inventoryAlerts)
+        setIntegrations(data.integrations)
+        setLeaderboard(data.leaderboard)
+        setActivities(data.activities)
+        setPipeline(data.pipeline)
+        setMapCustomers(data.mapCustomers)
+        setRegionSummaries(data.regionSummaries)
+        setProfileCallData(data.profileCallData)
       } catch (error) {
         console.error('Failed to load dashboard data:', error)
       } finally {

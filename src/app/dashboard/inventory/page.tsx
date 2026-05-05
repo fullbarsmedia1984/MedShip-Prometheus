@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
 import { Package, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
-import { getInventory, getInventoryKpis } from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import type { PaginatedResult, InventoryKpis } from '@/lib/data'
 import type { Product } from '@/lib/seed-data'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,11 @@ interface Filters {
   stockStatus: string
   search: string
   page: number
+}
+
+type InventoryDashboardResponse = {
+  result: PaginatedResult<Product>
+  kpis: InventoryKpis
 }
 
 function getStockStatus(product: Product): { label: string; variant: 'success' | 'warning' | 'danger' } {
@@ -74,23 +79,20 @@ export default function InventoryPage() {
     return () => clearTimeout(timer)
   }, [filters.search])
 
-  // Load KPIs on mount
-  useEffect(() => {
-    getInventoryKpis().then(setKpis)
-  }, [])
-
   // Fetch inventory on filter change
   const fetchInventory = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await getInventory({
+      const params = new URLSearchParams({
         category: filters.category,
-        stockStatus: filters.stockStatus as 'all' | 'in_stock' | 'low' | 'out_of_stock',
+        stockStatus: filters.stockStatus,
         search: debouncedSearch,
-        page: filters.page,
-        pageSize: 20,
+        page: String(filters.page),
+        pageSize: '20',
       })
-      setResult(data)
+      const data = await fetchJson<InventoryDashboardResponse>(`/api/dashboard/inventory?${params}`)
+      setResult(data.result)
+      setKpis(data.kpis)
     } finally {
       setLoading(false)
     }

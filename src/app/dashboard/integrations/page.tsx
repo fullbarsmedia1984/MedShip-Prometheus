@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Play, Eye, Clock, Zap, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
-import { getIntegrationStatus, getConnectionConfigs } from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import type { IntegrationStatusData } from '@/lib/seed-data'
 import type { ConnectionConfig } from '@/types'
 import { toast } from 'sonner'
@@ -55,6 +55,11 @@ const SCHEDULE_ICONS: Record<string, React.ElementType> = {
 // Page
 // ---------------------------------------------------------------------------
 
+type IntegrationsDashboardResponse = {
+  integrations: IntegrationStatusData[]
+  connections: ConnectionConfig[]
+}
+
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
   const [connections, setConnections] = useState<ConnectionConfig[]>([])
@@ -64,15 +69,12 @@ export default function IntegrationsPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [intData, connData] = await Promise.all([
-          getIntegrationStatus(),
-          getConnectionConfigs(),
-        ])
-        setIntegrations(intData)
-        setConnections(connData)
+        const data = await fetchJson<IntegrationsDashboardResponse>('/api/dashboard/integrations')
+        setIntegrations(data.integrations)
+        setConnections(data.connections)
 
         const enabled: Record<string, boolean> = {}
-        for (const i of intData) {
+        for (const i of data.integrations) {
           enabled[i.automation] = i.isActive
         }
         setEnabledMap(enabled)

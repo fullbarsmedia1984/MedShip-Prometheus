@@ -4,6 +4,8 @@
 // fixture data, but user-facing dashboard modules must not fall back to it.
 // =============================================================================
 
+import 'server-only'
+
 import type {
   Product,
   Customer,

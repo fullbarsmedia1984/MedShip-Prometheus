@@ -34,11 +34,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import {
-  getCustomersWithLocations,
-  getRegionSummaries,
-  getClientMapStats,
-} from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import type { ClientMapStats } from '@/lib/data'
 import type { Customer, SeedRegionSummary } from '@/lib/seed-data'
 
@@ -52,6 +48,12 @@ const REP_COLORS: Record<string, string> = {
 
 type ColorMode = 'status' | 'rep'
 type RegionSortKey = 'region' | 'customerCount' | 'activeCustomers' | 'totalRevenue' | 'avgOrderValue' | 'growth'
+
+type TerritoryDashboardResponse = {
+  customers: Customer[]
+  regions: SeedRegionSummary[]
+  stats: ClientMapStats
+}
 
 function RepDonutTooltip({ active, payload }: {
   active?: boolean
@@ -85,14 +87,10 @@ export default function TerritoryPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [customersData, regionsData, statsData] = await Promise.all([
-          getCustomersWithLocations(),
-          getRegionSummaries(),
-          getClientMapStats(),
-        ])
-        setCustomers(customersData)
-        setRegions(regionsData)
-        setStats(statsData)
+        const data = await fetchJson<TerritoryDashboardResponse>('/api/dashboard/territory')
+        setCustomers(data.customers)
+        setRegions(data.regions)
+        setStats(data.stats)
       } catch (error) {
         console.error('Failed to load territory data:', error)
       } finally {

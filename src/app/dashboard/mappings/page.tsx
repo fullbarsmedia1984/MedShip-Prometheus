@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Map, Plus, Save, Trash2, Edit3 } from 'lucide-react'
-import { getFieldMappings } from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import { AUTOMATION_INFO } from '@/types'
 import type { FieldMapping, AutomationType } from '@/types'
 import { toast } from 'sonner'
@@ -28,6 +28,10 @@ const MAPPING_AUTOMATIONS: AutomationType[] = [
   'P4_SHIPMENT_TRACKING',
 ]
 
+type MappingsDashboardResponse = {
+  mappings: FieldMapping[]
+}
+
 export default function MappingsPage() {
   const [loading, setLoading] = useState(true)
   const [mappings, setMappings] = useState<FieldMapping[]>([])
@@ -37,8 +41,8 @@ export default function MappingsPage() {
 
   const fetchMappings = useCallback(async () => {
     try {
-      const data = await getFieldMappings()
-      setMappings(data)
+      const data = await fetchJson<MappingsDashboardResponse>('/api/dashboard/mappings')
+      setMappings(data.mappings)
     } catch (error) {
       console.error('Failed to fetch mappings:', error)
     } finally {

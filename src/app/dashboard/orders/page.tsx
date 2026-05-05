@@ -5,11 +5,11 @@ import { Header } from '@/components/layout/Header'
 import { DataTable } from '@/components/dashboard/DataTable'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { KpiCard } from '@/components/dashboard/KpiCard'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ShoppingCart, DollarSign, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react'
-import { getOrders, getSalesReps } from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import type { Order, SalesRep } from '@/lib/seed-data'
 import type { PaginatedResult } from '@/lib/data'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,11 @@ interface Filters {
   salesRepId: string
   search: string
   page: number
+}
+
+type OrdersDashboardResponse = {
+  result: PaginatedResult<Order>
+  salesReps: SalesRep[]
 }
 
 function formatCurrency(value: number): string {
@@ -51,23 +56,20 @@ export default function OrdersPage() {
     return () => clearTimeout(timer)
   }, [filters.search])
 
-  // Load sales reps on mount
-  useEffect(() => {
-    getSalesReps().then(setSalesReps)
-  }, [])
-
   // Fetch orders on filter change
   const fetchOrders = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await getOrders({
+      const params = new URLSearchParams({
         status: filters.status,
         salesRepId: filters.salesRepId,
         search: debouncedSearch,
-        page: filters.page,
-        pageSize: 20,
+        page: String(filters.page),
+        pageSize: '20',
       })
-      setResult(data)
+      const data = await fetchJson<OrdersDashboardResponse>(`/api/dashboard/orders?${params}`)
+      setResult(data.result)
+      setSalesReps(data.salesReps)
     } finally {
       setLoading(false)
     }

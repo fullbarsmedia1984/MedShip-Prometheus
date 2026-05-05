@@ -30,18 +30,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  getSalesKpis,
-  getEnhancedSalesReps,
-  getMonthlyRepRevenue,
-  getPipelineByRep,
-  getQuotes,
-  getProfileCalls,
-  getProfileCallMetrics,
-  getWeeklyCallVolume,
-  getCallOutcomeBreakdown,
-  getTopCompetitorKeywords,
-} from '@/lib/data'
+import { fetchJson } from '@/lib/client-api'
 import type { SalesKpis, ProfileCallMetricsResult, KeywordResult } from '@/lib/data'
 import type { SeedSalesRep, SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
@@ -51,6 +40,19 @@ import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeader
 import { CompetitorKeywordCard } from '@/components/dashboard/CompetitorKeywordCard'
 
 type SortKey = 'revenueMTD' | 'revenueQTD' | 'revenueYTD' | 'dealsClosed' | 'dealsLost' | 'winRate' | 'quotesSent' | 'avgDealSize' | 'avgDaysToClose' | 'pipelineValue'
+
+type SalesDashboardResponse = {
+  kpis: SalesKpis
+  reps: SeedSalesRep[]
+  monthlyRevenue: SeedMonthlyRepRevenue[]
+  pipelineByRep: SeedPipelineByRep[]
+  quotes: SeedQuote[]
+  profileCalls: SeedProfileCall[]
+  weeklyVolume: SeedWeeklyCallVolume[]
+  outcomeBreakdown: Array<{ outcome: string; count: number; percentage: number; color: string }>
+  profileMetrics: ProfileCallMetricsResult
+  competitorKeywords: KeywordResult[]
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + 'T00:00:00')
@@ -76,28 +78,17 @@ export default function SalesPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [kpisData, repsData, revenueData, pipelineData, quotesData, callsData, volumeData, outcomesData, metricsData, keywordsData] = await Promise.all([
-          getSalesKpis(),
-          getEnhancedSalesReps(),
-          getMonthlyRepRevenue(),
-          getPipelineByRep(),
-          getQuotes({ pageSize: 40 }),
-          getProfileCalls({ pageSize: 50 }),
-          getWeeklyCallVolume(),
-          getCallOutcomeBreakdown(),
-          getProfileCallMetrics(),
-          getTopCompetitorKeywords(10),
-        ])
-        setKpis(kpisData)
-        setReps(repsData)
-        setMonthlyRevenue(revenueData)
-        setPipelineByRep(pipelineData)
-        setQuotes(quotesData.data)
-        setProfileCalls(callsData.data)
-        setWeeklyVolume(volumeData)
-        setOutcomeBreakdown(outcomesData)
-        setProfileMetrics(metricsData)
-        setCompetitorKeywords(keywordsData)
+        const data = await fetchJson<SalesDashboardResponse>('/api/dashboard/sales')
+        setKpis(data.kpis)
+        setReps(data.reps)
+        setMonthlyRevenue(data.monthlyRevenue)
+        setPipelineByRep(data.pipelineByRep)
+        setQuotes(data.quotes)
+        setProfileCalls(data.profileCalls)
+        setWeeklyVolume(data.weeklyVolume)
+        setOutcomeBreakdown(data.outcomeBreakdown)
+        setProfileMetrics(data.profileMetrics)
+        setCompetitorKeywords(data.competitorKeywords)
       } catch (error) {
         console.error('Failed to load sales data:', error)
       } finally {
