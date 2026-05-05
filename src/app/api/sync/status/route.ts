@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const scheduleRows = automation
+      ? (schedules || []).filter((schedule) => schedule.automation === automation)
+      : (schedules || [])
+
     // Get recent sync events
     let eventsQuery = supabase
       .from('sync_events')
@@ -50,11 +54,54 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: eventsError.message }, { status: 500 })
     }
 
+    let latestErrorQuery = supabase
+      .from('sync_events')
+      .select('automation,status,error_message,created_at,completed_at')
+      .not('error_message', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    if (automation) {
+      latestErrorQuery = latestErrorQuery.eq('automation', automation)
+    } else if (scheduleRows.length > 0) {
+      latestErrorQuery = latestErrorQuery.in(
+        'automation',
+        scheduleRows.map((schedule) => schedule.automation)
+      )
+    }
+
+    const { data: latestErrorEvents, error: latestErrorError } =
+      await latestErrorQuery
+
+    if (latestErrorError) {
+      return NextResponse.json(
+        { error: latestErrorError.message },
+        { status: 500 }
+      )
+    }
+
+    const latestErrorByAutomation = new Map<
+      string,
+      {
+        status: string
+        error_message: string | null
+        created_at: string
+        completed_at: string | null
+      }
+    >()
+
+    for (const event of latestErrorEvents || []) {
+      if (!latestErrorByAutomation.has(event.automation)) {
+        latestErrorByAutomation.set(event.automation, event)
+      }
+    }
+
     // Calculate stats per automation
-    const stats = (schedules || []).map((schedule) => {
+    const stats = scheduleRows.map((schedule) => {
       const automationEvents = (events || []).filter(
         (e) => e.automation === schedule.automation
       )
+      const latestError = latestErrorByAutomation.get(schedule.automation)
       const last24h = automationEvents.filter(
         (e) => new Date(e.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
       )
@@ -74,6 +121,14 @@ export async function GET(request: NextRequest) {
         lastRunDurationMs: schedule.last_run_duration_ms,
         nextRunAt: schedule.next_run_at,
         recordsProcessed: schedule.records_processed,
+        latestError: latestError
+          ? {
+              message: latestError.error_message,
+              status: latestError.status,
+              createdAt: latestError.created_at,
+              completedAt: latestError.completed_at,
+            }
+          : null,
         stats24h: {
           success: successCount,
           failed: failedCount,

@@ -42,10 +42,15 @@ type PricebookEntry = {
   }
 }
 
-type MirrorResult = {
+export type MirrorResult = {
+  scanned: number
+  eligible: number
+  lineItems: number
   quotes: number
   orders: number
   skipped: number
+  skippedByReason: Record<string, number>
+  skippedSamples: Array<{ soNumber: string; reason: string }>
   errors: Array<{ soNumber: string; error: string }>
 }
 
@@ -327,7 +332,17 @@ export async function mirrorCanonicalSalesOrdersToSalesforce(
   client: SalesforceClient,
   supabase: SupabaseClient
 ): Promise<MirrorResult> {
-  const result: MirrorResult = { quotes: 0, orders: 0, skipped: 0, errors: [] }
+  const result: MirrorResult = {
+    scanned: 0,
+    eligible: 0,
+    lineItems: 0,
+    quotes: 0,
+    orders: 0,
+    skipped: 0,
+    skippedByReason: {},
+    skippedSamples: [],
+    errors: [],
+  }
 
   const { data: headers, error: headersError } = await supabase
     .from('fb_sales_orders')
@@ -338,6 +353,7 @@ export async function mirrorCanonicalSalesOrdersToSalesforce(
 
   if (headersError) throw new Error(`Could not read fb_sales_orders: ${headersError.message}`)
   if (!headers || headers.length === 0) return result
+  result.scanned = headers.length
 
   const soNumbers = headers.map((header) => header.so_number)
   const { data: items, error: itemsError } = await supabase
@@ -346,6 +362,7 @@ export async function mirrorCanonicalSalesOrdersToSalesforce(
     .in('sales_order_number', soNumbers)
 
   if (itemsError) throw new Error(`Could not read fb_sales_order_items: ${itemsError.message}`)
+  result.lineItems = items?.length ?? 0
 
   const itemsByOrder = new Map<string, CanonicalItem[]>()
   for (const item of (items ?? []) as CanonicalItem[]) {
@@ -361,8 +378,17 @@ export async function mirrorCanonicalSalesOrdersToSalesforce(
       try {
         if (!header.sf_opportunity_id) {
           result.skipped++
+          result.skippedByReason.missingOpportunity =
+            (result.skippedByReason.missingOpportunity ?? 0) + 1
+          if (result.skippedSamples.length < 10) {
+            result.skippedSamples.push({
+              soNumber: header.so_number,
+              reason: 'Missing sf_opportunity_id; needs Opportunity/SO link before Salesforce mirror.',
+            })
+          }
           continue
         }
+        result.eligible++
 
         const documentItems = itemsByOrder.get(header.so_number) ?? []
         if (header.canonical_state === 'quote') {
@@ -373,6 +399,14 @@ export async function mirrorCanonicalSalesOrdersToSalesforce(
           result.orders++
         } else {
           result.skipped++
+          result.skippedByReason.unsupportedState =
+            (result.skippedByReason.unsupportedState ?? 0) + 1
+          if (result.skippedSamples.length < 10) {
+            result.skippedSamples.push({
+              soNumber: header.so_number,
+              reason: `Unsupported canonical_state: ${header.canonical_state}`,
+            })
+          }
         }
       } catch (error) {
         result.errors.push({

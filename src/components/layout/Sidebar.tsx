@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Package,
   BarChart3,
+  FileText,
   MapPin,
   RefreshCw,
   List,
@@ -23,6 +24,7 @@ import {
 const mainNav = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
+  { name: 'Quotes', href: '/dashboard/quotes', icon: FileText },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
   { name: 'Territory', href: '/dashboard/territory', icon: MapPin },

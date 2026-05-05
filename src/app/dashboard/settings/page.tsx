@@ -20,6 +20,8 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Clock,
+  Play,
   Zap,
 } from 'lucide-react'
 import type { ConnectionConfig } from '@/types'
@@ -37,6 +39,39 @@ interface SyncTableState {
   record_count: number
   last_error: string | null
   last_sync_duration_ms: number | null
+}
+
+type ManualAutomation = 'P2_INVENTORY_SYNC' | 'P7_FB_SO_SYNC'
+
+interface SyncAutomationStatus {
+  automation: string
+  cronExpression: string | null
+  isActive: boolean
+  lastRunAt: string | null
+  lastRunStatus: string | null
+  lastRunDurationMs: number | null
+  nextRunAt: string | null
+  recordsProcessed: number | null
+  latestError: {
+    message: string | null
+    status: string
+    createdAt: string
+    completedAt: string | null
+  } | null
+  stats24h: {
+    success: number
+    failed: number
+    pending: number
+    total: number
+    successRate: number
+  }
+}
+
+interface SyncStatusResponse {
+  success: boolean
+  data?: {
+    automations?: SyncAutomationStatus[]
+  }
 }
 
 interface SystemConfig {
@@ -112,6 +147,23 @@ const TABLE_LABELS: Record<string, string> = {
   sf_profile_calls: 'Profile Calls',
 }
 
+const FISHBOWL_SYNC_CONTROLS: {
+  automation: ManualAutomation
+  label: string
+  description: string
+}[] = [
+  {
+    automation: 'P2_INVENTORY_SYNC',
+    label: 'Fishbowl Inventory',
+    description: 'Inventory quantities to Salesforce products',
+  },
+  {
+    automation: 'P7_FB_SO_SYNC',
+    label: 'Fishbowl Sales Orders',
+    description: 'Sales orders into canonical Prometheus cache',
+  },
+]
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -126,6 +178,33 @@ function relativeTime(isoStr: string | null): string {
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.floor(hrs / 24)
   return `${days}d ago`
+}
+
+function formatDuration(ms: number | null | undefined): string {
+  if (!ms) return '-'
+  if (ms < 1000) return `${ms} ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} sec`
+  const mins = Math.floor(ms / 60_000)
+  const secs = Math.round((ms % 60_000) / 1000)
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`
+}
+
+function formatSchedule(cronExpression: string | null | undefined): string {
+  if (!cronExpression) return 'Manual'
+
+  const knownSchedules: Record<string, string> = {
+    '*/15 * * * *': 'Every 15 min',
+    '*/5 * * * *': 'Every 5 min',
+    '0 * * * *': 'Hourly',
+    '0 0 * * *': 'Daily',
+  }
+
+  return knownSchedules[cronExpression] ?? cronExpression
+}
+
+function displayStatus(status: string | null | undefined): string {
+  if (!status) return 'Pending'
+  return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +227,8 @@ export default function SettingsPage() {
   const [syncState, setSyncState] = useState<SyncTableState[]>([])
   const [syncing, setSyncing] = useState(false)
   const [syncExpanded, setSyncExpanded] = useState(false)
+  const [automationStatus, setAutomationStatus] = useState<SyncAutomationStatus[]>([])
+  const [triggeringAutomation, setTriggeringAutomation] = useState<ManualAutomation | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ---------------------------------------------------------------------------
@@ -205,11 +286,24 @@ export default function SettingsPage() {
     }
   }, [])
 
+  const fetchAutomationStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sync/status')
+      if (res.ok) {
+        const data: SyncStatusResponse = await res.json()
+        setAutomationStatus(data.data?.automations ?? [])
+      }
+    } catch {
+      // Ignore - sync schedule tables may not exist yet
+    }
+  }, [])
+
   useEffect(() => {
     fetchConnections()
     fetchDataSource()
     fetchSyncState()
-  }, [fetchConnections, fetchDataSource, fetchSyncState])
+    fetchAutomationStatus()
+  }, [fetchConnections, fetchDataSource, fetchSyncState, fetchAutomationStatus])
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -419,17 +513,65 @@ export default function SettingsPage() {
     }
   }
 
+  const triggerAutomationSync = async (automation: ManualAutomation) => {
+    const control = FISHBOWL_SYNC_CONTROLS.find((item) => item.automation === automation)
+    setTriggeringAutomation(automation)
+
+    try {
+      const res = await fetch('/api/sync/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          automation,
+          params: { fullSync: true },
+        }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to trigger sync')
+      }
+
+      toast.success(`${control?.label ?? automation} run requested`, {
+        description: data.eventId ? `Event ${data.eventId}` : 'Sync has been queued.',
+      })
+      await fetchAutomationStatus()
+      setTimeout(fetchAutomationStatus, 3000)
+    } catch (error) {
+      toast.error(`Failed to run ${control?.label ?? automation}`, {
+        description: error instanceof Error ? error.message : 'Could not reach the sync trigger API',
+      })
+    } finally {
+      setTriggeringAutomation(null)
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Derived state
   // ---------------------------------------------------------------------------
 
   const totalRecordsCached = syncState.reduce((s, t) => s + (t.record_count ?? 0), 0)
+  const totalSalesforceDurationMs = syncState.reduce(
+    (s, t) => s + (t.last_sync_duration_ms ?? 0),
+    0
+  )
   const lastFullSync = syncState
     .map((s) => s.last_full_sync_at)
     .filter(Boolean)
     .sort()
     .pop() ?? null
   const hasErrors = syncState.some((s) => s.last_error)
+  const latestSalesforceError = syncState.find((s) => s.last_error)?.last_error ?? null
+  const salesforceSyncStatus = syncing
+    ? 'Running'
+    : hasErrors
+      ? 'Failed'
+      : lastFullSync
+        ? 'Success'
+        : 'Pending'
+  const automationStatusById = new Map(
+    automationStatus.map((status) => [status.automation, status])
+  )
   const isLive = dataSourceMode === 'live'
   const isCacheEmpty = totalRecordsCached === 0
 
@@ -515,7 +657,7 @@ export default function SettingsPage() {
                       <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-50/50 p-3 dark:bg-red-950/20">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
                         <p className="text-sm text-red-600 dark:text-red-400">
-                          Live mode active but no data has been synced. Click <strong>Sync Now</strong> to pull from Salesforce.
+                          Live mode active but no data has been synced. Click <strong>Start Sync</strong> to pull from Salesforce.
                         </p>
                       </div>
                     )}
@@ -524,15 +666,36 @@ export default function SettingsPage() {
                   {/* Right: Sync Status */}
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-card-foreground">Salesforce Sync Status</p>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>Last sync: <strong className="text-card-foreground">{relativeTime(lastFullSync)}</strong></span>
-                        <span className="text-border">|</span>
-                        <span><strong className="text-card-foreground">{totalRecordsCached.toLocaleString()}</strong> records</span>
+                      <div>
+                        <p className="text-sm font-medium text-card-foreground">Salesforce Cache Sync</p>
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Clock className="h-3.5 w-3.5" />
+                          Manual full cache refresh
+                        </p>
+                      </div>
+                      <StatusBadge status={salesforceSyncStatus} variant="dot" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                      <div>
+                        <span className="text-muted-foreground">Last run</span>
+                        <p className="font-medium">{relativeTime(lastFullSync)}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Duration</span>
+                        <p className="font-medium">{formatDuration(totalSalesforceDurationMs)}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Records</span>
+                        <p className="font-medium">{totalRecordsCached.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Tables</span>
+                        <p className="font-medium">{syncState.length.toLocaleString()}</p>
                       </div>
                     </div>
 
-                    {/* Sync Now button */}
+                    {/* Start Sync button */}
                     <Button
                       onClick={triggerSync}
                       disabled={syncing}
@@ -545,14 +708,14 @@ export default function SettingsPage() {
                       size="lg"
                     >
                       <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
-                      {syncing ? 'Syncing...' : 'Sync Now'}
+                      {syncing ? 'Syncing...' : 'Start Sync'}
                     </Button>
 
                     {/* Error warning */}
-                    {hasErrors && !syncing && (
+                    {latestSalesforceError && !syncing && (
                       <div className="flex items-center gap-2 text-xs text-medship-danger">
                         <AlertTriangle className="h-3.5 w-3.5" />
-                        <span>Some tables had errors during last sync</span>
+                        <span className="line-clamp-2">Latest error: {latestSalesforceError}</span>
                       </div>
                     )}
 
@@ -613,6 +776,102 @@ export default function SettingsPage() {
                         )}
                       </div>
                     )}
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-lg border border-border/50">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/30 px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-card-foreground">Fishbowl Sync Schedules</p>
+                      <p className="text-xs text-muted-foreground">
+                        Manual controls for scheduled Fishbowl automations
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchAutomationStatus}
+                      className="gap-1.5 text-xs"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Refresh
+                    </Button>
+                  </div>
+
+                  <div className="divide-y divide-border/30">
+                    {FISHBOWL_SYNC_CONTROLS.map((control) => {
+                      const status = automationStatusById.get(control.automation)
+                      const isTriggering = triggeringAutomation === control.automation
+
+                      return (
+                        <div
+                          key={control.automation}
+                          className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,2fr)_auto]"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium text-card-foreground">{control.label}</p>
+                              <StatusBadge
+                                status={isTriggering ? 'Running' : displayStatus(status?.lastRunStatus)}
+                                variant="dot"
+                              />
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">{control.description}</p>
+                            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5" />
+                              {formatSchedule(status?.cronExpression)}
+                              {status?.isActive === false && ' (disabled)'}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                            <div>
+                              <span className="text-muted-foreground">Last run</span>
+                              <p className="font-medium">{relativeTime(status?.lastRunAt ?? null)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Duration</span>
+                              <p className="font-medium">{formatDuration(status?.lastRunDurationMs)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Records</span>
+                              <p className="font-medium">
+                                {(status?.recordsProcessed ?? 0).toLocaleString()}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">24h success</span>
+                              <p className="font-medium">{status?.stats24h.successRate ?? 0}%</p>
+                            </div>
+                            {status?.latestError?.message && (
+                              <div className="col-span-2 flex items-start gap-1.5 text-medship-danger sm:col-span-4">
+                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <span className="line-clamp-2">
+                                  Latest error: {status.latestError.message}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-start lg:justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => triggerAutomationSync(control.automation)}
+                              disabled={isTriggering}
+                              className="gap-1.5"
+                            >
+                              {isTriggering ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Play className="h-3.5 w-3.5" />
+                              )}
+                              Run Now
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               </CardContent>
