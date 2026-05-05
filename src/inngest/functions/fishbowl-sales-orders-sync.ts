@@ -1,8 +1,10 @@
 import { inngest } from '../client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createFishbowlClient } from '@/lib/fishbowl/client'
+import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getAllSalesOrders } from '@/lib/fishbowl/sales-orders'
 import { upsertSalesOrdersToCache } from '@/lib/fishbowl/sales-order-cache'
+import { mirrorCanonicalSalesOrdersToSalesforce } from '@/lib/salesforce/quote-order-mirror'
 import { logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
 import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
@@ -21,15 +23,34 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
   )
 
   const rawOrders = await getAllSalesOrders(fbClient)
-  const result = await upsertSalesOrdersToCache(createAdminClient(), rawOrders)
+  const supabase = createAdminClient()
+  const result = await upsertSalesOrdersToCache(supabase, rawOrders)
+  const sfClient = createSalesforceClient()
+  let salesforceMirror = null
+
+  await runWithAuthCircuitBreaker(
+    {
+      system: 'salesforce',
+      automation: 'P7_FB_SO_SYNC',
+      sourceSystem: 'prometheus',
+      targetSystem: 'salesforce',
+    },
+    () => sfClient.connect()
+  )
+
+  try {
+    salesforceMirror = await mirrorCanonicalSalesOrdersToSalesforce(sfClient, supabase)
+  } finally {
+    await sfClient.disconnect()
+  }
 
   await logSyncEvent({
     automation: 'P7_FB_SO_SYNC',
     sourceSystem: 'fishbowl',
-    targetSystem: 'prometheus',
+    targetSystem: 'salesforce',
     status: 'success',
     payload: { triggeredBy, totalRawOrders: rawOrders.length },
-    response: result,
+    response: { cache: result, salesforceMirror },
   })
 
   await updateSyncSchedule('P7_FB_SO_SYNC', {
