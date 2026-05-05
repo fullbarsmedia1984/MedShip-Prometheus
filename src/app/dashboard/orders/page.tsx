@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { DataTable } from '@/components/dashboard/DataTable'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
@@ -100,7 +101,13 @@ export default function OrdersPage() {
           ) : (
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           )}
-          <span className="font-mono text-sm">{value}</span>
+          <Link
+            href={`/dashboard/orders/${encodeURIComponent(row.id)}`}
+            onClick={(event) => event.stopPropagation()}
+            className="font-mono text-sm text-medship-primary hover:underline"
+          >
+            {value}
+          </Link>
         </div>
       ),
     },

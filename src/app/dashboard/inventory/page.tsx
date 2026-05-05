@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { DataTable } from '@/components/dashboard/DataTable'
@@ -111,7 +112,14 @@ export default function InventoryPage() {
     {
       key: 'sku',
       label: 'SKU',
-      render: (value: string) => <span className="font-mono text-sm">{value}</span>,
+      render: (value: string, row: Product) => (
+        <Link
+          href={`/dashboard/inventory/${encodeURIComponent(row.id)}`}
+          className="font-mono text-sm text-medship-primary hover:underline"
+        >
+          {value}
+        </Link>
+      ),
     },
     {
       key: 'name',

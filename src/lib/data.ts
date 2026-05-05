@@ -769,35 +769,35 @@ function applyOrderFilters(items: Order[], filters: OrderFilters): Order[] {
 
 async function getLiveOrders(): Promise<Order[]> {
   const supabase = createAdminClient()
-  const { data: opportunities, error } = await supabase
-    .from('sf_opportunities')
-    .select('sf_id, name, account_sf_id, owner_sf_id, stage_name, amount, close_date, is_closed, is_won, fishbowl_so_number, fulfillment_status, fulfillment_error, created_date, last_modified_date')
-    .order('close_date', { ascending: false })
-    .limit(1000)
+  const opportunityRows = await fetchAllRows<SfOpportunityRow>(() =>
+    supabase
+      .from('sf_opportunities')
+      .select('sf_id, name, account_sf_id, owner_sf_id, stage_name, amount, close_date, is_closed, is_won, fishbowl_so_number, fulfillment_status, fulfillment_error, created_date, last_modified_date')
+      .order('close_date', { ascending: false }) as unknown as SupabaseRangeQuery<SfOpportunityRow>
+  )
 
-  if (error) throw error
-  if (!opportunities || opportunities.length === 0) return []
+  if (opportunityRows.length === 0) return []
 
-  const opportunityRows = opportunities as SfOpportunityRow[]
   const opportunityIds = new Set(opportunityRows.map((row) => row.sf_id))
 
-  const [{ data: lineItems, error: lineItemsError }, lookups] = await Promise.all([
-    supabase
-      .from('sf_opportunity_line_items')
-      .select('sf_id, opportunity_sf_id, product_sf_id, product_code, product_name, quantity, unit_price, total_price')
-      .limit(5000),
+  const [lineItems, lookups] = await Promise.all([
+    fetchAllRows<SfOpportunityLineItemRow>(() =>
+      supabase
+        .from('sf_opportunity_line_items')
+        .select('sf_id, opportunity_sf_id, product_sf_id, product_code, product_name, quantity, unit_price, total_price')
+        .order('opportunity_sf_id') as unknown as SupabaseRangeQuery<SfOpportunityLineItemRow>
+    ).catch((error) => {
+      console.warn('Live opportunity line item query failed; orders will use opportunity totals only:', error)
+      return []
+    }),
     getLookupMaps(
       opportunityRows.map((row) => row.account_sf_id ?? ''),
       opportunityRows.map((row) => row.owner_sf_id ?? '')
     ),
   ])
 
-  if (lineItemsError) {
-    console.warn('Live opportunity line item query failed; orders will use opportunity totals only:', lineItemsError)
-  }
-
   const itemsByOpportunity = new Map<string, OrderItem[]>()
-  for (const item of ((lineItems ?? []) as SfOpportunityLineItemRow[])) {
+  for (const item of lineItems) {
     if (!opportunityIds.has(item.opportunity_sf_id)) continue
 
     const items = itemsByOpportunity.get(item.opportunity_sf_id) ?? []
@@ -899,6 +899,16 @@ export async function getOrders(filters: OrderFilters = {}): Promise<PaginatedRe
   const orders = await getLiveOrders()
   const items = applyOrderFilters(orders, filters)
   return paginate(items, filters.page, filters.pageSize)
+}
+
+export async function getOrderById(id: string): Promise<Order | null> {
+  void await getDataSourceMode()
+  const decodedId = decodeURIComponent(id)
+  const orders = await getLiveOrders()
+
+  return orders.find(
+    (order) => order.id === decodedId || order.orderNumber === decodedId
+  ) ?? null
 }
 
 export async function getRecentOrders(limit = 10): Promise<Order[]> {
