@@ -24,6 +24,8 @@ describe('FishbowlClient', () => {
     process.env.FISHBOWL_API_URL = MOCK_BASE_URL;
     process.env.FISHBOWL_USERNAME = 'testuser';
     process.env.FISHBOWL_PASSWORD = 'testpass';
+    delete process.env.FISHBOWL_CF_ACCESS_CLIENT_ID;
+    delete process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET;
     vi.restoreAllMocks();
   });
 
@@ -47,6 +49,42 @@ describe('FishbowlClient', () => {
     const client = createFishbowlClient();
     expect(client).toBeDefined();
     expect(client.isAuthenticated()).toBe(false);
+  });
+
+  it('allows Cloudflare Access over HTTPS without an explicit port', async () => {
+    process.env.FISHBOWL_API_URL = 'https://fishbowl.medshipment.com';
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_ID = 'client-id';
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET = 'client-secret';
+
+    const { createFishbowlClient } = await import('../client');
+    expect(() => createFishbowlClient()).not.toThrow();
+  });
+
+  it('rejects Cloudflare Access URLs with HTTP and an explicit port', async () => {
+    process.env.FISHBOWL_API_URL = 'http://fishbowl.medshipment.com:2456';
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_ID = 'client-id';
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET = 'client-secret';
+
+    const { createFishbowlClient } = await import('../client');
+    expect(() => createFishbowlClient()).toThrow('Cloudflare Access');
+  });
+
+  it('rejects Cloudflare Access URLs with an explicit default HTTPS port', async () => {
+    process.env.FISHBOWL_API_URL = 'https://fishbowl.medshipment.com:443';
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_ID = 'client-id';
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET = 'client-secret';
+
+    const { createFishbowlClient } = await import('../client');
+    expect(() => createFishbowlClient()).toThrow('explicit port');
+  });
+
+  it('allows direct host and port URLs when Cloudflare Access is not configured', async () => {
+    process.env.FISHBOWL_API_URL = 'http://192.168.1.100:28192';
+    delete process.env.FISHBOWL_CF_ACCESS_CLIENT_ID;
+    delete process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET;
+
+    const { createFishbowlClient } = await import('../client');
+    expect(() => createFishbowlClient()).not.toThrow();
   });
 
   // -------------------------------------------------------------------------
@@ -174,6 +212,8 @@ describe('getAllInventory pagination', () => {
     process.env.FISHBOWL_API_URL = MOCK_BASE_URL;
     process.env.FISHBOWL_USERNAME = 'testuser';
     process.env.FISHBOWL_PASSWORD = 'testpass';
+    delete process.env.FISHBOWL_CF_ACCESS_CLIENT_ID;
+    delete process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET;
     vi.restoreAllMocks();
   });
 

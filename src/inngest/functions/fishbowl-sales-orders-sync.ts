@@ -1,6 +1,9 @@
 import { inngest } from '../client'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createFishbowlClient } from '@/lib/fishbowl/client'
+import {
+  createFishbowlClient,
+  getFishbowlConnectionProfile,
+} from '@/lib/fishbowl/client'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getAllSalesOrders } from '@/lib/fishbowl/sales-orders'
 import { upsertSalesOrdersToCache } from '@/lib/fishbowl/sales-order-cache'
@@ -13,67 +16,91 @@ import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
 async function runFishbowlSalesOrderSync(triggeredBy: string) {
   const startTime = Date.now()
-  const fbClient = createFishbowlClient()
-
-  await runWithAuthCircuitBreaker(
-    {
-      system: 'fishbowl',
-      automation: 'P7_FB_SO_SYNC',
-      sourceSystem: 'fishbowl',
-      targetSystem: 'prometheus',
-    },
-    () => fbClient.authenticate()
-  )
-
-  const rawOrders = await getAllSalesOrders(fbClient)
-  const supabase = createAdminClient()
-  const result = await upsertSalesOrdersToCache(supabase, rawOrders)
-  const sfClient = createSalesforceClient()
-  let salesforceMirror: MirrorResult | null = null
-  let salesforceMirrorError: string | null = null
+  const connection = getFishbowlConnectionProfile()
 
   try {
+    const fbClient = createFishbowlClient()
+
     await runWithAuthCircuitBreaker(
       {
-        system: 'salesforce',
+        system: 'fishbowl',
         automation: 'P7_FB_SO_SYNC',
-        sourceSystem: 'prometheus',
-        targetSystem: 'salesforce',
+        sourceSystem: 'fishbowl',
+        targetSystem: 'prometheus',
       },
-      () => sfClient.connect()
+      () => fbClient.authenticate()
     )
 
+    const rawOrders = await getAllSalesOrders(fbClient)
+    const supabase = createAdminClient()
+    const result = await upsertSalesOrdersToCache(supabase, rawOrders)
+    const sfClient = createSalesforceClient()
+    let salesforceMirror: MirrorResult | null = null
+    let salesforceMirrorError: string | null = null
+
     try {
-      salesforceMirror = await mirrorCanonicalSalesOrdersToSalesforce(sfClient, supabase)
-    } finally {
-      await sfClient.disconnect()
+      await runWithAuthCircuitBreaker(
+        {
+          system: 'salesforce',
+          automation: 'P7_FB_SO_SYNC',
+          sourceSystem: 'prometheus',
+          targetSystem: 'salesforce',
+        },
+        () => sfClient.connect()
+      )
+
+      try {
+        salesforceMirror = await mirrorCanonicalSalesOrdersToSalesforce(sfClient, supabase)
+      } finally {
+        await sfClient.disconnect()
+      }
+    } catch (error) {
+      salesforceMirrorError = error instanceof Error ? error.message : 'Unknown Salesforce mirror error'
     }
+
+    const mirrorIssues =
+      salesforceMirrorError ||
+      (salesforceMirror && (salesforceMirror.skipped > 0 || salesforceMirror.errors.length > 0))
+
+    await logSyncEvent({
+      automation: 'P7_FB_SO_SYNC',
+      sourceSystem: 'fishbowl',
+      targetSystem: 'salesforce',
+      status: 'success',
+      payload: { triggeredBy, totalRawOrders: rawOrders.length, connection },
+      response: { cache: result, salesforceMirror, salesforceMirrorError },
+      errorMessage: salesforceMirrorError ?? undefined,
+    })
+
+    await updateSyncSchedule('P7_FB_SO_SYNC', {
+      lastRunAt: new Date().toISOString(),
+      lastRunStatus: mirrorIssues ? 'partial' : 'success',
+      lastRunDurationMs: Date.now() - startTime,
+      recordsProcessed: result.orders,
+    })
+
+    return result
   } catch (error) {
-    salesforceMirrorError = error instanceof Error ? error.message : 'Unknown Salesforce mirror error'
+    const errorMessage = error instanceof Error ? error.message : String(error)
+
+    await logSyncEvent({
+      automation: 'P7_FB_SO_SYNC',
+      sourceSystem: 'fishbowl',
+      targetSystem: 'salesforce',
+      status: 'failed',
+      payload: { triggeredBy, connection },
+      errorMessage,
+    })
+
+    await updateSyncSchedule('P7_FB_SO_SYNC', {
+      lastRunAt: new Date().toISOString(),
+      lastRunStatus: 'failed',
+      lastRunDurationMs: Date.now() - startTime,
+      recordsProcessed: 0,
+    })
+
+    throw error
   }
-
-  const mirrorIssues =
-    salesforceMirrorError ||
-    (salesforceMirror && (salesforceMirror.skipped > 0 || salesforceMirror.errors.length > 0))
-
-  await logSyncEvent({
-    automation: 'P7_FB_SO_SYNC',
-    sourceSystem: 'fishbowl',
-    targetSystem: 'salesforce',
-    status: 'success',
-    payload: { triggeredBy, totalRawOrders: rawOrders.length },
-    response: { cache: result, salesforceMirror, salesforceMirrorError },
-    errorMessage: salesforceMirrorError ?? undefined,
-  })
-
-  await updateSyncSchedule('P7_FB_SO_SYNC', {
-    lastRunAt: new Date().toISOString(),
-    lastRunStatus: mirrorIssues ? 'partial' : 'success',
-    lastRunDurationMs: Date.now() - startTime,
-    recordsProcessed: result.orders,
-  })
-
-  return result
 }
 
 export const fishbowlSalesOrdersSync = inngest.createFunction(

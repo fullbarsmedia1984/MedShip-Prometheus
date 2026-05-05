@@ -49,6 +49,76 @@ function logJson(label, value) {
   console.log(`${label}: ${JSON.stringify(value, null, 2)}`)
 }
 
+function fishbowlConnectionProfile() {
+  const apiUrl = process.env.FISHBOWL_API_URL
+  const cloudflareAccessEnabled = Boolean(
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_ID || process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET
+  )
+
+  if (!apiUrl) {
+    return {
+      configured: false,
+      hasExplicitPort: false,
+      cloudflareAccessEnabled,
+      error: 'FISHBOWL_API_URL is not configured',
+    }
+  }
+
+  try {
+    const parsed = new URL(apiUrl)
+    const explicitPort = getExplicitPort(apiUrl)
+    return {
+      configured: true,
+      protocol: parsed.protocol.replace(':', ''),
+      host: parsed.hostname,
+      port: explicitPort,
+      hasExplicitPort: Boolean(explicitPort),
+      cloudflareAccessEnabled,
+    }
+  } catch {
+    return {
+      configured: true,
+      hasExplicitPort: false,
+      cloudflareAccessEnabled,
+      error: 'Invalid FISHBOWL_API_URL',
+    }
+  }
+}
+
+function getExplicitPort(apiUrl) {
+  const authority = apiUrl.match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)?.[1]
+  const hostPort = authority?.split('@').pop()
+  if (!hostPort) return undefined
+
+  if (hostPort.startsWith('[')) {
+    return hostPort.match(/^\[[^\]]+\]:(\d+)$/)?.[1]
+  }
+
+  return hostPort.match(/:(\d+)$/)?.[1]
+}
+
+function validateFishbowlConfig() {
+  const apiUrl = requireEnv('FISHBOWL_API_URL')
+  const parsed = new URL(apiUrl)
+  const explicitPort = getExplicitPort(apiUrl)
+  const hasClientId = Boolean(process.env.FISHBOWL_CF_ACCESS_CLIENT_ID)
+  const hasClientSecret = Boolean(process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET)
+
+  if (hasClientId !== hasClientSecret) {
+    throw new Error(
+      'Invalid Fishbowl Cloudflare Access configuration. Set both service-token env vars, or leave both blank.'
+    )
+  }
+
+  if (hasClientId && hasClientSecret && parsed.protocol !== 'https:') {
+    throw new Error('Invalid FISHBOWL_API_URL for Cloudflare Access. Use https without an explicit port.')
+  }
+
+  if (hasClientId && hasClientSecret && explicitPort) {
+    throw new Error('Invalid FISHBOWL_API_URL for Cloudflare Access. Do not include an explicit port.')
+  }
+}
+
 function fishbowlHeaders(includeJson = true) {
   const headers = {}
   if (includeJson) headers['Content-Type'] = 'application/json'
@@ -77,6 +147,7 @@ async function fishbowlRequest(path, token) {
 }
 
 async function authenticateFishbowl() {
+  validateFishbowlConfig()
   const baseUrl = requireEnv('FISHBOWL_API_URL').replace(/\/+$/, '')
   const response = await fetch(`${baseUrl}/api/login`, {
     method: 'POST',
@@ -103,13 +174,35 @@ async function authenticateFishbowl() {
   }
 }
 
-async function pullFishbowlInventory() {
-  const auth = await authenticateFishbowl()
-  const firstPage = await fishbowlRequest(
+async function probeFishbowlInventory(token) {
+  const page = await fishbowlRequest(
     `/api/parts/inventory?pageNumber=1&pageSize=${PAGE_SIZE}`,
-    auth.token
+    token
   )
 
+  logJson('fishbowl.inventoryProbe', {
+    page: 1,
+    pageItems: (page.results ?? []).length,
+    totalPages: Number(page.totalPages ?? 1),
+  })
+
+  return page
+}
+
+async function probeFishbowlSalesOrders(token) {
+  const page = await fishbowlRequest(
+    `/api/sales-orders?pageNumber=1&pageSize=${PAGE_SIZE}`,
+    token
+  )
+
+  logJson('fishbowl.salesOrdersProbe', {
+    page: 1,
+    pageItems: (page.results ?? page.salesOrders ?? page.data ?? []).length,
+    totalPages: Number(page.totalPages ?? 1),
+  })
+}
+
+async function pullFishbowlInventory(auth, firstPage) {
   const totalPages = Number(firstPage.totalPages ?? 1)
   const items = [...(firstPage.results ?? [])]
 
@@ -128,7 +221,6 @@ async function pullFishbowlInventory() {
     pages: totalPages,
     records: items.length,
     qtyOnHand,
-    samplePartNumbers: items.slice(0, 5).map((item) => item.partNumber),
   })
 
   return items
@@ -239,7 +331,11 @@ async function main() {
     let inventory = []
 
     if (!skipFishbowl) {
-      inventory = await pullFishbowlInventory()
+      logJson('fishbowl.profile', fishbowlConnectionProfile())
+      const auth = await authenticateFishbowl()
+      const firstInventoryPage = await probeFishbowlInventory(auth.token)
+      await probeFishbowlSalesOrders(auth.token)
+      inventory = await pullFishbowlInventory(auth, firstInventoryPage)
       if (writeSnapshot) await writeInventorySnapshot(inventory)
     }
 

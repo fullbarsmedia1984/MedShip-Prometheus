@@ -10,6 +10,110 @@ import type { FBLoginResponse } from './types';
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_APP_ID = 20260505;
 
+export type FishbowlConnectionProfile = {
+  configured: boolean;
+  protocol?: string;
+  host?: string;
+  port?: string;
+  hasExplicitPort: boolean;
+  cloudflareAccessEnabled: boolean;
+  error?: string;
+};
+
+function hasCloudflareAccessConfig() {
+  return Boolean(
+    process.env.FISHBOWL_CF_ACCESS_CLIENT_ID ||
+      process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET
+  );
+}
+
+function parseFishbowlApiUrl(apiUrl: string): URL {
+  try {
+    return new URL(apiUrl);
+  } catch {
+    throw new Error(
+      'Invalid FISHBOWL_API_URL. Set it to a full URL such as ' +
+        'https://fishbowl.medshipment.com or http://192.168.1.100:28192.'
+    );
+  }
+}
+
+function getExplicitPort(apiUrl: string): string | undefined {
+  const authority = apiUrl.match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)?.[1];
+  const hostPort = authority?.split('@').pop();
+  if (!hostPort) return undefined;
+
+  if (hostPort.startsWith('[')) {
+    return hostPort.match(/^\[[^\]]+\]:(\d+)$/)?.[1];
+  }
+
+  return hostPort.match(/:(\d+)$/)?.[1];
+}
+
+export function getFishbowlConnectionProfile(): FishbowlConnectionProfile {
+  const apiUrl = process.env.FISHBOWL_API_URL;
+  const cloudflareAccessEnabled = hasCloudflareAccessConfig();
+
+  if (!apiUrl) {
+    return {
+      configured: false,
+      hasExplicitPort: false,
+      cloudflareAccessEnabled,
+      error: 'FISHBOWL_API_URL is not configured',
+    };
+  }
+
+  try {
+    const parsed = parseFishbowlApiUrl(apiUrl);
+    const explicitPort = getExplicitPort(apiUrl);
+    return {
+      configured: true,
+      protocol: parsed.protocol.replace(':', ''),
+      host: parsed.hostname,
+      port: explicitPort,
+      hasExplicitPort: Boolean(explicitPort),
+      cloudflareAccessEnabled,
+    };
+  } catch (err) {
+    return {
+      configured: true,
+      hasExplicitPort: false,
+      cloudflareAccessEnabled,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function validateFishbowlRuntimeConfig(apiUrl: string) {
+  const parsed = parseFishbowlApiUrl(apiUrl);
+  const explicitPort = getExplicitPort(apiUrl);
+  const hasClientId = Boolean(process.env.FISHBOWL_CF_ACCESS_CLIENT_ID);
+  const hasClientSecret = Boolean(process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET);
+
+  if (hasClientId !== hasClientSecret) {
+    throw new Error(
+      'Invalid Fishbowl Cloudflare Access configuration. Set both ' +
+        'FISHBOWL_CF_ACCESS_CLIENT_ID and FISHBOWL_CF_ACCESS_CLIENT_SECRET, or leave both blank.'
+    );
+  }
+
+  if (!hasClientId || !hasClientSecret) return;
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error(
+      'Invalid FISHBOWL_API_URL for Cloudflare Access. Use ' +
+        'https://fishbowl.medshipment.com without an explicit port.'
+    );
+  }
+
+  if (explicitPort) {
+    throw new Error(
+      'Invalid FISHBOWL_API_URL for Cloudflare Access. Do not include an explicit port; ' +
+        'port 2456 is an origin detail and should be hidden behind the tunnel.'
+    );
+  }
+}
+
 export class FishbowlClient implements IFishbowlClient {
   private token: string | null = null;
   private baseUrl: string;
@@ -30,6 +134,7 @@ export class FishbowlClient implements IFishbowlClient {
           'Set it to your Fishbowl server address (e.g., http://192.168.1.100:28192).'
       );
     }
+    validateFishbowlRuntimeConfig(apiUrl);
     this.baseUrl = apiUrl.replace(/\/+$/, '');
     this.username = process.env.FISHBOWL_USERNAME ?? '';
     this.password = process.env.FISHBOWL_PASSWORD ?? '';
