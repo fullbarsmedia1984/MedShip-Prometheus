@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  Lock,
   Save,
   CheckCircle,
   ChevronDown,
@@ -44,6 +45,12 @@ interface SystemConfig {
   icon: React.ElementType
   fields: { name: string; label: string; type: 'text' | 'password'; placeholder: string }[]
   phase2?: boolean
+}
+
+type SettingsConnectionConfig = ConnectionConfig & {
+  configured_fields?: string[]
+  locked_fields?: string[]
+  credential_source?: 'database' | 'environment'
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +135,7 @@ function relativeTime(isoStr: string | null): string {
 export default function SettingsPage() {
   // Connection config state
   const [loading, setLoading] = useState(true)
-  const [connections, setConnections] = useState<ConnectionConfig[]>([])
+  const [connections, setConnections] = useState<SettingsConnectionConfig[]>([])
   const [testing, setTesting] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [formValues, setFormValues] = useState<Record<string, Record<string, string>>>({})
@@ -151,7 +158,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/settings/connections')
       if (!res.ok) throw new Error('Failed to fetch')
-      const data: ConnectionConfig[] = await res.json()
+      const data: SettingsConnectionConfig[] = await res.json()
       setConnections(data)
 
       const populated: Record<string, Record<string, string>> = {}
@@ -313,6 +320,14 @@ export default function SettingsPage() {
   const getConnectionForSystem = (systemName: string) => {
     return connections.find((c) => c.system_name === systemName)
   }
+
+  const isFieldLocked = (
+    conn: SettingsConnectionConfig | undefined,
+    fieldName: string
+  ) => conn?.locked_fields?.includes(fieldName) ?? false
+
+  const configuredFieldCount = (conn: SettingsConnectionConfig | undefined) =>
+    conn?.configured_fields?.length ?? 0
 
   const formatTimestamp = (ts: string | null) => {
     if (!ts) return 'Never'
@@ -610,6 +625,10 @@ export default function SettingsPage() {
               const conn = getConnectionForSystem(system.key)
               const isConnected = conn?.is_active ?? false
               const isPhase2 = system.phase2
+              const isEnvBacked = conn?.credential_source === 'environment'
+              const allFieldsLocked = system.fields.every((field) =>
+                isFieldLocked(conn, field.name)
+              )
 
               return (
                 <Card key={system.key} className={cn(isPhase2 && 'opacity-60')}>
@@ -634,6 +653,8 @@ export default function SettingsPage() {
                           <p className="text-xs text-muted-foreground">
                             {isPhase2
                               ? 'Coming in Phase 2'
+                              : isEnvBacked
+                                ? `${configuredFieldCount(conn)} field(s) configured in Railway env`
                               : conn?.last_error
                                 ? conn.last_error
                                 : `Last connected: ${formatTimestamp(conn?.last_connected_at ?? null)}`}
@@ -656,7 +677,8 @@ export default function SettingsPage() {
                               variant="default"
                               size="sm"
                               onClick={() => saveCredentials(system.key)}
-                              disabled={saving === system.key}
+                              disabled={saving === system.key || allFieldsLocked}
+                              title={allFieldsLocked ? 'Credentials are managed in Railway env' : undefined}
                             >
                               {saving === system.key ? (
                                 <RefreshCw className="mr-1 h-4 w-4 animate-spin" />
@@ -691,22 +713,36 @@ export default function SettingsPage() {
                         const fieldKey = `${system.key}.${field.name}`
                         const isPassword = field.type === 'password'
                         const isVisible = visiblePasswords.has(fieldKey)
+                        const locked = isFieldLocked(conn, field.name)
+                        const displayValue = locked
+                          ? isPassword
+                            ? '************'
+                            : 'Configured in Railway env'
+                          : formValues[system.key]?.[field.name] ?? ''
 
                         return (
                           <div key={field.name}>
-                            <label className="mb-1.5 block text-sm font-medium">
-                              {field.label}
+                            <label className="mb-1.5 flex items-center gap-2 text-sm font-medium">
+                              <span>{field.label}</span>
+                              {locked && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
+                                  <Lock className="h-3 w-3" />
+                                  Locked
+                                </span>
+                              )}
                             </label>
                             <div className="relative">
                               <Input
                                 type={isPassword && !isVisible ? 'password' : 'text'}
-                                placeholder={field.placeholder}
-                                disabled={isPhase2}
-                                className="pr-10"
-                                value={formValues[system.key]?.[field.name] ?? ''}
-                                onChange={(e) => updateField(system.key, field.name, e.target.value)}
+                                placeholder={locked ? 'Configured in Railway env' : field.placeholder}
+                                disabled={isPhase2 || locked}
+                                className={cn('pr-10', locked && 'font-medium text-muted-foreground')}
+                                value={displayValue}
+                                onChange={(e) =>
+                                  updateField(system.key, field.name, e.target.value)
+                                }
                               />
-                              {isPassword && !isPhase2 && (
+                              {isPassword && !isPhase2 && !locked && (
                                 <button
                                   type="button"
                                   onClick={() => togglePasswordVisibility(fieldKey)}

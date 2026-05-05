@@ -7,7 +7,25 @@ const VALID_SYSTEMS: SystemName[] = ['salesforce', 'fishbowl', 'quickbooks', 'ea
 
 type ConnectionConfigRow = {
   config?: unknown
+  system_name?: unknown
+  configured_fields?: string[]
+  locked_fields?: string[]
   [key: string]: unknown
+}
+
+const ENV_FIELD_MAP: Record<string, Record<string, string>> = {
+  salesforce: {
+    loginUrl: 'SF_LOGIN_URL',
+    clientId: 'SF_CLIENT_ID',
+    clientSecret: 'SF_CLIENT_SECRET',
+    username: 'SF_USERNAME',
+    password: 'SF_PASSWORD',
+  },
+  fishbowl: {
+    apiUrl: 'FISHBOWL_API_URL',
+    username: 'FISHBOWL_USERNAME',
+    password: 'FISHBOWL_PASSWORD',
+  },
 }
 
 /**
@@ -34,7 +52,7 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json((data ?? []).map(redactConnectionConfig))
+    return NextResponse.json(withEnvironmentBackedConfigs(data ?? []))
   } catch (error) {
     console.error('Settings API error:', error)
     return NextResponse.json(
@@ -131,12 +149,56 @@ export async function PUT(request: NextRequest) {
 
 function redactConnectionConfig(row: ConnectionConfigRow) {
   const config = toStringRecord(row.config)
+  const envFields = getEnvironmentConfiguredFields(String(row.system_name ?? ''))
+  const configuredFields = [...new Set([...Object.keys(config), ...envFields])].sort()
 
   return {
     ...row,
     config: {},
-    configured_fields: Object.keys(config).sort(),
+    configured_fields: configuredFields,
+    locked_fields: envFields,
+    credential_source: envFields.length > 0 ? 'environment' : 'database',
   }
+}
+
+function withEnvironmentBackedConfigs(rows: ConnectionConfigRow[]) {
+  const bySystem = new Map<string, ConnectionConfigRow>()
+  for (const row of rows) {
+    if (typeof row.system_name === 'string') {
+      bySystem.set(row.system_name, row)
+    }
+  }
+
+  for (const system of Object.keys(ENV_FIELD_MAP)) {
+    const envFields = getEnvironmentConfiguredFields(system)
+    if (envFields.length === 0 || bySystem.has(system)) continue
+
+    bySystem.set(system, {
+      id: `env-${system}`,
+      system_name: system,
+      config: {},
+      is_active: true,
+      last_connected_at: null,
+      last_error: null,
+      created_at: null,
+      updated_at: null,
+    })
+  }
+
+  return Array.from(bySystem.values())
+    .map(redactConnectionConfig)
+    .sort((a, b) =>
+      String(a.system_name ?? '').localeCompare(String(b.system_name ?? ''))
+    )
+}
+
+function getEnvironmentConfiguredFields(system: string) {
+  const fieldMap = ENV_FIELD_MAP[system]
+  if (!fieldMap) return []
+
+  return Object.entries(fieldMap)
+    .filter(([, envName]) => Boolean(process.env[envName]))
+    .map(([fieldName]) => fieldName)
 }
 
 function toStringRecord(value: unknown): Record<string, string> {
