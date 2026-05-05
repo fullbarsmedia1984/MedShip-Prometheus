@@ -229,6 +229,7 @@ export default function SettingsPage() {
   const [syncExpanded, setSyncExpanded] = useState(false)
   const [automationStatus, setAutomationStatus] = useState<SyncAutomationStatus[]>([])
   const [triggeringAutomation, setTriggeringAutomation] = useState<ManualAutomation | null>(null)
+  const [refreshingAutomationStatus, setRefreshingAutomationStatus] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ---------------------------------------------------------------------------
@@ -286,15 +287,31 @@ export default function SettingsPage() {
     }
   }, [])
 
-  const fetchAutomationStatus = useCallback(async () => {
+  const fetchAutomationStatus = useCallback(async (showToast = false) => {
+    if (showToast) setRefreshingAutomationStatus(true)
+
     try {
       const res = await fetch('/api/sync/status')
-      if (res.ok) {
-        const data: SyncStatusResponse = await res.json()
-        setAutomationStatus(data.data?.automations ?? [])
+      const data: SyncStatusResponse & { error?: string } = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to load sync status')
       }
-    } catch {
-      // Ignore - sync schedule tables may not exist yet
+
+      setAutomationStatus(data.data?.automations ?? [])
+
+      if (showToast) {
+        toast.success('Fishbowl sync status refreshed')
+      }
+    } catch (error) {
+      if (showToast) {
+        toast.error('Could not refresh Fishbowl sync status', {
+          description: error instanceof Error ? error.message : 'The sync status endpoint did not respond.',
+        })
+      }
+      // Ignore silent background refresh failures; production may still be deploying.
+    } finally {
+      if (showToast) setRefreshingAutomationStatus(false)
     }
   }, [])
 
@@ -533,7 +550,9 @@ export default function SettingsPage() {
       }
 
       toast.success(`${control?.label ?? automation} run requested`, {
-        description: data.eventId ? `Event ${data.eventId}` : 'Sync has been queued.',
+        description: data.eventId
+          ? `Event ${data.eventId} queued. Status updates after Inngest runs it.`
+          : 'Sync has been queued. Status updates after Inngest runs it.',
       })
       await fetchAutomationStatus()
       setTimeout(fetchAutomationStatus, 3000)
@@ -790,10 +809,13 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={fetchAutomationStatus}
+                      onClick={() => fetchAutomationStatus(true)}
+                      disabled={refreshingAutomationStatus}
                       className="gap-1.5 text-xs"
                     >
-                      <RefreshCw className="h-3.5 w-3.5" />
+                      <RefreshCw
+                        className={cn('h-3.5 w-3.5', refreshingAutomationStatus && 'animate-spin')}
+                      />
                       Refresh
                     </Button>
                   </div>
