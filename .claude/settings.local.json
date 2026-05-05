@@ -2,7 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(npm ls:*)",
-      "Bash(taskkill //F //IM node.exe)"
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(npm run:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(git:*)",
+      "Bash(gh repo *)",
+      "WebFetch(domain:github.com)",
+      "Bash(uv --version)",
+      "Bash(pip install *)",
+      "Bash(python *)",
+      "Bash(export PATH=\"/c/Users/16303/AppData/Roaming/Python/Python314/Scripts:$PATH\")",
+      "Bash(uv sync *)",
+      "Bash(uv run *)"
     ]
   }
 }
