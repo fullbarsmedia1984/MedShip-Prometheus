@@ -24,7 +24,14 @@ interface Filters {
 
 type OrdersDashboardResponse = {
   result: PaginatedResult<Order>
+  summary: OrderSummary
   salesReps: SalesRep[]
+}
+
+type OrderSummary = {
+  total: number
+  totalRevenue: number
+  avgOrderValue: number
 }
 
 function formatCurrency(value: number): string {
@@ -45,6 +52,7 @@ export default function OrdersPage() {
   })
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [result, setResult] = useState<PaginatedResult<Order> | null>(null)
+  const [summary, setSummary] = useState<OrderSummary | null>(null)
   const [salesReps, setSalesReps] = useState<SalesRep[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
@@ -70,6 +78,7 @@ export default function OrdersPage() {
       })
       const data = await fetchJson<OrdersDashboardResponse>(`/api/dashboard/orders?${params}`)
       setResult(data.result)
+      setSummary(data.summary)
       setSalesReps(data.salesReps)
     } finally {
       setLoading(false)
@@ -85,10 +94,9 @@ export default function OrdersPage() {
     setFilters((prev) => ({ ...prev, page: 1 }))
   }, [filters.status, filters.salesRepId, debouncedSearch])
 
-  // Compute summary stats from current result set
-  const totalOrders = result?.total ?? 0
-  const totalRevenue = result?.data.reduce((sum, o) => sum + o.subtotal, 0) ?? 0
-  const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
+  const totalOrders = summary?.total ?? result?.total ?? 0
+  const totalRevenue = summary?.totalRevenue ?? 0
+  const avgOrderValue = summary?.avgOrderValue ?? 0
 
   const columns = [
     {

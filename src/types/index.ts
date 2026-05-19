@@ -210,6 +210,7 @@ export interface ISalesforceClient {
 
 export interface IFishbowlClient {
   authenticate(): Promise<void>;
+  logout(): Promise<void>;
   request<T>(method: string, path: string, body?: any): Promise<T>;
   isAuthenticated(): boolean;
 }

@@ -8,6 +8,10 @@ import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getAllSalesOrders } from '@/lib/fishbowl/sales-orders'
 import { upsertSalesOrdersToCache } from '@/lib/fishbowl/sales-order-cache'
 import {
+  resolveSalesOrderOpportunityLinks,
+  type SalesOrderLinkResolverResult,
+} from '@/lib/fishbowl/sales-order-links'
+import {
   mirrorCanonicalSalesOrdersToSalesforce,
   type MirrorResult,
 } from '@/lib/salesforce/quote-order-mirror'
@@ -17,10 +21,9 @@ import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 async function runFishbowlSalesOrderSync(triggeredBy: string) {
   const startTime = Date.now()
   const connection = getFishbowlConnectionProfile()
+  const fbClient = createFishbowlClient()
 
   try {
-    const fbClient = createFishbowlClient()
-
     await runWithAuthCircuitBreaker(
       {
         system: 'fishbowl',
@@ -31,9 +34,23 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
       () => fbClient.authenticate()
     )
 
-    const rawOrders = await getAllSalesOrders(fbClient)
+    const rawOrders = await getAllSalesOrders(fbClient, {
+      hydrateDetails: true,
+      detailLimit: Number(process.env.FISHBOWL_SO_DETAIL_LIMIT ?? 500),
+    })
     const supabase = createAdminClient()
     const result = await upsertSalesOrdersToCache(supabase, rawOrders)
+    let salesOrderLinks: SalesOrderLinkResolverResult | null = null
+    let salesOrderLinksError: string | null = null
+
+    try {
+      salesOrderLinks = await resolveSalesOrderOpportunityLinks(supabase)
+    } catch (error) {
+      salesOrderLinksError = error instanceof Error
+        ? error.message
+        : 'Unknown sales order link resolver error'
+    }
+
     const sfClient = createSalesforceClient()
     let salesforceMirror: MirrorResult | null = null
     let salesforceMirrorError: string | null = null
@@ -61,6 +78,9 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
     const mirrorIssues =
       salesforceMirrorError ||
       (salesforceMirror && (salesforceMirror.skipped > 0 || salesforceMirror.errors.length > 0))
+    const partialIssues = Boolean(salesOrderLinksError || mirrorIssues)
+    const errorMessages = [salesOrderLinksError, salesforceMirrorError]
+      .filter((message): message is string => Boolean(message))
 
     await logSyncEvent({
       automation: 'P7_FB_SO_SYNC',
@@ -68,18 +88,24 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
       targetSystem: 'salesforce',
       status: 'success',
       payload: { triggeredBy, totalRawOrders: rawOrders.length, connection },
-      response: { cache: result, salesforceMirror, salesforceMirrorError },
-      errorMessage: salesforceMirrorError ?? undefined,
+      response: { cache: result, salesOrderLinks, salesOrderLinksError, salesforceMirror, salesforceMirrorError },
+      errorMessage: errorMessages.length > 0 ? errorMessages.join(' | ') : undefined,
     })
 
     await updateSyncSchedule('P7_FB_SO_SYNC', {
       lastRunAt: new Date().toISOString(),
-      lastRunStatus: mirrorIssues ? 'partial' : 'success',
+      lastRunStatus: partialIssues ? 'partial' : 'success',
       lastRunDurationMs: Date.now() - startTime,
       recordsProcessed: result.orders,
     })
 
-    return result
+    return {
+      cache: result,
+      salesOrderLinks,
+      salesOrderLinksError,
+      salesforceMirror,
+      salesforceMirrorError,
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
 
@@ -100,6 +126,8 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
     })
 
     throw error
+  } finally {
+    await fbClient.logout()
   }
 }
 

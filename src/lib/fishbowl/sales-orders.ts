@@ -12,6 +12,7 @@ import {
 } from './types';
 
 const PAGE_SIZE = 100;
+const DEFAULT_DETAIL_LIMIT = 500;
 
 export type FBRawSalesOrderItem = Record<string, unknown>;
 
@@ -36,6 +37,30 @@ export type FBRawSalesOrder = Record<string, unknown> & {
   shipTo?: Record<string, unknown>;
   items?: FBRawSalesOrderItem[];
   lines?: FBRawSalesOrderItem[];
+  soItems?: FBRawSalesOrderItem[];
+  salesOrderItems?: FBRawSalesOrderItem[];
+}
+
+type GetAllSalesOrdersOptions = {
+  hydrateDetails?: boolean;
+  detailLimit?: number;
+}
+
+function toTimestamp(value: unknown): number {
+  if (!value) return 0;
+  const time = new Date(String(value)).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function salesOrderSortValue(order: FBRawSalesOrder): number {
+  return Math.max(
+    toTimestamp(order.dateCreated),
+    toTimestamp(order.dateIssued),
+    toTimestamp(order.dateCompleted),
+    toTimestamp(order.lastModified && typeof order.lastModified === 'object'
+      ? (order.lastModified as Record<string, unknown>).dateLastModified
+      : null)
+  );
 }
 
 /**
@@ -80,7 +105,8 @@ export async function createSalesOrder(
  * standard paginated shape and a few common aliases.
  */
 export async function getAllSalesOrders(
-  client: FishbowlClient
+  client: FishbowlClient,
+  options: GetAllSalesOrdersOptions = {}
 ): Promise<FBRawSalesOrder[]> {
   const allOrders: FBRawSalesOrder[] = [];
   let pageNumber = 1;
@@ -102,7 +128,47 @@ export async function getAllSalesOrders(
     pageNumber++;
   }
 
+  if (options.hydrateDetails) {
+    const detailLimit = Math.max(0, options.detailLimit ?? DEFAULT_DETAIL_LIMIT);
+    const detailCandidates = [...allOrders]
+      .filter((order) => order.id !== undefined && order.id !== null)
+      .sort((a, b) => salesOrderSortValue(b) - salesOrderSortValue(a))
+      .slice(0, detailLimit);
+    const detailById = new Map<string, FBRawSalesOrder>();
+
+    for (const order of detailCandidates) {
+      try {
+        const detail = await getSalesOrderById(client, order.id as string | number);
+        if (detail) detailById.set(String(order.id), detail);
+      } catch {
+        // Keep header sync useful even when a detail row is missing or malformed.
+      }
+    }
+
+    return allOrders.map((order) => {
+      const detail = detailById.get(String(order.id));
+      return detail ? { ...order, ...detail } : order;
+    });
+  }
+
   return allOrders;
+}
+
+export async function getSalesOrderById(
+  client: FishbowlClient,
+  id: string | number
+): Promise<FBRawSalesOrder | null> {
+  try {
+    return await client.request<FBRawSalesOrder>(
+      'GET',
+      `/api/sales-orders/${encodeURIComponent(String(id))}`
+    );
+  } catch (err) {
+    if (err instanceof FishbowlApiError && err.statusCode === 404) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 /**

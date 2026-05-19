@@ -192,6 +192,28 @@ export class FishbowlClient implements IFishbowlClient {
     this.serverVersion = data.serverVersion ?? data.user?.serverVersion ?? null;
   }
 
+  async logout(): Promise<void> {
+    if (!this.token) return;
+
+    const url = `${this.baseUrl}/api/logout`;
+    const token = this.token;
+    this.token = null;
+
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...this.getCfAccessHeaders(),
+        },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      // Logout is best-effort; the important local behavior is to avoid reusing
+      // a token after the caller has finished its Fishbowl work.
+    }
+  }
+
   isAuthenticated(): boolean {
     return this.token !== null;
   }
@@ -284,6 +306,8 @@ export class FishbowlClient implements IFishbowlClient {
         success: false,
         error: err instanceof Error ? err.message : String(err),
       };
+    } finally {
+      await this.logout();
     }
   }
 

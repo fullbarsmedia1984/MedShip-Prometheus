@@ -174,6 +174,19 @@ async function authenticateFishbowl() {
   }
 }
 
+async function logoutFishbowl(token) {
+  if (!token) return
+  const baseUrl = requireEnv('FISHBOWL_API_URL').replace(/\/+$/, '')
+  await fetch(`${baseUrl}/api/logout`, {
+    method: 'POST',
+    headers: {
+      ...fishbowlHeaders(false),
+      Authorization: `Bearer ${token}`,
+    },
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => {})
+}
+
 async function probeFishbowlInventory(token) {
   const page = await fishbowlRequest(
     `/api/parts/inventory?pageNumber=1&pageSize=${PAGE_SIZE}`,
@@ -329,14 +342,19 @@ async function readStatus() {
 async function main() {
   try {
     let inventory = []
+    let fishbowlAuth = null
 
     if (!skipFishbowl) {
       logJson('fishbowl.profile', fishbowlConnectionProfile())
-      const auth = await authenticateFishbowl()
-      const firstInventoryPage = await probeFishbowlInventory(auth.token)
-      await probeFishbowlSalesOrders(auth.token)
-      inventory = await pullFishbowlInventory(auth, firstInventoryPage)
-      if (writeSnapshot) await writeInventorySnapshot(inventory)
+      try {
+        fishbowlAuth = await authenticateFishbowl()
+        const firstInventoryPage = await probeFishbowlInventory(fishbowlAuth.token)
+        await probeFishbowlSalesOrders(fishbowlAuth.token)
+        inventory = await pullFishbowlInventory(fishbowlAuth, firstInventoryPage)
+        if (writeSnapshot) await writeInventorySnapshot(inventory)
+      } finally {
+        await logoutFishbowl(fishbowlAuth?.token)
+      }
     }
 
     if (!skipSalesforce) {

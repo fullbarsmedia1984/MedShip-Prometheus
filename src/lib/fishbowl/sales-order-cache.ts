@@ -43,6 +43,12 @@ function toSalesperson(value: unknown): string | null {
   return toText(value)
 }
 
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
 function classifySalesOrder(statusValue: unknown): CanonicalState {
   const status = String(statusValue ?? '').trim().toLowerCase()
   if (!status) return 'unknown'
@@ -60,15 +66,13 @@ function normalizeLineItem(
   item: FBRawSalesOrderItem,
   index: number
 ): Record<string, unknown> {
-  const product = valueAt(item, ['product', 'part'])
-  const productRecord = product && typeof product === 'object'
-    ? product as Record<string, unknown>
-    : undefined
+  const productRecord = objectValue(valueAt(item, ['product', 'part', 'productItem']))
+  const uomRecord = objectValue(valueAt(item, ['uom']))
   const partNumber = valueAt(item, ['partNumber', 'number', 'sku', 'productNumber']) ??
-    valueAt(productRecord, ['partNumber', 'number', 'sku'])
-  const quantity = valueAt(item, ['quantity', 'qty', 'quantityOrdered'])
-  const unitPrice = valueAt(item, ['unitPrice', 'price', 'unitCost'])
-  const totalPrice = valueAt(item, ['totalPrice', 'total', 'amount'])
+    valueAt(productRecord, ['partNumber', 'number', 'sku', 'name'])
+  const quantity = valueAt(item, ['quantity', 'qty', 'quantityOrdered', 'productQuantity'])
+  const unitPrice = valueAt(item, ['unitPrice', 'price', 'unitCost', 'productPrice'])
+  const totalPrice = valueAt(item, ['totalPrice', 'total', 'amount', 'total'])
 
   return {
     sales_order_number: soNumber,
@@ -81,7 +85,7 @@ function normalizeLineItem(
     ),
     quantity: toNumber(quantity) ?? 0,
     quantity_fulfilled: toNumber(valueAt(item, ['quantityFulfilled', 'qtyFulfilled'])),
-    quantity_uom: toText(valueAt(item, ['uom', 'uomCode'])),
+    quantity_uom: toText(valueAt(item, ['uomCode']) ?? valueAt(uomRecord, ['abbreviation', 'name', 'code'])),
     unit_price: toNumber(unitPrice),
     total_price: toNumber(totalPrice) ?? (
       toNumber(quantity) !== null && toNumber(unitPrice) !== null
@@ -98,15 +102,11 @@ export function normalizeSalesOrder(raw: FBRawSalesOrder): NormalizedSalesOrder 
   if (!soNumber) return null
 
   const customer = valueAt(raw, ['customer'])
-  const customerRecord = customer && typeof customer === 'object'
-    ? customer as Record<string, unknown>
-    : undefined
-  const shipTo = valueAt(raw, ['shipTo', 'shippingAddress'])
-  const shipToRecord = shipTo && typeof shipTo === 'object'
-    ? shipTo as Record<string, unknown>
-    : undefined
+  const customerRecord = objectValue(customer)
+  const shipTo = valueAt(raw, ['shipTo', 'shippingAddress', 'shipToAddress'])
+  const shipToRecord = objectValue(shipTo)
   const status = toText(valueAt(raw, ['status', 'statusName'])) ?? 'Unknown'
-  const rawItems = valueAt(raw, ['items', 'lines', 'salesOrderItems'])
+  const rawItems = valueAt(raw, ['items', 'lines', 'salesOrderItems', 'soItems'])
   const items = Array.isArray(rawItems) ? rawItems as FBRawSalesOrderItem[] : []
 
   return {
@@ -116,16 +116,16 @@ export function normalizeSalesOrder(raw: FBRawSalesOrder): NormalizedSalesOrder 
       status,
       customer_name: toText(valueAt(raw, ['customerName']) ?? valueAt(customerRecord, ['name'])),
       customer_id: toText(valueAt(customerRecord, ['id'])),
-      customer_po: toText(valueAt(raw, ['customerPO', 'customerPo', 'poNumber'])),
+      customer_po: toText(valueAt(raw, ['customerPO', 'customerPo', 'poNumber', 'customerPoNumber'])),
       salesperson: toSalesperson(valueAt(raw, ['salesperson', 'salesPerson'])),
       date_created: toDate(valueAt(raw, ['dateCreated', 'createdDate', 'createdAt'])),
       date_scheduled: toDate(valueAt(raw, ['dateScheduled', 'scheduledDate'])),
       date_issued: toDate(valueAt(raw, ['dateIssued', 'issuedDate'])),
       date_completed: toDate(valueAt(raw, ['dateCompleted', 'completedDate'])),
-      total_amount: toNumber(valueAt(raw, ['total', 'totalAmount', 'grandTotal'])),
-      subtotal_amount: toNumber(valueAt(raw, ['subtotal', 'subTotal'])),
+      total_amount: toNumber(valueAt(raw, ['total', 'totalAmount', 'grandTotal', 'totalPrice'])),
+      subtotal_amount: toNumber(valueAt(raw, ['subtotal', 'subTotal', 'subTotalPrice'])),
       tax_amount: toNumber(valueAt(raw, ['taxTotal', 'taxAmount'])),
-      shipping_amount: toNumber(valueAt(raw, ['shippingTotal', 'shippingAmount'])),
+      shipping_amount: toNumber(valueAt(raw, ['shippingTotal', 'shippingAmount', 'shippingCost'])),
       currency: toText(valueAt(raw, ['currency'])) ?? 'USD',
       ship_to_name: toText(valueAt(shipToRecord, ['name'])),
       ship_to_street: toText(valueAt(shipToRecord, ['address', 'street'])),

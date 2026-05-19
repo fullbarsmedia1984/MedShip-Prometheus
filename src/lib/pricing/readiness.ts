@@ -1,6 +1,15 @@
 import 'server-only'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  calculateMinimumQuotePrice,
+  calculateSuggestedRetailPrice,
+  evaluatePricingGuardrails,
+} from './calculator'
+import {
+  normalizeFishbowlPartNumber,
+  normalizeSalesforceProductCode,
+} from './normalization'
 
 type ReadinessStatus = 'ready' | 'warning' | 'blocker' | 'coming_soon'
 
@@ -38,6 +47,11 @@ export type PricingReadinessReport = {
 type CountResult = {
   count: number
   available: boolean
+}
+
+type PricingRuleRow = {
+  target_margin_pct: number | string | null
+  minimum_margin_pct: number | string | null
 }
 
 type SupabaseRangeQuery<T> = {
@@ -119,11 +133,34 @@ function percent(value: number, total: number) {
   return Math.round((value / total) * 1000) / 10
 }
 
+function toNumber(value: number | string | null | undefined): number | null {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : null
+}
+
 function overallStatus(checks: ReadinessCheck[]): ReadinessStatus {
   if (checks.some((check) => check.status === 'blocker')) return 'blocker'
   if (checks.some((check) => check.status === 'warning')) return 'warning'
   if (checks.some((check) => check.status === 'coming_soon')) return 'coming_soon'
   return 'ready'
+}
+
+async function getActivePricingRule(): Promise<PricingRuleRow | null> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('pricing_rules')
+    .select('target_margin_pct, minimum_margin_pct')
+    .eq('is_active', true)
+    .order('priority')
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingRelationError(error)) return null
+    throw error
+  }
+
+  return data as PricingRuleRow | null
 }
 
 export async function getPricingReadinessReport(): Promise<PricingReadinessReport> {
@@ -142,6 +179,7 @@ export async function getPricingReadinessReport(): Promise<PricingReadinessRepor
     contractLines,
     cogsRows,
     pricingRules,
+    activePricingRule,
   ] = await Promise.all([
     safeCount('sf_products'),
     safeCount('sf_products', (query) => query.not('product_code', 'is', null)),
@@ -155,6 +193,7 @@ export async function getPricingReadinessReport(): Promise<PricingReadinessRepor
     safeCount('contract_price_lines'),
     safeCount('product_cogs'),
     safeCount('pricing_rules'),
+    getActivePricingRule(),
   ])
 
   const [productCodes, partNumbers] = await Promise.all([
@@ -173,15 +212,31 @@ export async function getPricingReadinessReport(): Promise<PricingReadinessRepor
   ])
 
   const normalizedProductCodes = new Set(
-    productCodes
-      .map((row) => row.product_code?.trim().toLowerCase())
-      .filter((value): value is string => Boolean(value))
+    productCodes.flatMap((row) =>
+      normalizeSalesforceProductCode(row.product_code).matchKeys
+    )
   )
   const directSkuMatches = partNumbers.filter((row) => {
-    const partNumber = row.part_number?.trim().toLowerCase()
-    return Boolean(partNumber && normalizedProductCodes.has(partNumber))
+    const partNumber = normalizeFishbowlPartNumber(row.part_number)
+    return !partNumber.isBlank && partNumber.matchKeys.some((key) => normalizedProductCodes.has(key))
   }).length
   const matchDenominator = Math.min(sfProductsWithCode.count, inventoryWithPartNumber.count)
+  const targetMarginPct = toNumber(activePricingRule?.target_margin_pct)
+  const minimumMarginPct = toNumber(activePricingRule?.minimum_margin_pct)
+  const sampleCostBasis = 100
+  const suggestedRetailPrice = calculateSuggestedRetailPrice(sampleCostBasis, targetMarginPct, 2)
+  const minimumQuotePrice = calculateMinimumQuotePrice(sampleCostBasis, minimumMarginPct, 2)
+  const formulaProbe = evaluatePricingGuardrails({
+    productId: 'readiness-probe',
+    contractUnitPrice: suggestedRetailPrice,
+    costBasis: sampleCostBasis,
+    quotedUnitPrice: suggestedRetailPrice,
+    minimumMarginPct,
+    currency: 'USD',
+    expectedCurrency: 'USD',
+    uom: 'Each',
+    expectedUom: 'Each',
+  })
 
   const checks: ReadinessCheck[] = [
     {
@@ -293,6 +348,25 @@ export async function getPricingReadinessReport(): Promise<PricingReadinessRepor
         { key: 'pricing_rules', label: 'Pricing rules', value: pricingRules.count },
       ],
       nextAction: 'Define target margin and minimum margin by product family/category.',
+    },
+    {
+      key: 'pricing_formula_engine',
+      label: 'Pricing Formula Engine',
+      status: activePricingRule && formulaProbe.primaryOutcome === 'ready' ? 'ready' : 'coming_soon',
+      message:
+        activePricingRule && formulaProbe.primaryOutcome === 'ready'
+          ? 'Pricing formulas can calculate suggested retail, minimum quote price, margin, and below-floor outcomes from the active rule.'
+          : 'Pricing formulas are implemented, but no active pricing rule is available for live calculations.',
+      owner: 'Pricing/Data',
+      metrics: [
+        { key: 'sample_cost_basis', label: 'Sample cost basis', value: sampleCostBasis },
+        { key: 'sample_suggested_retail', label: 'Suggested retail probe', value: suggestedRetailPrice ?? 0 },
+        { key: 'sample_minimum_quote', label: 'Minimum quote probe', value: minimumQuotePrice ?? 0 },
+        { key: 'active_pricing_rules', label: 'Active pricing rules', value: activePricingRule ? 1 : 0 },
+      ],
+      nextAction: activePricingRule
+        ? 'Connect calculator inputs to contract pricing, COGS, and quote line records.'
+        : 'Create or enable a pricing rule before showing live calculator outputs.',
     },
   ]
 

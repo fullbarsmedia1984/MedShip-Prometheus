@@ -7,7 +7,7 @@ import { SparklineChart } from '@/components/dashboard/SparklineChart'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Play, Eye, Clock, Zap, RefreshCw } from 'lucide-react'
+import { Play, Eye, Clock, Zap, RefreshCw, Link as LinkIcon, PackageSearch } from 'lucide-react'
 import Link from 'next/link'
 import { fetchJson } from '@/lib/client-api'
 import type { IntegrationStatusData } from '@/lib/seed-data'
@@ -53,6 +53,7 @@ const SCHEDULE_ICONS: Record<string, React.ElementType> = {
 }
 
 const EXPECTED_CONNECTIONS: SystemName[] = ['salesforce', 'fishbowl', 'quickbooks', 'easypost']
+const RUNNABLE_MANUAL_AUTOMATIONS = new Set(['P2_INVENTORY_SYNC', 'P7_FB_SO_SYNC'])
 
 // ---------------------------------------------------------------------------
 // Page
@@ -61,12 +62,24 @@ const EXPECTED_CONNECTIONS: SystemName[] = ['salesforce', 'fishbowl', 'quickbook
 type IntegrationsDashboardResponse = {
   integrations: IntegrationStatusData[]
   connections: ConnectionConfig[]
+  relationshipHealth: RelationshipHealth
+}
+
+type RelationshipHealth = {
+  salesOrders: number
+  lineItems: number
+  linkedSalesOrders: number
+  unlinkedSalesOrders: number
+  opportunityLinks: number
+  opportunitiesWithSoNumber: number
 }
 
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
   const [connections, setConnections] = useState<ConnectionConfig[]>([])
+  const [relationshipHealth, setRelationshipHealth] = useState<RelationshipHealth | null>(null)
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({})
+  const [triggeringMap, setTriggeringMap] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -75,6 +88,7 @@ export default function IntegrationsPage() {
         const data = await fetchJson<IntegrationsDashboardResponse>('/api/dashboard/integrations')
         setIntegrations(data.integrations)
         setConnections(data.connections)
+        setRelationshipHealth(data.relationshipHealth)
 
         const enabled: Record<string, boolean> = {}
         for (const i of data.integrations) {
@@ -88,8 +102,21 @@ export default function IntegrationsPage() {
     load()
   }, [])
 
-  const handleRunNow = (automation: string, name: string) => {
-    toast.success(`Triggered manual run for ${name}`)
+  const handleRunNow = async (automation: string, name: string) => {
+    setTriggeringMap((prev) => ({ ...prev, [automation]: true }))
+
+    try {
+      const result = await fetchJson<{ eventId?: string; message?: string }>('/api/sync/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automation }),
+      })
+      toast.success(result.message ?? `Triggered manual run for ${name}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Unable to trigger ${name}`)
+    } finally {
+      setTriggeringMap((prev) => ({ ...prev, [automation]: false }))
+    }
   }
 
   const toggleEnabled = (automation: string) => {
@@ -119,6 +146,9 @@ export default function IntegrationsPage() {
     systemName,
     connection: connectionBySystem.get(systemName),
   }))
+  const relationshipCoverage = relationshipHealth && relationshipHealth.salesOrders > 0
+    ? Math.round((relationshipHealth.linkedSalesOrders / relationshipHealth.salesOrders) * 1000) / 10
+    : 0
 
   if (loading) {
     return (
@@ -149,6 +179,7 @@ export default function IntegrationsPage() {
               const ScheduleIcon = SCHEDULE_ICONS[item.schedule] ?? Clock
               const enabled = enabledMap[item.automation] ?? true
               const isComingSoon = item.isComingSoon === true
+              const canRunNow = RUNNABLE_MANUAL_AUTOMATIONS.has(item.automation)
 
               return (
                 <Card key={item.automation} className={cn('shadow-sm', !enabled && 'opacity-60')}>
@@ -219,10 +250,15 @@ export default function IntegrationsPage() {
                         variant="outline"
                         size="sm"
                         className="gap-1.5 text-xs"
-                        disabled={isComingSoon}
+                        disabled={isComingSoon || !canRunNow || triggeringMap[item.automation]}
                         onClick={() => handleRunNow(item.automation, item.name)}
+                        title={canRunNow ? 'Trigger this sync now' : 'Manual trigger requires additional record context'}
                       >
-                        <Play className="h-3 w-3" />
+                        {triggeringMap[item.automation] ? (
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Play className="h-3 w-3" />
+                        )}
                         Run Now
                       </Button>
                       <Link href={`/dashboard/events?automation=${item.automation}`}>
@@ -258,6 +294,54 @@ export default function IntegrationsPage() {
             })}
           </div>
         )}
+
+        {/* ---- Canonical Relationship Health ---- */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <LinkIcon className="h-4 w-4 text-medship-primary" />
+              Fishbowl SO Relationship Health
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!relationshipHealth || relationshipHealth.salesOrders === 0 ? (
+              <ComingSoonPanel
+                title="Fishbowl sales orders are not cached yet"
+                description="P7 must populate fb_sales_orders and fb_sales_order_items before Zeus can link Quotes or Orders to Salesforce Opportunities."
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-semibold tabular-nums">{relationshipHealth.salesOrders.toLocaleString('en-US')}</p>
+                  <p className="text-xs uppercase text-muted-foreground">SO Headers</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-semibold tabular-nums">{relationshipHealth.lineItems.toLocaleString('en-US')}</p>
+                  <p className="text-xs uppercase text-muted-foreground">SO Lines</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-semibold tabular-nums">{relationshipHealth.linkedSalesOrders.toLocaleString('en-US')}</p>
+                  <p className="text-xs uppercase text-muted-foreground">Linked SOs</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-semibold tabular-nums">{relationshipHealth.unlinkedSalesOrders.toLocaleString('en-US')}</p>
+                  <p className="text-xs uppercase text-muted-foreground">Unlinked SOs</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-2xl font-semibold tabular-nums">{relationshipCoverage}%</p>
+                  <p className="text-xs uppercase text-muted-foreground">Link Coverage</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="flex items-center gap-2">
+                    <PackageSearch className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-2xl font-semibold tabular-nums">{relationshipHealth.opportunityLinks.toLocaleString('en-US')}</p>
+                  </div>
+                  <p className="text-xs uppercase text-muted-foreground">Link Rows</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* ---- Connection Status ---- */}
         <Card className="shadow-sm">
