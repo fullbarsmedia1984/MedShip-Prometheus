@@ -11,7 +11,7 @@ export type Automation =
   | 'P6_LOW_STOCK_CHECK'
   | 'P7_FB_SO_SYNC'
 
-export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'prometheus'
+export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'prometheus' | 'inngest'
 
 export interface SyncEvent {
   id?: string

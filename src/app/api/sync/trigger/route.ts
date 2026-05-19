@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { inngest } from '@/inngest'
 import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { logSyncEvent, updateSyncEvent } from '@/lib/utils/logger'
 
 type Automation =
   | 'P1_OPP_TO_SO'
@@ -108,16 +109,58 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Send event to Inngest
-    const { ids } = await inngest.send({
-      name: eventConfig.name,
-      data: eventConfig.data,
+    const triggerPayload = {
+      eventName: eventConfig.name,
+      eventData: eventConfig.data,
+      params,
+      requestedBy: auth.user?.email ?? (auth.isDevBypass ? 'local-dev-bypass' : 'unknown'),
+      requestedByUserId: auth.user?.id ?? null,
+    }
+
+    const auditEventId = await logSyncEvent({
+      automation,
+      sourceSystem: 'prometheus',
+      targetSystem: 'inngest',
+      status: 'pending',
+      payload: triggerPayload,
+    })
+
+    let ids: string[]
+
+    try {
+      // Send event to Inngest after the request is auditable in sync_events.
+      const sendResult = await inngest.send({
+        name: eventConfig.name,
+        data: eventConfig.data,
+      })
+      ids = sendResult.ids
+    } catch (sendError) {
+      const message = sendError instanceof Error ? sendError.message : 'Unknown Inngest send error'
+      await updateSyncEvent(auditEventId, {
+        status: 'failed',
+        errorMessage: message,
+        response: {
+          eventName: eventConfig.name,
+          automation,
+        },
+      })
+      throw sendError
+    }
+
+    await updateSyncEvent(auditEventId, {
+      response: {
+        eventName: eventConfig.name,
+        eventId: ids[0],
+        automation,
+      },
+      targetRecordId: ids[0],
     })
 
     return NextResponse.json({
       success: true,
       message: `${automation} triggered successfully`,
       eventId: ids[0],
+      auditEventId,
       automation,
     })
   } catch (error) {
