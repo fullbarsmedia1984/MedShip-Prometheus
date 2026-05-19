@@ -15,14 +15,16 @@ import { logger } from '@/lib/utils/logger'
  * 4. Fetch payments and match to invoices
  * 5. Update SF with payment status
  *
- * TODO: Implement in Phase 3
+ * TODO: Implement in Phase 3.
+ * Disabled as a cron until QuickBooks credentials and mappings exist. Keeping
+ * this as an event-only placeholder avoids noisy production failures.
  */
 export const qbInvoiceSync = inngest.createFunction(
   {
     id: 'qb-invoice-sync',
-    name: 'P3: QB Invoice Sync',
+    name: 'P3: QB Invoice Sync (Coming Soon)',
     retries: 2,
-    triggers: [{ cron: '0 * * * *' }],
+    triggers: [{ event: 'quickbooks/invoice.sync.placeholder' }],
   },
   async ({ step }) => {
     logger.log('info', 'P3_QB_INVOICE_SYNC', 'Starting scheduled QB invoice sync')
@@ -73,7 +75,7 @@ export const qbInvoiceSyncManual = inngest.createFunction(
     retries: 2,
     triggers: [{ event: 'quickbooks/invoice.sync' }],
   },
-  async ({ event, step }) => {
+  async ({ event }) => {
     const { sinceDate } = event.data
 
     logger.log('info', 'P3_QB_INVOICE_SYNC', 'Starting manual QB invoice sync', {

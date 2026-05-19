@@ -12,6 +12,11 @@ Build pricing intelligence for Zeus so Medical Shipment can:
 
 For the detailed roadmap to move Purchasing Manager-maintained Contract Pricing spreadsheets into Zeus as the canonical source, see `docs/contract-pricing-canonical-source-build-plan.md`.
 
+For the current post-hiatus sprint plan and data-quality operating checks, see:
+
+- [Zeus Next Start Plan](./zeus-next-start-plan.md)
+- [Data Completeness SOP](./data-completeness-sop.md)
+
 Current data gaps from the live database:
 
 - `sf_products`: 765 rows, 765 with product codes.

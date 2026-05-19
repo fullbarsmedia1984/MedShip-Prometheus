@@ -1,10 +1,12 @@
 # Prometheus IT Troubleshooting Guide
 
-Last updated: 2026-05-05
+Last updated: 2026-05-19
 
 This guide is for diagnosing Prometheus connectivity and sync issues with Fishbowl, Cloudflare Access, Salesforce, Supabase, and Inngest.
 
 Do not paste secrets into tickets or chat. When sharing results, redact tokens, passwords, cookie values, and authorization headers.
+
+For completeness checks after connectivity is healthy, use [Data Completeness SOP](./data-completeness-sop.md). For the current restart plan, use [Zeus Next Start Plan](./zeus-next-start-plan.md).
 
 ## Quick Triage Matrix
 

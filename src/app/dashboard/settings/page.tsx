@@ -85,6 +85,7 @@ interface SystemConfig {
 type SettingsConnectionConfig = ConnectionConfig & {
   configured_fields?: string[]
   locked_fields?: string[]
+  optional_locked_fields?: string[]
   credential_source?: 'database' | 'environment'
 }
 
@@ -436,6 +437,16 @@ export default function SettingsPage() {
     conn: SettingsConnectionConfig | undefined,
     fieldName: string
   ) => conn?.locked_fields?.includes(fieldName) ?? false
+
+  const isFieldOptionalLocked = (
+    conn: SettingsConnectionConfig | undefined,
+    fieldName: string
+  ) => conn?.optional_locked_fields?.includes(fieldName) ?? false
+
+  const isFieldConfigured = (
+    conn: SettingsConnectionConfig | undefined,
+    fieldName: string
+  ) => conn?.configured_fields?.includes(fieldName) ?? false
 
   const configuredFieldCount = (conn: SettingsConnectionConfig | undefined) =>
     conn?.configured_fields?.length ?? 0
@@ -995,10 +1006,17 @@ export default function SettingsPage() {
                         const isPassword = field.type === 'password'
                         const isVisible = visiblePasswords.has(fieldKey)
                         const locked = isFieldLocked(conn, field.name)
+                        const optionalLocked = isFieldOptionalLocked(conn, field.name)
+                        const configured = isFieldConfigured(conn, field.name)
+                        const lockedPlaceholder = optionalLocked && !configured
+                          ? 'Optional for username-token auth'
+                          : 'Configured in Railway env'
                         const displayValue = locked
                           ? isPassword
-                            ? '************'
-                            : 'Configured in Railway env'
+                            ? configured
+                              ? '************'
+                              : ''
+                            : lockedPlaceholder
                           : formValues[system.key]?.[field.name] ?? ''
 
                         return (
@@ -1015,7 +1033,7 @@ export default function SettingsPage() {
                             <div className="relative">
                               <Input
                                 type={isPassword && !isVisible ? 'password' : 'text'}
-                                placeholder={locked ? 'Configured in Railway env' : field.placeholder}
+                                placeholder={locked ? lockedPlaceholder : field.placeholder}
                                 disabled={isPhase2 || locked}
                                 className={cn('pr-10', locked && 'font-medium text-muted-foreground')}
                                 value={displayValue}

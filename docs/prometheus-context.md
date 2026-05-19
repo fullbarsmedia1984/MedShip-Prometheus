@@ -1,10 +1,17 @@
 # Prometheus Context
 
-Last updated: 2026-05-05
+Last updated: 2026-05-19
 
 Prometheus, also called Zeus in client conversations, is Medical Shipment's internal integration and operations app. It joins Salesforce, Fishbowl, and later QuickBooks/EasyPost data into a Supabase-backed web dashboard and automation layer.
 
 ![Prometheus architecture](./prometheus-architecture-4k.png)
+
+Related operating docs:
+
+- [IT Troubleshooting Guide](./it-troubleshooting-guide.md)
+- [Data Completeness SOP](./data-completeness-sop.md)
+- [Zeus Next Start Plan](./zeus-next-start-plan.md)
+- [Pricing Implementation Plan](./zeus-pricing-implementation-plan.md)
 
 ## Purpose
 

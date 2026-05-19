@@ -15,14 +15,16 @@ import { logger } from '@/lib/utils/logger'
  * 4. Generate alerts/notifications
  * 5. Optionally create SF Task for purchasing
  *
- * TODO: Implement in Phase 6
+ * TODO: Implement in Phase 6.
+ * Disabled as a cron until reorder rules and alert destinations are ready.
+ * Keeping this as an event-only placeholder avoids noisy production failures.
  */
 export const lowStockCheck = inngest.createFunction(
   {
     id: 'low-stock-check',
-    name: 'P6: Low Stock Check',
+    name: 'P6: Low Stock Check (Coming Soon)',
     retries: 1,
-    triggers: [{ cron: '*/15 * * * *' }],
+    triggers: [{ event: 'inventory/low-stock.check.placeholder' }],
   },
   async ({ step }) => {
     logger.log('info', 'P6_LOW_STOCK_CHECK', 'Starting scheduled low stock check')
@@ -73,7 +75,7 @@ export const lowStockCheckManual = inngest.createFunction(
     retries: 1,
     triggers: [{ event: 'inventory/low-stock.check' }],
   },
-  async ({ event, step }) => {
+  async ({ event }) => {
     const { triggeredBy } = event.data
 
     logger.log('info', 'P6_LOW_STOCK_CHECK', 'Starting manual low stock check', {

@@ -14,14 +14,17 @@ import { logger } from '@/lib/utils/logger'
  * 3. Update SF Opportunity with tracking number
  * 4. Optionally create EasyPost tracker for status updates
  *
- * TODO: Implement in Phase 4
+ * TODO: Implement in Phase 4.
+ * Disabled as a cron until Fishbowl shipment extraction and Salesforce field
+ * mappings are ready. Keeping this as an event-only placeholder avoids noisy
+ * production failures.
  */
 export const shipmentTrackingSync = inngest.createFunction(
   {
     id: 'shipment-tracking-sync',
-    name: 'P4: Shipment Tracking Sync',
+    name: 'P4: Shipment Tracking Sync (Coming Soon)',
     retries: 2,
-    triggers: [{ cron: '*/15 * * * *' }],
+    triggers: [{ event: 'fishbowl/shipment.sync.placeholder' }],
   },
   async ({ step }) => {
     logger.log('info', 'P4_SHIPMENT_TRACKING', 'Starting scheduled shipment tracking sync')
@@ -71,7 +74,7 @@ export const shipmentTrackingSyncManual = inngest.createFunction(
     retries: 2,
     triggers: [{ event: 'fishbowl/shipment.sync' }],
   },
-  async ({ event, step }) => {
+  async ({ event }) => {
     const { dayRange = 7 } = event.data
 
     logger.log('info', 'P4_SHIPMENT_TRACKING', 'Starting manual shipment tracking sync', {

@@ -10,6 +10,7 @@ type ConnectionConfigRow = {
   system_name?: unknown
   configured_fields?: string[]
   locked_fields?: string[]
+  optional_locked_fields?: string[]
   [key: string]: unknown
 }
 
@@ -150,13 +151,16 @@ export async function PUT(request: NextRequest) {
 function redactConnectionConfig(row: ConnectionConfigRow) {
   const config = toStringRecord(row.config)
   const envFields = getEnvironmentConfiguredFields(String(row.system_name ?? ''))
+  const optionalLockedFields = getEnvironmentManagedOptionalFields(String(row.system_name ?? ''))
+  const lockedFields = [...new Set([...envFields, ...optionalLockedFields])].sort()
   const configuredFields = [...new Set([...Object.keys(config), ...envFields])].sort()
 
   return {
     ...row,
     config: {},
     configured_fields: configuredFields,
-    locked_fields: envFields,
+    locked_fields: lockedFields,
+    optional_locked_fields: optionalLockedFields,
     credential_source: envFields.length > 0 ? 'environment' : 'database',
   }
 }
@@ -199,6 +203,23 @@ function getEnvironmentConfiguredFields(system: string) {
   return Object.entries(fieldMap)
     .filter(([, envName]) => Boolean(process.env[envName]))
     .map(([fieldName]) => fieldName)
+}
+
+function getEnvironmentManagedOptionalFields(system: string) {
+  if (system !== 'salesforce') return []
+
+  const hasUsernameTokenAuth = Boolean(
+    process.env.SF_USERNAME &&
+      process.env.SF_PASSWORD &&
+      process.env.SF_SECURITY_TOKEN
+  )
+
+  if (!hasUsernameTokenAuth) return []
+
+  return ['clientId', 'clientSecret'].filter((fieldName) => {
+    const envName = ENV_FIELD_MAP.salesforce[fieldName]
+    return envName && !process.env[envName]
+  })
 }
 
 function toStringRecord(value: unknown): Record<string, string> {
