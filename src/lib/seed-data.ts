@@ -260,6 +260,9 @@ export interface Order {
   trackingNumber?: string
   items: OrderItem[]
   subtotal: number
+  sourceStatus?: string
+  dataQualityFlags?: string[]
+  lineItemCount?: number
 }
 
 function generateOrders(): Order[] {
@@ -904,6 +907,9 @@ export interface SeedQuote {
   amount: number
   status: 'sent' | 'viewed' | 'accepted' | 'expired' | 'rejected'
   daysOpen: number
+  sourceStatus?: string
+  dataQualityFlags?: string[]
+  lineItemCount?: number
 }
 
 export const seedQuotes: SeedQuote[] = [

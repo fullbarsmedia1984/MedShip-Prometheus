@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/auth'
 import { getQuotes } from '@/lib/data'
+import type { QuoteFilters } from '@/lib/data'
 import type { SeedQuote } from '@/lib/seed-data'
 
 type QuoteSummary = {
@@ -9,6 +10,16 @@ type QuoteSummary = {
   accepted: number
   avgDaysOpen: number
   statusCounts: Record<SeedQuote['status'], number>
+}
+
+type DataQualitySummary = {
+  totalCached: number
+  visibleRows: number
+  hiddenByScope: number
+  likelyTest: number
+  historical: number
+  incompleteLines: number
+  zeroValue: number
 }
 
 const EMPTY_STATUS_COUNTS: Record<SeedQuote['status'], number> = {
@@ -37,25 +48,48 @@ function buildSummary(quotes: SeedQuote[], total: number): QuoteSummary {
   }
 }
 
+function buildDataQualitySummary(visibleQuotes: SeedQuote[], allQuotes: SeedQuote[]): DataQualitySummary {
+  const countFlag = (flag: string) =>
+    allQuotes.filter((quote) => quote.dataQualityFlags?.includes(flag)).length
+
+  return {
+    totalCached: allQuotes.length,
+    visibleRows: visibleQuotes.length,
+    hiddenByScope: Math.max(0, allQuotes.length - visibleQuotes.length),
+    likelyTest: countFlag('likely_test'),
+    historical: countFlag('historical'),
+    incompleteLines: countFlag('missing_line_items'),
+    zeroValue: countFlag('zero_value'),
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireApiAuth()
     if (!auth.authorized) return auth.response
 
     const params = request.nextUrl.searchParams
-    const [result, allQuotes] = await Promise.all([
+    const scope = params.get('scope')
+    const filters: QuoteFilters = {
+      status: params.get('status') ?? 'all',
+      search: params.get('search') ?? '',
+      scope: scope === 'all' || scope === 'business' ? scope : 'active',
+    }
+    const allScopeFilters = { ...filters, scope: 'all' as const }
+    const [result, allFilteredQuotes, allScopeQuotes] = await Promise.all([
       getQuotes({
-        status: params.get('status') ?? 'all',
-        search: params.get('search') ?? '',
+        ...filters,
         page: Number(params.get('page') ?? 1),
         pageSize: Number(params.get('pageSize') ?? 20),
       }),
-      getQuotes({ pageSize: 100000 }),
+      getQuotes({ ...filters, pageSize: 100000 }),
+      getQuotes({ ...allScopeFilters, pageSize: 100000 }),
     ])
 
     return NextResponse.json({
       result,
-      summary: buildSummary(allQuotes.data, allQuotes.total),
+      summary: buildSummary(allFilteredQuotes.data, allFilteredQuotes.total),
+      dataQuality: buildDataQualitySummary(allFilteredQuotes.data, allScopeQuotes.data),
     })
   } catch (error) {
     return NextResponse.json(

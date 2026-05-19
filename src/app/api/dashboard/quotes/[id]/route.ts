@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, context: QuoteDetailContext) {
 
     const { id } = await context.params
     const decodedId = decodeURIComponent(id)
-    const result = await getQuotes({ search: decodedId, pageSize: 1000 })
+    const result = await getQuotes({ search: decodedId, scope: 'all', pageSize: 1000 })
     const quote = result.data.find((item) => item.id === decodedId)
 
     if (!quote) {

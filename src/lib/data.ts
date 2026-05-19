@@ -48,6 +48,7 @@ export interface OrderFilters {
   search?: string
   dateFrom?: string
   dateTo?: string
+  scope?: 'business' | 'all'
   page?: number
   pageSize?: number
 }
@@ -213,6 +214,13 @@ type CanonicalSalesOrderItemRow = {
   total_price: number | string | null
 }
 
+const STALE_QUOTE_DAYS = 365
+const QUALITY_LIKELY_TEST = 'likely_test'
+const QUALITY_INCOMPLETE_LINES = 'missing_line_items'
+const QUALITY_ZERO_VALUE = 'zero_value'
+const QUALITY_HISTORICAL = 'historical'
+const TEST_RECORD_PATTERN = /(^|\b)(test|testing|do not use|sample|warehouse)/i
+
 type SfProductCategoryRow = {
   sf_id: string
   family: string | null
@@ -330,6 +338,43 @@ function toNumber(value: number | string | null | undefined): number {
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+function daysSince(dateValue: string | null | undefined): number | null {
+  if (!dateValue) return null
+  const time = new Date(dateValue).getTime()
+  if (!Number.isFinite(time)) return null
+  return Math.max(0, Math.floor((Date.now() - time) / 86_400_000))
+}
+
+function hasTestMarker(...values: Array<string | null | undefined>): boolean {
+  return values.some((value) => Boolean(value && TEST_RECORD_PATTERN.test(value)))
+}
+
+function salesOrderQualityFlags(input: {
+  soNumber: string
+  customerName: string | null
+  salesperson: string | null
+  amount: number
+  lineItemCount: number
+  quoteDaysOpen?: number | null
+}): string[] {
+  const flags = new Set<string>()
+
+  if (hasTestMarker(input.soNumber, input.customerName, input.salesperson)) {
+    flags.add(QUALITY_LIKELY_TEST)
+  }
+  if (input.lineItemCount === 0) {
+    flags.add(QUALITY_INCOMPLETE_LINES)
+  }
+  if (input.amount <= 0) {
+    flags.add(QUALITY_ZERO_VALUE)
+  }
+  if (input.quoteDaysOpen !== undefined && input.quoteDaysOpen !== null && input.quoteDaysOpen > STALE_QUOTE_DAYS) {
+    flags.add(QUALITY_HISTORICAL)
+  }
+
+  return [...flags]
 }
 
 function warnEmptyLiveTable(tableName: string, surface: string): void {
@@ -778,6 +823,14 @@ function mapOpportunityToOrder(
 
 function applyOrderFilters(items: Order[], filters: OrderFilters): Order[] {
   let filtered = [...items]
+  const scope = filters.scope ?? 'business'
+
+  if (scope !== 'all') {
+    filtered = filtered.filter((order) => {
+      const flags = order.dataQualityFlags ?? []
+      return !flags.includes(QUALITY_LIKELY_TEST) && !flags.includes(QUALITY_INCOMPLETE_LINES)
+    })
+  }
 
   if (filters.status && filters.status !== 'all') {
     filtered = filtered.filter((o) => o.status === filters.status)
@@ -867,6 +920,13 @@ async function getLiveOrders(): Promise<Order[]> {
       toNumber(row.total_amount) ||
       items.reduce((sum, item) => sum + item.total, 0)
     const date = row.date_issued ?? row.date_created ?? row.last_synced_at ?? new Date().toISOString()
+    const flags = salesOrderQualityFlags({
+      soNumber: row.so_number,
+      customerName: row.customer_name,
+      salesperson: row.salesperson,
+      amount: subtotal,
+      lineItemCount: items.length,
+    })
 
     return {
       id: row.id,
@@ -881,6 +941,9 @@ async function getLiveOrders(): Promise<Order[]> {
       trackingNumber: undefined,
       items,
       subtotal: roundCurrency(subtotal),
+      sourceStatus: row.status,
+      dataQualityFlags: flags,
+      lineItemCount: items.length,
     }
   })
 }
@@ -1308,6 +1371,7 @@ export async function getSalesActivity(limit = 10): Promise<SeedSalesActivity[]>
 export interface QuoteFilters {
   status?: string
   search?: string
+  scope?: 'active' | 'business' | 'all'
   page?: number
   pageSize?: number
 }
@@ -1328,6 +1392,22 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
       throw error
     })
 
+  const quoteNumbers = new Set(rows.map((row) => row.so_number))
+  const lineItems = await fetchAllRows<CanonicalSalesOrderItemRow>(() =>
+      supabase
+        .from('fb_sales_order_items')
+        .select('id, sales_order_number, part_number, part_description, sf_product_id, quantity, unit_price, total_price')
+        .order('sales_order_number') as unknown as SupabaseRangeQuery<CanonicalSalesOrderItemRow>
+    ).catch((error) => {
+      console.warn('Live Fishbowl quote item query failed; quotes will be marked incomplete:', error)
+      return []
+    })
+  const lineItemCounts = new Map<string, number>()
+  for (const item of lineItems) {
+    if (!quoteNumbers.has(item.sales_order_number)) continue
+    lineItemCounts.set(item.sales_order_number, (lineItemCounts.get(item.sales_order_number) ?? 0) + 1)
+  }
+
   const now = Date.now()
   const quotes = rows.map((row): SeedQuote => {
     const dateValue = row.date_created ?? row.last_synced_at ?? new Date().toISOString()
@@ -1335,19 +1415,50 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
     const daysOpen = Number.isNaN(created.getTime())
       ? 0
       : Math.max(0, Math.floor((now - created.getTime()) / 86_400_000))
+    const amount = roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount))
+    const lineItemCount = lineItemCounts.get(row.so_number) ?? 0
+    const flags = salesOrderQualityFlags({
+      soNumber: row.so_number,
+      customerName: row.customer_name,
+      salesperson: row.salesperson,
+      amount,
+      lineItemCount,
+      quoteDaysOpen: daysSince(dateValue),
+    })
 
     return {
       id: row.so_number,
       date: dateValue.split('T')[0],
       repName: row.salesperson ?? 'Unassigned',
       customerName: row.customer_name ?? 'Unknown Customer',
-      amount: roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount)),
+      amount,
       status: mapFishbowlQuoteStatus(row.status),
       daysOpen,
+      sourceStatus: row.status,
+      dataQualityFlags: flags,
+      lineItemCount,
     }
   })
 
   let filtered = quotes
+  const scope = filters.scope ?? 'active'
+  if (scope === 'active') {
+    filtered = filtered.filter((quote) => {
+      const flags = quote.dataQualityFlags ?? []
+      return !flags.includes(QUALITY_LIKELY_TEST) &&
+        !flags.includes(QUALITY_INCOMPLETE_LINES) &&
+        !flags.includes(QUALITY_ZERO_VALUE) &&
+        !flags.includes(QUALITY_HISTORICAL)
+    })
+  } else if (scope === 'business') {
+    filtered = filtered.filter((quote) => {
+      const flags = quote.dataQualityFlags ?? []
+      return !flags.includes(QUALITY_LIKELY_TEST) &&
+        !flags.includes(QUALITY_INCOMPLETE_LINES) &&
+        !flags.includes(QUALITY_ZERO_VALUE)
+    })
+  }
+
   if (filters.status && filters.status !== 'all') {
     filtered = filtered.filter((quote) => quote.status === filters.status)
   }

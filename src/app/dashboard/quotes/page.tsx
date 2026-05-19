@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Clock3, DollarSign, FileText } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock3, DollarSign, FileText } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import { DataTable } from '@/components/dashboard/DataTable'
@@ -19,6 +19,7 @@ import type { SeedQuote } from '@/lib/seed-data'
 type Filters = {
   status: string
   search: string
+  scope: 'active' | 'business' | 'all'
   page: number
 }
 
@@ -33,6 +34,17 @@ type QuoteSummary = {
 type QuotesDashboardResponse = {
   result: PaginatedResult<SeedQuote>
   summary: QuoteSummary
+  dataQuality: DataQualitySummary
+}
+
+type DataQualitySummary = {
+  totalCached: number
+  visibleRows: number
+  hiddenByScope: number
+  likelyTest: number
+  historical: number
+  incompleteLines: number
+  zeroValue: number
 }
 
 function formatCurrency(value: number): string {
@@ -58,7 +70,7 @@ function formatDate(dateStr: string): string {
 }
 
 function hasActiveFilters(filters: Filters, debouncedSearch: string): boolean {
-  return filters.status !== 'all' || debouncedSearch.trim().length > 0
+  return filters.scope !== 'active' || filters.status !== 'all' || debouncedSearch.trim().length > 0
 }
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
@@ -74,11 +86,13 @@ export default function QuotesPage() {
   const [filters, setFilters] = useState<Filters>({
     status: 'all',
     search: '',
+    scope: 'active',
     page: 1,
   })
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [result, setResult] = useState<PaginatedResult<SeedQuote> | null>(null)
   const [summary, setSummary] = useState<QuoteSummary | null>(null)
+  const [dataQuality, setDataQuality] = useState<DataQualitySummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -98,6 +112,7 @@ export default function QuotesPage() {
       const params = new URLSearchParams({
         status: filters.status,
         search: debouncedSearch,
+        scope: filters.scope,
         page: String(filters.page),
         pageSize: '20',
       })
@@ -105,14 +120,16 @@ export default function QuotesPage() {
 
       setResult(data.result)
       setSummary(data.summary)
+      setDataQuality(data.dataQuality)
     } catch (err) {
       setResult(null)
       setSummary(null)
+      setDataQuality(null)
       setError(err instanceof Error ? err.message : 'Unable to load quotes')
     } finally {
       setLoading(false)
     }
-  }, [filters.status, debouncedSearch, filters.page])
+  }, [filters.status, filters.scope, debouncedSearch, filters.page])
 
   useEffect(() => {
     fetchQuotes()
@@ -120,7 +137,7 @@ export default function QuotesPage() {
 
   useEffect(() => {
     setFilters((prev) => ({ ...prev, page: 1 }))
-  }, [filters.status, debouncedSearch])
+  }, [filters.status, filters.scope, debouncedSearch])
 
   const activeFilters = hasActiveFilters(filters, debouncedSearch)
   const hasLiveQuotes = (summary?.total ?? 0) > 0
@@ -189,7 +206,11 @@ export default function QuotesPage() {
       <Header title="Quotes" />
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="Live Quotes" value={summary?.total ?? 0} icon={FileText} />
+          <KpiCard
+            title={filters.scope === 'active' ? 'Active Quotes' : 'Live Quotes'}
+            value={summary?.total ?? 0}
+            icon={FileText}
+          />
           <KpiCard
             title="Quote Value"
             value={formatCurrency(summary?.totalAmount ?? 0)}
@@ -222,6 +243,24 @@ export default function QuotesPage() {
                 className="w-full sm:w-72"
               />
               <Select
+                value={filters.scope}
+                onValueChange={(value) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    scope: value === 'all' || value === 'business' ? value : 'active',
+                  }))
+                }
+              >
+                <SelectTrigger className="w-full sm:w-52">
+                  <SelectValue placeholder="Data Scope" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active Business</SelectItem>
+                  <SelectItem value="business">Business History</SelectItem>
+                  <SelectItem value="all">All Synced Rows</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
                 value={filters.status}
                 onValueChange={(value) =>
                   setFilters((prev) => ({ ...prev, status: value ?? 'all' }))
@@ -239,6 +278,15 @@ export default function QuotesPage() {
                 </SelectContent>
               </Select>
             </div>
+            {dataQuality && dataQuality.hiddenByScope > 0 && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Showing {dataQuality.visibleRows.toLocaleString()} rows from {dataQuality.totalCached.toLocaleString()} cached Fishbowl quotes.
+                  Cache quality signals: {dataQuality.historical.toLocaleString()} historical, {dataQuality.likelyTest.toLocaleString()} test, {dataQuality.incompleteLines.toLocaleString()} missing-line, and {dataQuality.zeroValue.toLocaleString()} zero-value records.
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
 

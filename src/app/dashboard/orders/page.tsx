@@ -9,7 +9,7 @@ import { KpiCard } from '@/components/dashboard/KpiCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ShoppingCart, DollarSign, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react'
+import { ShoppingCart, DollarSign, TrendingUp, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { fetchJson } from '@/lib/client-api'
 import type { Order, SalesRep } from '@/lib/seed-data'
 import type { PaginatedResult } from '@/lib/data'
@@ -19,12 +19,14 @@ interface Filters {
   status: string
   salesRepId: string
   search: string
+  scope: 'business' | 'all'
   page: number
 }
 
 type OrdersDashboardResponse = {
   result: PaginatedResult<Order>
   summary: OrderSummary
+  dataQuality: DataQualitySummary
   salesReps: SalesRep[]
 }
 
@@ -32,6 +34,14 @@ type OrderSummary = {
   total: number
   totalRevenue: number
   avgOrderValue: number
+}
+
+type DataQualitySummary = {
+  totalCached: number
+  visibleRows: number
+  hiddenByScope: number
+  likelyTest: number
+  incompleteLines: number
 }
 
 function formatCurrency(value: number): string {
@@ -48,11 +58,13 @@ export default function OrdersPage() {
     status: 'all',
     salesRepId: 'all',
     search: '',
+    scope: 'business',
     page: 1,
   })
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [result, setResult] = useState<PaginatedResult<Order> | null>(null)
   const [summary, setSummary] = useState<OrderSummary | null>(null)
+  const [dataQuality, setDataQuality] = useState<DataQualitySummary | null>(null)
   const [salesReps, setSalesReps] = useState<SalesRep[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
@@ -73,17 +85,19 @@ export default function OrdersPage() {
         status: filters.status,
         salesRepId: filters.salesRepId,
         search: debouncedSearch,
+        scope: filters.scope,
         page: String(filters.page),
         pageSize: '20',
       })
       const data = await fetchJson<OrdersDashboardResponse>(`/api/dashboard/orders?${params}`)
       setResult(data.result)
       setSummary(data.summary)
+      setDataQuality(data.dataQuality)
       setSalesReps(data.salesReps)
     } finally {
       setLoading(false)
     }
-  }, [filters.status, filters.salesRepId, debouncedSearch, filters.page])
+  }, [filters.status, filters.salesRepId, filters.scope, debouncedSearch, filters.page])
 
   useEffect(() => {
     fetchOrders()
@@ -92,7 +106,7 @@ export default function OrdersPage() {
   // Reset page when filters change
   useEffect(() => {
     setFilters((prev) => ({ ...prev, page: 1 }))
-  }, [filters.status, filters.salesRepId, debouncedSearch])
+  }, [filters.status, filters.salesRepId, filters.scope, debouncedSearch])
 
   const totalOrders = summary?.total ?? result?.total ?? 0
   const totalRevenue = summary?.totalRevenue ?? 0
@@ -250,6 +264,23 @@ export default function OrdersPage() {
                 className="w-full sm:w-64"
               />
               <Select
+                value={filters.scope}
+                onValueChange={(value) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    scope: value === 'all' ? 'all' : 'business',
+                  }))
+                }
+              >
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Data Scope" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="business">Business Rows</SelectItem>
+                  <SelectItem value="all">All Synced Rows</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
                 value={filters.status}
                 onValueChange={(value) =>
                   setFilters((prev) => ({ ...prev, status: value ?? 'all' }))
@@ -286,6 +317,15 @@ export default function OrdersPage() {
                 </SelectContent>
               </Select>
             </div>
+            {dataQuality && dataQuality.hiddenByScope > 0 && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Showing {dataQuality.visibleRows.toLocaleString()} business rows from {dataQuality.totalCached.toLocaleString()} cached Fishbowl orders.
+                  Hidden rows include {dataQuality.likelyTest.toLocaleString()} test records and {dataQuality.incompleteLines.toLocaleString()} records without line items.
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
