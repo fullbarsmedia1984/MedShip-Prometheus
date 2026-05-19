@@ -60,6 +60,19 @@ export type InngestEvents = {
     data: {
       fullSync?: boolean
       triggeredBy?: string
+      action?: 'backfill.start' | 'backfill.pages' | 'detail.hydrate' | 'incremental' | 'pause' | 'retry.failed'
+    }
+  }
+
+  'fishbowl/sales-orders.backfill.pages': {
+    data: {
+      triggeredBy?: string
+    }
+  }
+
+  'fishbowl/sales-orders.detail.hydrate': {
+    data: {
+      triggeredBy?: string
     }
   }
 

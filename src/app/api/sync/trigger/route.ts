@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         name: 'fishbowl/sales-orders.sync',
         data: {
           fullSync: params.fullSync ?? true,
+          action: params.action ?? (params.fullSync === false ? 'incremental' : 'backfill.start'),
           triggeredBy: 'manual',
         },
       },

@@ -28,6 +28,7 @@ type OrdersDashboardResponse = {
   summary: OrderSummary
   dataQuality: DataQualitySummary
   salesReps: SalesRep[]
+  salesOrderCoverage: SalesOrderCoverage | null
 }
 
 type OrderSummary = {
@@ -42,6 +43,14 @@ type DataQualitySummary = {
   hiddenByScope: number
   likelyTest: number
   incompleteLines: number
+}
+
+type SalesOrderCoverage = {
+  sourceTotalHeadersEstimate: number
+  cachedHeaders: number
+  pageCheckpoints: number
+  pagesCompleted: number
+  backfillStatus: string
 }
 
 function formatCurrency(value: number): string {
@@ -65,6 +74,7 @@ export default function OrdersPage() {
   const [result, setResult] = useState<PaginatedResult<Order> | null>(null)
   const [summary, setSummary] = useState<OrderSummary | null>(null)
   const [dataQuality, setDataQuality] = useState<DataQualitySummary | null>(null)
+  const [salesOrderCoverage, setSalesOrderCoverage] = useState<SalesOrderCoverage | null>(null)
   const [salesReps, setSalesReps] = useState<SalesRep[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
@@ -93,6 +103,7 @@ export default function OrdersPage() {
       setResult(data.result)
       setSummary(data.summary)
       setDataQuality(data.dataQuality)
+      setSalesOrderCoverage(data.salesOrderCoverage)
       setSalesReps(data.salesReps)
     } finally {
       setLoading(false)
@@ -111,6 +122,9 @@ export default function OrdersPage() {
   const totalOrders = summary?.total ?? result?.total ?? 0
   const totalRevenue = summary?.totalRevenue ?? 0
   const avgOrderValue = summary?.avgOrderValue ?? 0
+  const headerCoverage = salesOrderCoverage && salesOrderCoverage.sourceTotalHeadersEstimate > 0
+    ? Math.round((salesOrderCoverage.cachedHeaders / salesOrderCoverage.sourceTotalHeadersEstimate) * 1000) / 10
+    : 0
 
   const columns = [
     {
@@ -324,6 +338,12 @@ export default function OrdersPage() {
                   Showing {dataQuality.visibleRows.toLocaleString()} business rows from {dataQuality.totalCached.toLocaleString()} cached Fishbowl orders.
                   Hidden rows include {dataQuality.likelyTest.toLocaleString()} test records and {dataQuality.incompleteLines.toLocaleString()} records without line items.
                 </span>
+              </div>
+            )}
+            {salesOrderCoverage && salesOrderCoverage.backfillStatus !== 'complete' && (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                Showing scoped rows from an incomplete Fishbowl cache. Backfill is {headerCoverage}% complete
+                ({salesOrderCoverage.cachedHeaders.toLocaleString()} of about {salesOrderCoverage.sourceTotalHeadersEstimate.toLocaleString()} headers cached).
               </div>
             )}
           </CardContent>

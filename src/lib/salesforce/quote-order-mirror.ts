@@ -346,8 +346,11 @@ export async function mirrorCanonicalSalesOrdersToSalesforce(
 
   const { data: headers, error: headersError } = await supabase
     .from('fb_sales_orders')
-    .select('id, so_number, status, customer_name, date_created, date_scheduled, date_issued, total_amount, subtotal_amount, sf_opportunity_id, sf_quote_id, sf_order_id, canonical_state')
+    .select('id, so_number, status, customer_name, date_created, date_scheduled, date_issued, total_amount, subtotal_amount, sf_opportunity_id, sf_quote_id, sf_order_id, canonical_state, detail_status, data_quality_flags')
     .neq('canonical_state', 'void')
+    .eq('detail_status', 'success')
+    .not('data_quality_flags', 'cs', '{"likely_test"}')
+    .not('data_quality_flags', 'cs', '{"unknown_state"}')
     .order('last_synced_at', { ascending: false })
     .limit(500)
 

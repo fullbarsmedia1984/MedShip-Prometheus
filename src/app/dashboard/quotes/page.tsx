@@ -35,6 +35,7 @@ type QuotesDashboardResponse = {
   result: PaginatedResult<SeedQuote>
   summary: QuoteSummary
   dataQuality: DataQualitySummary
+  salesOrderCoverage: SalesOrderCoverage | null
 }
 
 type DataQualitySummary = {
@@ -45,6 +46,14 @@ type DataQualitySummary = {
   historical: number
   incompleteLines: number
   zeroValue: number
+}
+
+type SalesOrderCoverage = {
+  sourceTotalHeadersEstimate: number
+  cachedHeaders: number
+  pageCheckpoints: number
+  pagesCompleted: number
+  backfillStatus: string
 }
 
 function formatCurrency(value: number): string {
@@ -93,6 +102,7 @@ export default function QuotesPage() {
   const [result, setResult] = useState<PaginatedResult<SeedQuote> | null>(null)
   const [summary, setSummary] = useState<QuoteSummary | null>(null)
   const [dataQuality, setDataQuality] = useState<DataQualitySummary | null>(null)
+  const [salesOrderCoverage, setSalesOrderCoverage] = useState<SalesOrderCoverage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -121,10 +131,12 @@ export default function QuotesPage() {
       setResult(data.result)
       setSummary(data.summary)
       setDataQuality(data.dataQuality)
+      setSalesOrderCoverage(data.salesOrderCoverage)
     } catch (err) {
       setResult(null)
       setSummary(null)
       setDataQuality(null)
+      setSalesOrderCoverage(null)
       setError(err instanceof Error ? err.message : 'Unable to load quotes')
     } finally {
       setLoading(false)
@@ -141,6 +153,9 @@ export default function QuotesPage() {
 
   const activeFilters = hasActiveFilters(filters, debouncedSearch)
   const hasLiveQuotes = (summary?.total ?? 0) > 0
+  const headerCoverage = salesOrderCoverage && salesOrderCoverage.sourceTotalHeadersEstimate > 0
+    ? Math.round((salesOrderCoverage.cachedHeaders / salesOrderCoverage.sourceTotalHeadersEstimate) * 1000) / 10
+    : 0
 
   const columns = [
     {
@@ -285,6 +300,12 @@ export default function QuotesPage() {
                   Showing {dataQuality.visibleRows.toLocaleString()} rows from {dataQuality.totalCached.toLocaleString()} cached Fishbowl quotes.
                   Cache quality signals: {dataQuality.historical.toLocaleString()} historical, {dataQuality.likelyTest.toLocaleString()} test, {dataQuality.incompleteLines.toLocaleString()} missing-line, and {dataQuality.zeroValue.toLocaleString()} zero-value records.
                 </span>
+              </div>
+            )}
+            {salesOrderCoverage && salesOrderCoverage.backfillStatus !== 'complete' && (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                Showing scoped rows from an incomplete Fishbowl cache. Backfill is {headerCoverage}% complete
+                ({salesOrderCoverage.cachedHeaders.toLocaleString()} of about {salesOrderCoverage.sourceTotalHeadersEstimate.toLocaleString()} headers cached).
               </div>
             )}
           </CardContent>

@@ -46,6 +46,14 @@ type GetAllSalesOrdersOptions = {
   detailLimit?: number;
 }
 
+export type SalesOrdersPage = {
+  results: FBRawSalesOrder[];
+  totalPages: number;
+  totalCount?: number;
+  pageNumber: number;
+  pageSize: number;
+}
+
 function toTimestamp(value: unknown): number {
   if (!value) return 0;
   const time = new Date(String(value)).getTime();
@@ -152,6 +160,31 @@ export async function getAllSalesOrders(
   }
 
   return allOrders;
+}
+
+export async function getSalesOrdersPage(
+  client: FishbowlClient,
+  pageNumber: number,
+  pageSize = PAGE_SIZE
+): Promise<SalesOrdersPage> {
+  const page = await client.request<
+    FBPaginatedResponse<FBRawSalesOrder> & {
+      data?: FBRawSalesOrder[];
+      salesOrders?: FBRawSalesOrder[];
+      totalCount?: number;
+    }
+  >(
+    'GET',
+    `/api/sales-orders?pageNumber=${pageNumber}&pageSize=${pageSize}`
+  );
+
+  return {
+    results: page.results ?? page.salesOrders ?? page.data ?? [],
+    totalPages: Number(page.totalPages ?? 1),
+    totalCount: page.totalCount,
+    pageNumber: Number(page.pageNumber ?? pageNumber),
+    pageSize: Number(page.pageSize ?? pageSize),
+  };
 }
 
 export async function getSalesOrderById(

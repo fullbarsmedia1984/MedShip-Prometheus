@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/auth'
 import { getIntegrationStatus, getConnectionConfigs } from '@/lib/data'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSalesOrderCoverage, type SalesOrderCoverage } from '@/lib/fishbowl/sales-order-completeness'
 
 type RelationshipHealth = {
   salesOrders: number
@@ -11,6 +12,8 @@ type RelationshipHealth = {
   opportunityLinks: number
   opportunitiesWithSoNumber: number
 }
+
+type FishbowlSalesOrderCoverage = SalesOrderCoverage | null
 
 type SupabaseCountQuery = PromiseLike<{
   count: number | null
@@ -77,13 +80,18 @@ export async function GET() {
     const auth = await requireApiAuth()
     if (!auth.authorized) return auth.response
 
-    const [integrations, connections, relationshipHealth] = await Promise.all([
+    const supabase = createAdminClient()
+    const [integrations, connections, relationshipHealth, salesOrderCoverage] = await Promise.all([
       getIntegrationStatus(),
       getConnectionConfigs(),
       getRelationshipHealth(),
+      getSalesOrderCoverage(supabase).catch((error) => {
+        if (isMissingRelationError(error)) return null as FishbowlSalesOrderCoverage
+        throw error
+      }),
     ])
 
-    return NextResponse.json({ integrations, connections, relationshipHealth })
+    return NextResponse.json({ integrations, connections, relationshipHealth, salesOrderCoverage })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },

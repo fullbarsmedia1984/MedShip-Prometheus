@@ -5,22 +5,23 @@ import {
   getFishbowlConnectionProfile,
 } from '@/lib/fishbowl/client'
 import { createSalesforceClient } from '@/lib/salesforce/client'
-import { getAllSalesOrders } from '@/lib/fishbowl/sales-orders'
-import { upsertSalesOrdersToCache } from '@/lib/fishbowl/sales-order-cache'
-import {
-  resolveSalesOrderOpportunityLinks,
-  type SalesOrderLinkResolverResult,
-} from '@/lib/fishbowl/sales-order-links'
 import {
   mirrorCanonicalSalesOrdersToSalesforce,
   type MirrorResult,
 } from '@/lib/salesforce/quote-order-mirror'
+import {
+  hydrateSalesOrderDetailBatch,
+  pauseSalesOrderBackfill,
+  processSalesOrderPageBatch,
+  retryFailedSalesOrderBackfill,
+  startSalesOrderBackfill,
+} from '@/lib/fishbowl/sales-order-completeness'
 import { logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
 import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
-async function runFishbowlSalesOrderSync(triggeredBy: string) {
-  const startTime = Date.now()
-  const connection = getFishbowlConnectionProfile()
+type P7Action = 'backfill.start' | 'backfill.pages' | 'detail.hydrate' | 'incremental' | 'pause' | 'retry.failed'
+
+async function withFishbowlClient<T>(operation: (client: ReturnType<typeof createFishbowlClient>) => Promise<T>) {
   const fbClient = createFishbowlClient()
 
   try {
@@ -33,78 +34,88 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
       },
       () => fbClient.authenticate()
     )
+    return await operation(fbClient)
+  } finally {
+    await fbClient.logout()
+  }
+}
 
-    const rawOrders = await getAllSalesOrders(fbClient, {
-      hydrateDetails: true,
-      detailLimit: Number(process.env.FISHBOWL_SO_DETAIL_LIMIT ?? 500),
-    })
-    const supabase = createAdminClient()
-    const result = await upsertSalesOrdersToCache(supabase, rawOrders)
-    let salesOrderLinks: SalesOrderLinkResolverResult | null = null
-    let salesOrderLinksError: string | null = null
+async function mirrorHydratedRowsToSalesforce(supabase: ReturnType<typeof createAdminClient>) {
+  const sfClient = createSalesforceClient()
+  try {
+    await runWithAuthCircuitBreaker(
+      {
+        system: 'salesforce',
+        automation: 'P7_FB_SO_SYNC',
+        sourceSystem: 'prometheus',
+        targetSystem: 'salesforce',
+      },
+      () => sfClient.connect()
+    )
 
     try {
-      salesOrderLinks = await resolveSalesOrderOpportunityLinks(supabase)
-    } catch (error) {
-      salesOrderLinksError = error instanceof Error
-        ? error.message
-        : 'Unknown sales order link resolver error'
+      return await mirrorCanonicalSalesOrdersToSalesforce(sfClient, supabase)
+    } finally {
+      await sfClient.disconnect()
     }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : 'Unknown Salesforce mirror error',
+    }
+  }
+}
 
-    const sfClient = createSalesforceClient()
+async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action = 'incremental') {
+  const startTime = Date.now()
+  const connection = getFishbowlConnectionProfile()
+  const supabase = createAdminClient()
+
+  try {
+    let result: Record<string, unknown>
     let salesforceMirror: MirrorResult | null = null
-    let salesforceMirrorError: string | null = null
 
-    try {
-      await runWithAuthCircuitBreaker(
-        {
-          system: 'salesforce',
-          automation: 'P7_FB_SO_SYNC',
-          sourceSystem: 'prometheus',
-          targetSystem: 'salesforce',
-        },
-        () => sfClient.connect()
-      )
-
-      try {
-        salesforceMirror = await mirrorCanonicalSalesOrdersToSalesforce(sfClient, supabase)
-      } finally {
-        await sfClient.disconnect()
+    if (action === 'pause') {
+      result = await pauseSalesOrderBackfill(supabase)
+    } else if (action === 'retry.failed') {
+      result = await retryFailedSalesOrderBackfill(supabase)
+    } else if (action === 'backfill.start') {
+      result = await withFishbowlClient((client) => startSalesOrderBackfill(supabase, client))
+    } else if (action === 'backfill.pages') {
+      result = await withFishbowlClient((client) => processSalesOrderPageBatch(supabase, client))
+    } else if (action === 'detail.hydrate') {
+      result = await withFishbowlClient((client) => hydrateSalesOrderDetailBatch(supabase, client))
+      const mirrorResult = await mirrorHydratedRowsToSalesforce(supabase)
+      salesforceMirror = 'error' in mirrorResult ? null : mirrorResult
+      if ('error' in mirrorResult) {
+        result = { ...result, salesforceMirrorError: mirrorResult.error }
       }
-    } catch (error) {
-      salesforceMirrorError = error instanceof Error ? error.message : 'Unknown Salesforce mirror error'
+    } else {
+      const started = await startIfNeeded(supabase)
+      const pages = await withFishbowlClient((client) => processSalesOrderPageBatch(supabase, client))
+      const details = await withFishbowlClient((client) => hydrateSalesOrderDetailBatch(supabase, client))
+      result = { started, pages, details }
     }
-
-    const mirrorIssues =
-      salesforceMirrorError ||
-      (salesforceMirror && (salesforceMirror.skipped > 0 || salesforceMirror.errors.length > 0))
-    const partialIssues = Boolean(salesOrderLinksError || mirrorIssues)
-    const errorMessages = [salesOrderLinksError, salesforceMirrorError]
-      .filter((message): message is string => Boolean(message))
 
     await logSyncEvent({
       automation: 'P7_FB_SO_SYNC',
       sourceSystem: 'fishbowl',
       targetSystem: 'salesforce',
       status: 'success',
-      payload: { triggeredBy, totalRawOrders: rawOrders.length, connection },
-      response: { cache: result, salesOrderLinks, salesOrderLinksError, salesforceMirror, salesforceMirrorError },
-      errorMessage: errorMessages.length > 0 ? errorMessages.join(' | ') : undefined,
+      payload: { triggeredBy, action, connection },
+      response: { result, salesforceMirror },
     })
 
     await updateSyncSchedule('P7_FB_SO_SYNC', {
       lastRunAt: new Date().toISOString(),
-      lastRunStatus: partialIssues ? 'partial' : 'success',
+      lastRunStatus: 'success',
       lastRunDurationMs: Date.now() - startTime,
-      recordsProcessed: result.orders,
+      recordsProcessed: Number(result.headersUpserted ?? result.detailsSucceeded ?? 0),
     })
 
     return {
-      cache: result,
-      salesOrderLinks,
-      salesOrderLinksError,
+      action,
+      result,
       salesforceMirror,
-      salesforceMirrorError,
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -114,7 +125,7 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
       sourceSystem: 'fishbowl',
       targetSystem: 'salesforce',
       status: 'failed',
-      payload: { triggeredBy, connection },
+      payload: { triggeredBy, action, connection },
       errorMessage,
     })
 
@@ -126,9 +137,18 @@ async function runFishbowlSalesOrderSync(triggeredBy: string) {
     })
 
     throw error
-  } finally {
-    await fbClient.logout()
   }
+}
+
+async function startIfNeeded(supabase: ReturnType<typeof createAdminClient>) {
+  const { count, error } = await supabase
+    .from('fishbowl_so_page_checkpoints')
+    .select('*', { count: 'exact', head: true })
+
+  if (error) throw new Error(`Could not check Fishbowl SO checkpoints: ${error.message}`)
+  if ((count ?? 0) > 0) return { skipped: true, reason: 'checkpoints_exist' }
+
+  return withFishbowlClient((client) => startSalesOrderBackfill(supabase, client))
 }
 
 export const fishbowlSalesOrdersSync = inngest.createFunction(
@@ -140,7 +160,7 @@ export const fishbowlSalesOrdersSync = inngest.createFunction(
   },
   async ({ step }) => {
     return step.run('sync-fishbowl-sales-orders', () =>
-      runFishbowlSalesOrderSync('schedule')
+      runFishbowlSalesOrderSync('schedule', 'incremental')
     )
   }
 )
@@ -154,7 +174,38 @@ export const fishbowlSalesOrdersSyncManual = inngest.createFunction(
   },
   async ({ event, step }) => {
     return step.run('sync-fishbowl-sales-orders-manual', () =>
-      runFishbowlSalesOrderSync(event.data.triggeredBy ?? 'manual')
+      runFishbowlSalesOrderSync(
+        event.data.triggeredBy ?? 'manual',
+        event.data.action ?? (event.data.fullSync ? 'backfill.start' : 'incremental')
+      )
+    )
+  }
+)
+
+export const fishbowlSalesOrdersBackfillPages = inngest.createFunction(
+  {
+    id: 'fishbowl-sales-orders-backfill-pages',
+    name: 'P7: Fishbowl Sales Orders Backfill Pages',
+    retries: 2,
+    triggers: [{ event: 'fishbowl/sales-orders.backfill.pages' }],
+  },
+  async ({ event, step }) => {
+    return step.run('fishbowl-sales-orders-backfill-pages', () =>
+      runFishbowlSalesOrderSync(event.data.triggeredBy ?? 'manual', 'backfill.pages')
+    )
+  }
+)
+
+export const fishbowlSalesOrdersDetailHydrate = inngest.createFunction(
+  {
+    id: 'fishbowl-sales-orders-detail-hydrate',
+    name: 'P7: Fishbowl Sales Orders Detail Hydrate',
+    retries: 2,
+    triggers: [{ event: 'fishbowl/sales-orders.detail.hydrate' }],
+  },
+  async ({ event, step }) => {
+    return step.run('fishbowl-sales-orders-detail-hydrate', () =>
+      runFishbowlSalesOrderSync(event.data.triggeredBy ?? 'manual', 'detail.hydrate')
     )
   }
 )

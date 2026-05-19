@@ -7,7 +7,7 @@ import { SparklineChart } from '@/components/dashboard/SparklineChart'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Play, Eye, Clock, Zap, RefreshCw, Link as LinkIcon, PackageSearch } from 'lucide-react'
+import { Play, Eye, Clock, Zap, RefreshCw, Link as LinkIcon, PackageSearch, Database } from 'lucide-react'
 import Link from 'next/link'
 import { fetchJson } from '@/lib/client-api'
 import type { IntegrationStatusData } from '@/lib/seed-data'
@@ -63,6 +63,7 @@ type IntegrationsDashboardResponse = {
   integrations: IntegrationStatusData[]
   connections: ConnectionConfig[]
   relationshipHealth: RelationshipHealth
+  salesOrderCoverage: SalesOrderCoverage | null
 }
 
 type RelationshipHealth = {
@@ -74,10 +75,28 @@ type RelationshipHealth = {
   opportunitiesWithSoNumber: number
 }
 
+type SalesOrderCoverage = {
+  sourceTotalPages: number
+  sourcePageSize: number
+  sourceTotalHeadersEstimate: number
+  cachedHeaders: number
+  cachedLineItems: number
+  pageCheckpoints: number
+  pagesCompleted: number
+  pagesFailed: number
+  detailQueued: number
+  detailHydrated: number
+  detailFailed: number
+  lastRunAt: string | null
+  lastRunStatus: string | null
+  backfillStatus: string
+}
+
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
   const [connections, setConnections] = useState<ConnectionConfig[]>([])
   const [relationshipHealth, setRelationshipHealth] = useState<RelationshipHealth | null>(null)
+  const [salesOrderCoverage, setSalesOrderCoverage] = useState<SalesOrderCoverage | null>(null)
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({})
   const [triggeringMap, setTriggeringMap] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
@@ -89,6 +108,7 @@ export default function IntegrationsPage() {
         setIntegrations(data.integrations)
         setConnections(data.connections)
         setRelationshipHealth(data.relationshipHealth)
+        setSalesOrderCoverage(data.salesOrderCoverage)
 
         const enabled: Record<string, boolean> = {}
         for (const i of data.integrations) {
@@ -116,6 +136,26 @@ export default function IntegrationsPage() {
       toast.error(error instanceof Error ? error.message : `Unable to trigger ${name}`)
     } finally {
       setTriggeringMap((prev) => ({ ...prev, [automation]: false }))
+    }
+  }
+
+  const handleP7Action = async (action: string) => {
+    setTriggeringMap((prev) => ({ ...prev, [`P7:${action}`]: true }))
+
+    try {
+      const result = await fetchJson<{ eventId?: string; message?: string }>('/api/sync/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          automation: 'P7_FB_SO_SYNC',
+          params: { action, fullSync: action === 'backfill.start' },
+        }),
+      })
+      toast.success(result.message ?? `Triggered ${action}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Unable to trigger ${action}`)
+    } finally {
+      setTriggeringMap((prev) => ({ ...prev, [`P7:${action}`]: false }))
     }
   }
 
@@ -148,6 +188,15 @@ export default function IntegrationsPage() {
   }))
   const relationshipCoverage = relationshipHealth && relationshipHealth.salesOrders > 0
     ? Math.round((relationshipHealth.linkedSalesOrders / relationshipHealth.salesOrders) * 1000) / 10
+    : 0
+  const headerCoverage = salesOrderCoverage && salesOrderCoverage.sourceTotalHeadersEstimate > 0
+    ? Math.round((salesOrderCoverage.cachedHeaders / salesOrderCoverage.sourceTotalHeadersEstimate) * 1000) / 10
+    : 0
+  const pageCoverage = salesOrderCoverage && salesOrderCoverage.pageCheckpoints > 0
+    ? Math.round((salesOrderCoverage.pagesCompleted / salesOrderCoverage.pageCheckpoints) * 1000) / 10
+    : 0
+  const detailCoverage = salesOrderCoverage && salesOrderCoverage.detailQueued > 0
+    ? Math.round((salesOrderCoverage.detailHydrated / salesOrderCoverage.detailQueued) * 1000) / 10
     : 0
 
   if (loading) {
@@ -294,6 +343,99 @@ export default function IntegrationsPage() {
             })}
           </div>
         )}
+
+        {/* ---- Fishbowl Sales Order Coverage ---- */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Database className="h-4 w-4 text-medship-primary" />
+              Fishbowl Sales Order Coverage
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!salesOrderCoverage ? (
+              <ComingSoonPanel
+                title="Coverage tracking is not initialized"
+                description="Run the P7 migration and start the Fishbowl Sales Order backfill to populate coverage metrics."
+              />
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-2xl font-semibold tabular-nums">{salesOrderCoverage.sourceTotalPages.toLocaleString()}</p>
+                    <p className="text-xs uppercase text-muted-foreground">Source Pages</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-2xl font-semibold tabular-nums">{salesOrderCoverage.sourceTotalHeadersEstimate.toLocaleString()}</p>
+                    <p className="text-xs uppercase text-muted-foreground">Est. Headers</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-2xl font-semibold tabular-nums">{headerCoverage}%</p>
+                    <p className="text-xs uppercase text-muted-foreground">Header Coverage</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-2xl font-semibold tabular-nums">{pageCoverage}%</p>
+                    <p className="text-xs uppercase text-muted-foreground">Page Coverage</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-2xl font-semibold tabular-nums">{detailCoverage}%</p>
+                    <p className="text-xs uppercase text-muted-foreground">Detail Coverage</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-2xl font-semibold tabular-nums">{salesOrderCoverage.cachedLineItems.toLocaleString()}</p>
+                    <p className="text-xs uppercase text-muted-foreground">Cached Lines</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
+                  <div>
+                    <span className="text-muted-foreground">Status</span>
+                    <p className="font-medium capitalize">{salesOrderCoverage.backfillStatus.replace('_', ' ')}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Failed pages</span>
+                    <p className="font-medium">{salesOrderCoverage.pagesFailed.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Failed details</span>
+                    <p className="font-medium">{salesOrderCoverage.detailFailed.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Last P7 run</span>
+                    <p className="font-medium">{formatRelativeTime(salesOrderCoverage.lastRunAt ?? undefined)}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 border-t pt-3">
+                  {[
+                    ['backfill.start', 'Start/Resume Backfill'],
+                    ['pause', 'Pause Backfill'],
+                    ['retry.failed', 'Retry Failed'],
+                    ['backfill.pages', 'Fetch Pages'],
+                    ['detail.hydrate', 'Hydrate Details'],
+                    ['incremental', 'Run Incremental'],
+                  ].map(([action, label]) => (
+                    <Button
+                      key={action}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs"
+                      disabled={triggeringMap[`P7:${action}`]}
+                      onClick={() => handleP7Action(action)}
+                    >
+                      {triggeringMap[`P7:${action}`] ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         {/* ---- Canonical Relationship Health ---- */}
         <Card className="shadow-sm">

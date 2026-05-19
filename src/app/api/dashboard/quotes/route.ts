@@ -3,6 +3,8 @@ import { requireApiAuth } from '@/lib/auth'
 import { getQuotes } from '@/lib/data'
 import type { QuoteFilters } from '@/lib/data'
 import type { SeedQuote } from '@/lib/seed-data'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getSalesOrderCoverage, type SalesOrderCoverage } from '@/lib/fishbowl/sales-order-completeness'
 
 type QuoteSummary = {
   total: number
@@ -76,7 +78,8 @@ export async function GET(request: NextRequest) {
       scope: scope === 'all' || scope === 'business' ? scope : 'active',
     }
     const allScopeFilters = { ...filters, scope: 'all' as const }
-    const [result, allFilteredQuotes, allScopeQuotes] = await Promise.all([
+    const supabase = createAdminClient()
+    const [result, allFilteredQuotes, allScopeQuotes, salesOrderCoverage] = await Promise.all([
       getQuotes({
         ...filters,
         page: Number(params.get('page') ?? 1),
@@ -84,12 +87,14 @@ export async function GET(request: NextRequest) {
       }),
       getQuotes({ ...filters, pageSize: 100000 }),
       getQuotes({ ...allScopeFilters, pageSize: 100000 }),
+      getSalesOrderCoverage(supabase).catch(() => null as SalesOrderCoverage | null),
     ])
 
     return NextResponse.json({
       result,
       summary: buildSummary(allFilteredQuotes.data, allFilteredQuotes.total),
       dataQuality: buildDataQualitySummary(allFilteredQuotes.data, allScopeQuotes.data),
+      salesOrderCoverage,
     })
   } catch (error) {
     return NextResponse.json(

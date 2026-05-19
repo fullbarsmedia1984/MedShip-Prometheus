@@ -22,6 +22,8 @@ export {
 export {
   fishbowlSalesOrdersSync,
   fishbowlSalesOrdersSyncManual,
+  fishbowlSalesOrdersBackfillPages,
+  fishbowlSalesOrdersDetailHydrate,
 } from './functions/fishbowl-sales-orders-sync'
 export { sfFullSync } from './functions/sf-full-sync'
 export { sfIncrementalSync } from './functions/sf-incremental-sync'
