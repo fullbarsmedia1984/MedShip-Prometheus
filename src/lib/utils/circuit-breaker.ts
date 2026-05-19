@@ -77,6 +77,9 @@ export function isExternalAuthError(system: ExternalSystem, error: unknown) {
   return [
     'fishbowl login failed',
     'fishbowlautherror',
+    'invalid fishbowl_api_url',
+    'invalid fishbowl cloudflare access configuration',
+    'cloudflare access',
     'invalid credentials',
     'unauthorized',
     '401',

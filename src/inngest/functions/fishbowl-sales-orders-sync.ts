@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   createFishbowlClient,
   getFishbowlConnectionProfile,
+  type FishbowlClient,
 } from '@/lib/fishbowl/client'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import {
@@ -21,22 +22,25 @@ import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
 type P7Action = 'backfill.start' | 'backfill.pages' | 'detail.hydrate' | 'incremental' | 'pause' | 'retry.failed'
 
-async function withFishbowlClient<T>(operation: (client: ReturnType<typeof createFishbowlClient>) => Promise<T>) {
-  const fbClient = createFishbowlClient()
+async function withFishbowlClient<T>(operation: (client: FishbowlClient) => Promise<T>) {
+  const state: { fbClient: FishbowlClient | null } = { fbClient: null }
 
   try {
-    await runWithAuthCircuitBreaker(
+    return await runWithAuthCircuitBreaker(
       {
         system: 'fishbowl',
         automation: 'P7_FB_SO_SYNC',
         sourceSystem: 'fishbowl',
         targetSystem: 'prometheus',
       },
-      () => fbClient.authenticate()
+      async () => {
+        state.fbClient = createFishbowlClient()
+        await state.fbClient.authenticate()
+        return operation(state.fbClient)
+      }
     )
-    return await operation(fbClient)
   } finally {
-    await fbClient.logout()
+    await state.fbClient?.logout()
   }
 }
 
