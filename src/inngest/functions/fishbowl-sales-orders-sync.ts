@@ -94,7 +94,7 @@ async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action =
     } else if (action === 'retry.failed') {
       result = await retryFailedSalesOrderBackfill(supabase)
     } else if (action === 'backfill.start') {
-      result = await withP7FishbowlSession((client) => startSalesOrderBackfill(supabase, client))
+      result = await startOrResumeBackfillChunk(supabase)
     } else if (action === 'backfill.pages') {
       result = await withP7FishbowlSession((client) => processSalesOrderPageBatch(supabase, client))
     } else if (action === 'detail.hydrate') {
@@ -178,6 +178,16 @@ async function processIncrementalChunk(supabase: ReturnType<typeof createAdminCl
   const started = await startIfNeeded(supabase)
 
   return withP7FishbowlSession(async (client) => {
+    const pages = await processSalesOrderPageBatch(supabase, client)
+    const details = await hydrateSalesOrderDetailBatch(supabase, client)
+
+    return { started, pages, details }
+  })
+}
+
+async function startOrResumeBackfillChunk(supabase: ReturnType<typeof createAdminClient>) {
+  return withP7FishbowlSession(async (client) => {
+    const started = await startSalesOrderBackfill(supabase, client)
     const pages = await processSalesOrderPageBatch(supabase, client)
     const details = await hydrateSalesOrderDetailBatch(supabase, client)
 
