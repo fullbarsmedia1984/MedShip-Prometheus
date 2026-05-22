@@ -11,6 +11,10 @@ const INVALID_FIELD_ERROR = 'INVALID_FIELD'
 export async function getUnsyncedClosedOpportunities(
   client: SalesforceClient
 ): Promise<SFOpportunity[]> {
+  const modifiedSince = new Date(Date.now() - 5 * 60_000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, 'Z')
+
   return client.withRetry(async (conn) => {
     try {
       const result = await conn.query<SFOpportunity>(`
@@ -26,7 +30,7 @@ export async function getUnsyncedClosedOpportunities(
         FROM Opportunity
         WHERE StageName = 'Closed Won'
           AND Fishbowl_SO_Number__c = null
-          AND LastModifiedDate >= LAST_N_MINUTES:5
+          AND LastModifiedDate >= ${modifiedSince}
         ORDER BY CloseDate ASC
       `)
 
