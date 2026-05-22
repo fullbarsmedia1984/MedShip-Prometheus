@@ -34,13 +34,19 @@ export type SalesOrderCoverage = {
   cachedHeaders: number
   cachedLineItems: number
   pageCheckpoints: number
+  pagesPending: number
+  pagesRunning: number
   pagesCompleted: number
   pagesFailed: number
   detailQueued: number
+  detailPending: number
+  detailRunning: number
   detailHydrated: number
   detailFailed: number
   lastRunAt: string | null
   lastRunStatus: string | null
+  lastRunMode: SyncRunMode | null
+  activeRunStartedAt: string | null
   backfillStatus: 'not_started' | 'running' | 'complete' | 'partial'
 }
 
@@ -429,30 +435,47 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     headersRes,
     linesRes,
     checkpointsRes,
+    pendingPagesRes,
+    runningPagesRes,
     completedPagesRes,
     failedPagesRes,
     queuedRes,
+    pendingDetailsRes,
+    runningDetailsRes,
     hydratedRes,
     failedDetailsRes,
     latestRunRes,
+    activeRunRes,
   ] = await Promise.all([
     supabase.from('fb_sales_orders').select('*', { count: 'exact', head: true }),
     supabase.from('fb_sales_order_items').select('*', { count: 'exact', head: true }),
     supabase.from('fishbowl_so_page_checkpoints').select('*', { count: 'exact', head: true }),
+    supabase.from('fishbowl_so_page_checkpoints').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('fishbowl_so_page_checkpoints').select('*', { count: 'exact', head: true }).eq('status', 'running'),
     supabase.from('fishbowl_so_page_checkpoints').select('*', { count: 'exact', head: true }).eq('status', 'success'),
     supabase.from('fishbowl_so_page_checkpoints').select('*', { count: 'exact', head: true }).eq('status', 'failed'),
     supabase.from('fishbowl_so_detail_queue').select('*', { count: 'exact', head: true }),
+    supabase.from('fishbowl_so_detail_queue').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('fishbowl_so_detail_queue').select('*', { count: 'exact', head: true }).eq('status', 'running'),
     supabase.from('fishbowl_so_detail_queue').select('*', { count: 'exact', head: true }).eq('status', 'success'),
     supabase.from('fishbowl_so_detail_queue').select('*', { count: 'exact', head: true }).eq('status', 'failed'),
     supabase
       .from('fishbowl_so_sync_runs')
-      .select('status, source_total_pages, source_page_size, source_total_headers_estimate, started_at, completed_at')
+      .select('mode, status, source_total_pages, source_page_size, source_total_headers_estimate, started_at, completed_at')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('fishbowl_so_sync_runs')
+      .select('mode, started_at')
+      .eq('status', 'running')
       .order('started_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
   ])
 
   const latestRun = latestRunRes.data as {
+    mode?: SyncRunMode | null
     status?: string | null
     source_total_pages?: number | null
     source_page_size?: number | null
@@ -460,11 +483,17 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     started_at?: string | null
     completed_at?: string | null
   } | null
+  const activeRun = activeRunRes.data as {
+    mode?: SyncRunMode | null
+    started_at?: string | null
+  } | null
   const sourceTotalPages = latestRun?.source_total_pages ?? checkpointsRes.count ?? 0
   const sourcePageSize = latestRun?.source_page_size ?? DEFAULT_PAGE_SIZE
   const sourceTotalHeadersEstimate = latestRun?.source_total_headers_estimate ?? sourceTotalPages * sourcePageSize
   const pagesCompleted = completedPagesRes.count ?? 0
   const pageCheckpoints = checkpointsRes.count ?? 0
+  const pagesRunning = runningPagesRes.count ?? 0
+  const detailRunning = runningDetailsRes.count ?? 0
   const backfillStatus = pageCheckpoints === 0
     ? 'not_started'
     : pagesCompleted >= pageCheckpoints
@@ -480,13 +509,19 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     cachedHeaders: headersRes.count ?? 0,
     cachedLineItems: linesRes.count ?? 0,
     pageCheckpoints,
+    pagesPending: pendingPagesRes.count ?? 0,
+    pagesRunning,
     pagesCompleted,
     pagesFailed: failedPagesRes.count ?? 0,
     detailQueued: queuedRes.count ?? 0,
+    detailPending: pendingDetailsRes.count ?? 0,
+    detailRunning,
     detailHydrated: hydratedRes.count ?? 0,
     detailFailed: failedDetailsRes.count ?? 0,
-    lastRunAt: latestRun?.completed_at ?? latestRun?.started_at ?? null,
-    lastRunStatus: latestRun?.status ?? null,
+    lastRunAt: activeRun?.started_at ?? latestRun?.completed_at ?? latestRun?.started_at ?? null,
+    lastRunStatus: activeRun ? 'running' : latestRun?.status ?? null,
+    lastRunMode: activeRun?.mode ?? latestRun?.mode ?? null,
+    activeRunStartedAt: activeRun?.started_at ?? null,
     backfillStatus,
   }
 }

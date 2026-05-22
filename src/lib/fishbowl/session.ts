@@ -133,9 +133,11 @@ export async function withFishbowlSession<T>(
 ) {
   const supabase = createAdminClient()
   const lock = await acquireFishbowlLock(supabase, options)
-  const client = createFishbowlClient()
+  let client: FishbowlClient | null = null
 
   try {
+    client = createFishbowlClient()
+    const activeClient = client
     await runWithAuthCircuitBreaker(
       {
         system: 'fishbowl',
@@ -143,12 +145,12 @@ export async function withFishbowlSession<T>(
         sourceSystem: options.sourceSystem,
         targetSystem: options.targetSystem,
       },
-      () => client.authenticate()
+      () => activeClient.authenticate()
     )
 
-    return await operation(client)
+    return await operation(activeClient)
   } finally {
-    await client.logout()
+    await client?.logout()
     await releaseFishbowlLock(supabase, lock.owner)
   }
 }

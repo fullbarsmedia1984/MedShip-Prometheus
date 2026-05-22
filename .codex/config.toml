@@ -1,0 +1,30 @@
+mcp_oauth_callback_port = 5555
+mcp_oauth_callback_url = "http://localhost:5555/callback"
+mcp_oauth_credentials_store = "auto"
+
+[mcp_servers.salesforce_sandbox_reads]
+url = "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads"
+enabled = true
+scopes = ["mcp_api", "refresh_token"]
+default_tools_approval_mode = "approve"
+
+[mcp_servers.salesforce_sandbox_reads.oauth]
+client_id = "<SANDBOX_EXTERNAL_CLIENT_APP_CONSUMER_KEY>"
+
+[mcp_servers.salesforce_sandbox_mutations]
+url = "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-mutations"
+enabled = true
+scopes = ["mcp_api", "refresh_token"]
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.salesforce_sandbox_mutations.oauth]
+client_id = "<SANDBOX_EXTERNAL_CLIENT_APP_CONSUMER_KEY>"
+
+[mcp_servers.salesforce_production_zeus_prometheus_ops]
+url = "https://api.salesforce.com/platform/mcp/v1/custom/zeus-prometheus-ops"
+enabled = false
+scopes = ["mcp_api", "refresh_token"]
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.salesforce_production_zeus_prometheus_ops.oauth]
+client_id = "<PRODUCTION_EXTERNAL_CLIENT_APP_CONSUMER_KEY>"

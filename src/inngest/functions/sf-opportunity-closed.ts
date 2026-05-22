@@ -18,7 +18,7 @@ import { upsertSalesOrdersToCache } from '@/lib/fishbowl/sales-order-cache'
 import { validatePartNumbers } from '@/lib/fishbowl/inventory'
 import type { FBSalesOrderPayload } from '@/types'
 import type { SFOpportunity } from '@/lib/salesforce/types'
-import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
+import { CircuitBreakerOpenError, runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
 
 type SalesforceClientInstance = ReturnType<typeof createSalesforceClient>
@@ -58,6 +58,51 @@ function getEventPayload(event: unknown): Record<string, unknown> | undefined {
     amount: data.amount,
     closeDate: data.closeDate,
   }
+}
+
+async function isP1ScheduleActive() {
+  const { data, error } = await createAdminClient()
+    .from('sync_schedules')
+    .select('is_active')
+    .eq('automation', 'P1_OPP_TO_SO')
+    .maybeSingle()
+
+  if (error) {
+    logger.log('warn', 'P1_OPP_TO_SO', 'Could not read sync schedule; allowing P1 run', {
+      error: error.message,
+    })
+    return true
+  }
+
+  return data?.is_active !== false
+}
+
+function shouldProcessOpportunity(opp: SFOpportunity) {
+  if (opp.StageName && opp.StageName !== 'Closed Won') {
+    return { shouldProcess: false, reason: `Opportunity stage is ${opp.StageName}` }
+  }
+
+  if (opp.Fishbowl_SO_Number__c) {
+    return { shouldProcess: false, reason: 'Opportunity already has Fishbowl SO number' }
+  }
+
+  const lineItems = opp.OpportunityLineItems?.records ?? []
+  if (lineItems.length === 0) {
+    return { shouldProcess: false, reason: 'Opportunity has no line items' }
+  }
+
+  return { shouldProcess: true, reason: null }
+}
+
+async function markP1Skipped(startTime: number, reason: string) {
+  await updateSyncSchedule('P1_OPP_TO_SO', {
+    lastRunAt: new Date().toISOString(),
+    lastRunStatus: 'skipped',
+    lastRunDurationMs: Date.now() - startTime,
+    recordsProcessed: 0,
+  })
+
+  return { processed: 0, failed: 0, skipped: true, reason }
 }
 
 export async function processP1Opportunity({
@@ -269,8 +314,12 @@ export const sfOpportunityClosed = inngest.createFunction(
     const isOpportunityEvent = event.name === 'salesforce/opportunity.closed'
     const opportunityId = getEventOpportunityId(event)
 
-    const sfClient = createSalesforceClient()
+    const scheduleActive = await step.run('check-p1-schedule-active', isP1ScheduleActive)
+    if (!scheduleActive) {
+      return markP1Skipped(startTime, 'P1_OPP_TO_SO is disabled in sync_schedules')
+    }
 
+    const sfClient = createSalesforceClient()
     try {
       await step.run('connect-salesforce', async () => {
         await runWithAuthCircuitBreaker(
@@ -284,45 +333,57 @@ export const sfOpportunityClosed = inngest.createFunction(
         )
       })
 
-      return await withFishbowlSession(
-        {
-          automation: 'P1_OPP_TO_SO',
-          sourceSystem: 'salesforce',
-          targetSystem: 'fishbowl',
-        },
-        async (fbClient) => {
-          if (isOpportunityEvent) {
-            if (!opportunityId) {
-              logger.log('error', 'P1_OPP_TO_SO', 'Opportunity event missing opportunityId')
-              return { processed: 0, failed: 1, message: 'Missing opportunityId' }
-            }
+      if (isOpportunityEvent) {
+        if (!opportunityId) {
+          logger.log('error', 'P1_OPP_TO_SO', 'Opportunity event missing opportunityId')
+          return { processed: 0, failed: 1, message: 'Missing opportunityId' }
+        }
 
-            const opportunity = await step.run(`fetch-opp-${opportunityId}`, async () => {
-              return getOpportunityById(sfClient, opportunityId)
+        const opportunity = await step.run(`fetch-opp-${opportunityId}`, async () => {
+          return getOpportunityById(sfClient, opportunityId)
+        })
+
+        if (!opportunity) {
+          await step.run(`log-missing-opp-${opportunityId}`, async () => {
+            await logSyncEvent({
+              automation: 'P1_OPP_TO_SO',
+              sourceSystem: 'salesforce',
+              targetSystem: 'fishbowl',
+              sourceRecordId: opportunityId,
+              status: 'failed',
+              payload: getEventPayload(event),
+              errorMessage: 'Opportunity not found in Salesforce',
+              idempotencyKey: opportunityId,
             })
+          })
 
-            if (!opportunity) {
-              await step.run(`log-missing-opp-${opportunityId}`, async () => {
-                await logSyncEvent({
-                  automation: 'P1_OPP_TO_SO',
-                  sourceSystem: 'salesforce',
-                  targetSystem: 'fishbowl',
-                  sourceRecordId: opportunityId,
-                  status: 'failed',
-                  payload: getEventPayload(event),
-                  errorMessage: 'Opportunity not found in Salesforce',
-                  idempotencyKey: opportunityId,
-                })
-              })
+          return {
+            processed: 0,
+            failed: 1,
+            message: 'Opportunity not found in Salesforce',
+          }
+        }
 
-              return {
-                processed: 0,
-                failed: 1,
-                message: 'Opportunity not found in Salesforce',
-              }
-            }
+        const readiness = shouldProcessOpportunity(opportunity)
+        if (!readiness.shouldProcess) {
+          logger.log('info', 'P1_OPP_TO_SO', `Skipping ${opportunity.Id} - ${readiness.reason}`)
+          return {
+            processed: 0,
+            failed: 0,
+            skipped: 1,
+            sourceRecordId: opportunity.Id,
+            message: readiness.reason,
+          }
+        }
 
-            const result = await step.run(`process-opp-${opportunity.Id}`, async () => {
+        const result = await withFishbowlSession(
+          {
+            automation: 'P1_OPP_TO_SO',
+            sourceSystem: 'salesforce',
+            targetSystem: 'fishbowl',
+          },
+          async (fbClient) => {
+            return step.run(`process-opp-${opportunity.Id}`, async () => {
               return processP1Opportunity({
                 opp: opportunity,
                 sfClient,
@@ -330,34 +391,66 @@ export const sfOpportunityClosed = inngest.createFunction(
                 sourcePayload: getEventPayload(event),
               })
             })
-
-            return {
-              processed: result.status === 'processed' ? 1 : 0,
-              failed: result.status === 'failed' ? 1 : 0,
-              skipped: result.status === 'skipped' ? 1 : 0,
-              eventId: result.eventId,
-              targetRecordId: result.targetRecordId,
-              errorMessage: result.errorMessage,
-            }
           }
+        )
 
-          const opportunities = await step.run('fetch-unsynced-opps', async () => {
-            return getUnsyncedClosedOpportunities(sfClient)
-          })
+        return {
+          processed: result.status === 'processed' ? 1 : 0,
+          failed: result.status === 'failed' ? 1 : 0,
+          skipped: result.status === 'skipped' ? 1 : 0,
+          eventId: result.eventId,
+          targetRecordId: result.targetRecordId,
+          errorMessage: result.errorMessage,
+        }
+      }
 
-          if (opportunities.length === 0) {
-            await updateSyncSchedule('P1_OPP_TO_SO', {
-              lastRunAt: new Date().toISOString(),
-              lastRunStatus: 'success',
-              lastRunDurationMs: Date.now() - startTime,
-              recordsProcessed: 0,
-            })
-            return { processed: 0, failed: 0, message: 'No unsynced opportunities found' }
-          }
+      const opportunities = await step.run('fetch-unsynced-opps', async () => {
+        return getUnsyncedClosedOpportunities(sfClient)
+      })
 
-          logger.log('info', 'P1_OPP_TO_SO', `Found ${opportunities.length} unsynced opportunities`)
+      if (opportunities.length === 0) {
+        await updateSyncSchedule('P1_OPP_TO_SO', {
+          lastRunAt: new Date().toISOString(),
+          lastRunStatus: 'success',
+          lastRunDurationMs: Date.now() - startTime,
+          recordsProcessed: 0,
+        })
+        return { processed: 0, failed: 0, message: 'No unsynced opportunities found' }
+      }
 
-          for (const opp of opportunities) {
+      const actionableOpportunities = opportunities.filter((opp) => {
+        const readiness = shouldProcessOpportunity(opp)
+        if (!readiness.shouldProcess) {
+          logger.log('info', 'P1_OPP_TO_SO', `Skipping ${opp.Id} - ${readiness.reason}`)
+        }
+        return readiness.shouldProcess
+      })
+
+      if (actionableOpportunities.length === 0) {
+        await updateSyncSchedule('P1_OPP_TO_SO', {
+          lastRunAt: new Date().toISOString(),
+          lastRunStatus: 'success',
+          lastRunDurationMs: Date.now() - startTime,
+          recordsProcessed: 0,
+        })
+        return {
+          processed: 0,
+          failed: 0,
+          skipped: opportunities.length,
+          message: 'No actionable unsynced opportunities found',
+        }
+      }
+
+      logger.log('info', 'P1_OPP_TO_SO', `Found ${actionableOpportunities.length} actionable unsynced opportunities`)
+
+      const result = await withFishbowlSession(
+        {
+          automation: 'P1_OPP_TO_SO',
+          sourceSystem: 'salesforce',
+          targetSystem: 'fishbowl',
+        },
+        async (fbClient) => {
+          for (const opp of actionableOpportunities) {
             await step.run(`process-opp-${opp.Id}`, async () => {
               const result = await processP1Opportunity({
                 opp,
@@ -373,35 +466,25 @@ export const sfOpportunityClosed = inngest.createFunction(
             })
           }
 
-          await updateSyncSchedule('P1_OPP_TO_SO', {
-            lastRunAt: new Date().toISOString(),
-            lastRunStatus: failedCount > 0 ? 'partial' : 'success',
-            lastRunDurationMs: Date.now() - startTime,
-            recordsProcessed: processedCount,
-          })
-
           return { processed: processedCount, failed: failedCount }
         }
       )
+
+      await updateSyncSchedule('P1_OPP_TO_SO', {
+        lastRunAt: new Date().toISOString(),
+        lastRunStatus: failedCount > 0 ? 'partial' : 'success',
+        lastRunDurationMs: Date.now() - startTime,
+        recordsProcessed: processedCount,
+      })
+
+      return result
     } catch (error) {
-      if (error instanceof FishbowlSessionLockError) {
-        await logSyncEvent({
-          automation: 'P1_OPP_TO_SO',
-          sourceSystem: 'salesforce',
-          targetSystem: 'fishbowl',
-          status: 'dismissed',
-          payload: { triggeredBy: isOpportunityEvent ? 'event' : 'schedule', opportunityId },
-          errorMessage: error.message,
+      if (error instanceof FishbowlSessionLockError || error instanceof CircuitBreakerOpenError) {
+        logger.log('warn', 'P1_OPP_TO_SO', `Skipping P1 external sync work: ${error.message}`, {
+          triggeredBy: isOpportunityEvent ? 'event' : 'schedule',
+          opportunityId,
         })
-
-        await updateSyncSchedule('P1_OPP_TO_SO', {
-          lastRunAt: new Date().toISOString(),
-          lastRunStatus: 'skipped',
-          lastRunDurationMs: Date.now() - startTime,
-          recordsProcessed: 0,
-        })
-
-        return { processed: 0, failed: 0, skipped: true, reason: error.message }
+        return markP1Skipped(startTime, error.message)
       }
 
       throw error

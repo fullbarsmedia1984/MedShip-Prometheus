@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Header } from '@/components/layout/Header'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { SparklineChart } from '@/components/dashboard/SparklineChart'
@@ -82,14 +82,90 @@ type SalesOrderCoverage = {
   cachedHeaders: number
   cachedLineItems: number
   pageCheckpoints: number
+  pagesPending: number
+  pagesRunning: number
   pagesCompleted: number
   pagesFailed: number
   detailQueued: number
+  detailPending: number
+  detailRunning: number
   detailHydrated: number
   detailFailed: number
   lastRunAt: string | null
   lastRunStatus: string | null
+  lastRunMode: string | null
+  activeRunStartedAt: string | null
   backfillStatus: string
+}
+
+const P7_ACTION_LABELS: Record<string, string> = {
+  'backfill.start': 'Start/resume backfill',
+  pause: 'Pause backfill',
+  'retry.failed': 'Retry failed rows',
+  'backfill.pages': 'Fetch pages',
+  'detail.hydrate': 'Hydrate details',
+  incremental: 'Run incremental sync',
+}
+
+function formatRunMode(mode?: string | null): string {
+  const map: Record<string, string> = {
+    backfill: 'Backfill setup',
+    pages: 'Page fetch',
+    details: 'Detail hydration',
+    incremental: 'Incremental sync',
+  }
+  return mode ? map[mode] ?? mode.replace('.', ' ') : 'P7'
+}
+
+function buildP7StatusText(
+  coverage: SalesOrderCoverage | null,
+  requestedAction: string | null,
+  monitorUntil: number
+): string {
+  if (!coverage) {
+    return requestedAction
+      ? `${P7_ACTION_LABELS[requestedAction] ?? requestedAction} requested. Waiting for coverage data...`
+      : 'Coverage tracking is waiting for the first P7 run.'
+  }
+
+  const pagesTotal = coverage.pageCheckpoints.toLocaleString()
+  const pagesDone = coverage.pagesCompleted.toLocaleString()
+  const detailsDone = coverage.detailHydrated.toLocaleString()
+  const detailsTotal = coverage.detailQueued.toLocaleString()
+
+  if (coverage.pagesRunning > 0) {
+    return `Fetching Fishbowl pages now: ${pagesDone} of ${pagesTotal} pages complete, ${coverage.pagesPending.toLocaleString()} pending.`
+  }
+
+  if (coverage.detailRunning > 0) {
+    return `Hydrating Sales Order details now: ${detailsDone} of ${detailsTotal} details complete, ${coverage.detailPending.toLocaleString()} pending.`
+  }
+
+  if (coverage.lastRunStatus === 'running') {
+    return `${formatRunMode(coverage.lastRunMode)} is running in Inngest. Started ${formatRelativeTime(coverage.activeRunStartedAt ?? coverage.lastRunAt ?? undefined)}.`
+  }
+
+  if (requestedAction && Date.now() < monitorUntil) {
+    return `${P7_ACTION_LABELS[requestedAction] ?? requestedAction} requested. Watching for Inngest progress...`
+  }
+
+  if (coverage.pagesFailed > 0 || coverage.detailFailed > 0) {
+    return `Backfill needs attention: ${coverage.pagesFailed.toLocaleString()} failed pages and ${coverage.detailFailed.toLocaleString()} failed detail rows are retryable.`
+  }
+
+  if (coverage.backfillStatus === 'complete' && coverage.detailQueued > coverage.detailHydrated) {
+    return `Header backfill is complete. Detail hydration is ${detailsDone} of ${detailsTotal} rows.`
+  }
+
+  if (coverage.backfillStatus === 'complete') {
+    return `Backfill is complete. Zeus has ${coverage.cachedHeaders.toLocaleString()} cached headers and ${coverage.cachedLineItems.toLocaleString()} line items.`
+  }
+
+  if (coverage.backfillStatus === 'running' || coverage.pagesPending > 0 || coverage.detailPending > 0) {
+    return `Backfill is in progress: ${pagesDone} of ${pagesTotal} pages complete and ${detailsDone} of ${detailsTotal} details hydrated.`
+  }
+
+  return `Last P7 status: ${coverage.lastRunStatus ?? coverage.backfillStatus}. Last checked ${formatRelativeTime(coverage.lastRunAt ?? undefined)}.`
 }
 
 export default function IntegrationsPage() {
@@ -100,27 +176,58 @@ export default function IntegrationsPage() {
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({})
   const [triggeringMap, setTriggeringMap] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
+  const [refreshingCoverage, setRefreshingCoverage] = useState(false)
+  const [lastCoverageRefreshAt, setLastCoverageRefreshAt] = useState<string | null>(null)
+  const [lastRequestedP7Action, setLastRequestedP7Action] = useState<string | null>(null)
+  const [p7MonitorUntil, setP7MonitorUntil] = useState(0)
+
+  const loadDashboard = useCallback(async (options?: { initial?: boolean; silent?: boolean }) => {
+    if (!options?.initial && !options?.silent) {
+      setRefreshingCoverage(true)
+    }
+
+    try {
+      const data = await fetchJson<IntegrationsDashboardResponse>('/api/dashboard/integrations')
+      setIntegrations(data.integrations)
+      setConnections(data.connections)
+      setRelationshipHealth(data.relationshipHealth)
+      setSalesOrderCoverage(data.salesOrderCoverage)
+      setLastCoverageRefreshAt(new Date().toISOString())
+
+      const enabled: Record<string, boolean> = {}
+      for (const i of data.integrations) {
+        enabled[i.automation] = i.isActive
+      }
+      setEnabledMap(enabled)
+    } finally {
+      if (options?.initial) setLoading(false)
+      setRefreshingCoverage(false)
+    }
+  }, [])
 
   useEffect(() => {
-    async function load() {
-      try {
-        const data = await fetchJson<IntegrationsDashboardResponse>('/api/dashboard/integrations')
-        setIntegrations(data.integrations)
-        setConnections(data.connections)
-        setRelationshipHealth(data.relationshipHealth)
-        setSalesOrderCoverage(data.salesOrderCoverage)
+    loadDashboard({ initial: true })
+  }, [loadDashboard])
 
-        const enabled: Record<string, boolean> = {}
-        for (const i of data.integrations) {
-          enabled[i.automation] = i.isActive
-        }
-        setEnabledMap(enabled)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
+  useEffect(() => {
+    const shouldPoll =
+      p7MonitorUntil > Date.now() ||
+      salesOrderCoverage?.lastRunStatus === 'running' ||
+      (salesOrderCoverage?.pagesRunning ?? 0) > 0 ||
+      (salesOrderCoverage?.detailRunning ?? 0) > 0 ||
+      (
+        salesOrderCoverage?.backfillStatus === 'running' &&
+        ((salesOrderCoverage?.pagesPending ?? 0) > 0 || (salesOrderCoverage?.detailPending ?? 0) > 0)
+      )
+
+    if (!shouldPoll) return
+
+    const interval = window.setInterval(() => {
+      loadDashboard({ silent: true })
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [loadDashboard, p7MonitorUntil, salesOrderCoverage])
 
   const handleRunNow = async (automation: string, name: string) => {
     setTriggeringMap((prev) => ({ ...prev, [automation]: true }))
@@ -141,6 +248,8 @@ export default function IntegrationsPage() {
 
   const handleP7Action = async (action: string) => {
     setTriggeringMap((prev) => ({ ...prev, [`P7:${action}`]: true }))
+    setLastRequestedP7Action(action)
+    setP7MonitorUntil(Date.now() + 120000)
 
     try {
       const result = await fetchJson<{ eventId?: string; message?: string }>('/api/sync/trigger', {
@@ -152,6 +261,7 @@ export default function IntegrationsPage() {
         }),
       })
       toast.success(result.message ?? `Triggered ${action}`)
+      await loadDashboard({ silent: true })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : `Unable to trigger ${action}`)
     } finally {
@@ -198,6 +308,17 @@ export default function IntegrationsPage() {
   const detailCoverage = salesOrderCoverage && salesOrderCoverage.detailQueued > 0
     ? Math.round((salesOrderCoverage.detailHydrated / salesOrderCoverage.detailQueued) * 1000) / 10
     : 0
+  const p7ActionInFlight = Object.entries(triggeringMap).some(([key, value]) => key.startsWith('P7:') && value)
+  const p7HasLiveActivity = Boolean(
+    p7ActionInFlight ||
+    refreshingCoverage ||
+    salesOrderCoverage?.lastRunStatus === 'running' ||
+    Boolean(salesOrderCoverage?.activeRunStartedAt) ||
+    (salesOrderCoverage?.pagesRunning ?? 0) > 0 ||
+    (salesOrderCoverage?.detailRunning ?? 0) > 0 ||
+    (lastRequestedP7Action && Date.now() < p7MonitorUntil)
+  )
+  const p7StatusText = buildP7StatusText(salesOrderCoverage, lastRequestedP7Action, p7MonitorUntil)
 
   if (loading) {
     return (
@@ -385,6 +506,54 @@ export default function IntegrationsPage() {
                     <p className="text-2xl font-semibold tabular-nums">{salesOrderCoverage.cachedLineItems.toLocaleString()}</p>
                     <p className="text-xs uppercase text-muted-foreground">Cached Lines</p>
                   </div>
+                </div>
+
+                <div
+                  className={cn(
+                    'flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between',
+                    p7HasLiveActivity ? 'border-medship-primary/30 bg-medship-primary/5' : 'bg-muted/30'
+                  )}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                        p7HasLiveActivity ? 'bg-medship-primary/10 text-medship-primary' : 'bg-muted text-muted-foreground'
+                      )}
+                      aria-hidden="true"
+                    >
+                      {p7HasLiveActivity ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Database className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {p7HasLiveActivity ? 'P7 sync activity detected' : 'P7 sync status'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{p7StatusText}</p>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 text-xs text-muted-foreground md:text-right">
+                    <p>
+                      {p7HasLiveActivity ? 'Auto-refreshing every 5s' : 'Auto-refresh starts while P7 is active'}
+                    </p>
+                    <p>Last checked {formatRelativeTime(lastCoverageRefreshAt ?? undefined)}</p>
+                  </div>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      salesOrderCoverage.backfillStatus === 'complete'
+                        ? 'bg-medship-success'
+                        : 'bg-medship-primary'
+                    )}
+                    style={{ width: `${Math.min(Math.max(pageCoverage, 0), 100)}%` }}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-4">

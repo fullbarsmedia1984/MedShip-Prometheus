@@ -5,7 +5,7 @@ import { calculateNextRetry } from '@/lib/utils/retry'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getOpportunityById } from '@/lib/salesforce/queries'
 import { processP1Opportunity } from './sf-opportunity-closed'
-import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
+import { CircuitBreakerOpenError, runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
 
 /**
@@ -64,6 +64,37 @@ export const retryFailedSyncs = inngest.createFunction(
                 () => sfClient.connect()
               )
 
+              const opp = await getOpportunityById(sfClient, event.source_record_id!)
+              if (!opp) {
+                await updateSyncEvent(event.id!, {
+                  status: 'failed',
+                  errorMessage: 'Opportunity not found in Salesforce',
+                  nextRetryAt: null,
+                  completedAt: new Date().toISOString(),
+                })
+                return
+              }
+
+              if (opp.Fishbowl_SO_Number__c) {
+                await updateSyncEvent(event.id!, {
+                  status: 'dismissed',
+                  errorMessage: 'Opportunity already has Fishbowl SO number',
+                  nextRetryAt: null,
+                  completedAt: new Date().toISOString(),
+                })
+                return
+              }
+
+              if ((opp.OpportunityLineItems?.records ?? []).length === 0) {
+                await updateSyncEvent(event.id!, {
+                  status: 'dismissed',
+                  errorMessage: 'Opportunity has no line items',
+                  nextRetryAt: null,
+                  completedAt: new Date().toISOString(),
+                })
+                return
+              }
+
               await withFishbowlSession(
                 {
                   automation: 'P1_OPP_TO_SO',
@@ -71,17 +102,6 @@ export const retryFailedSyncs = inngest.createFunction(
                   targetSystem: 'fishbowl',
                 },
                 async (fbClient) => {
-                  const opp = await getOpportunityById(sfClient, event.source_record_id!)
-                  if (!opp) {
-                    await updateSyncEvent(event.id!, {
-                      status: 'failed',
-                      errorMessage: 'Opportunity not found in Salesforce',
-                      nextRetryAt: null,
-                      completedAt: new Date().toISOString(),
-                    })
-                    return
-                  }
-
                   const result = await processP1Opportunity({
                     opp,
                     sfClient,
@@ -128,12 +148,14 @@ export const retryFailedSyncs = inngest.createFunction(
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-            if (error instanceof FishbowlSessionLockError) {
+            if (error instanceof FishbowlSessionLockError || error instanceof CircuitBreakerOpenError) {
+              const newRetryCount = currentRetryCount + 1
+              const nextRetry = calculateNextRetry(newRetryCount, event.max_retries ?? 4)
               await updateSyncEvent(event.id!, {
-                status: 'dismissed',
+                status: nextRetry ? 'retrying' : 'dismissed',
                 errorMessage,
-                retryCount: currentRetryCount + 1,
-                nextRetryAt: calculateNextRetry(currentRetryCount + 1, event.max_retries ?? 4)?.toISOString() || null,
+                retryCount: newRetryCount,
+                nextRetryAt: nextRetry?.toISOString() || null,
                 completedAt: new Date().toISOString(),
               })
               return
