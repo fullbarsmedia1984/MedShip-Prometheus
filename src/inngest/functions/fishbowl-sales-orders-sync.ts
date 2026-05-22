@@ -26,6 +26,24 @@ type P7Action =
   | 'retry.failed'
   | 'salesforce.mirror'
 
+function numericResultValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function countProcessedRows(result: Record<string, unknown>) {
+  const pages = result.pages && typeof result.pages === 'object'
+    ? result.pages as Record<string, unknown>
+    : null
+  const details = result.details && typeof result.details === 'object'
+    ? result.details as Record<string, unknown>
+    : null
+
+  return numericResultValue(result.headersUpserted)
+    + numericResultValue(result.detailsSucceeded)
+    + numericResultValue(pages?.headersUpserted)
+    + numericResultValue(details?.detailsSucceeded)
+}
+
 async function withP7FishbowlSession<T>(operation: (client: FishbowlClient) => Promise<T>) {
   return withFishbowlSession(
     {
@@ -105,7 +123,7 @@ async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action =
       lastRunAt: new Date().toISOString(),
       lastRunStatus: 'success',
       lastRunDurationMs: Date.now() - startTime,
-      recordsProcessed: Number(result.headersUpserted ?? result.detailsSucceeded ?? 0),
+      recordsProcessed: countProcessedRows(result),
     })
 
     return {
