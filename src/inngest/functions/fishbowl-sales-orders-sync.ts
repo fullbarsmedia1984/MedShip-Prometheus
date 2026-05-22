@@ -89,10 +89,7 @@ async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action =
         result = { ...result, salesforceMirrorError: mirrorResult.error }
       }
     } else {
-      const started = await startIfNeeded(supabase)
-      const pages = await withP7FishbowlSession((client) => processSalesOrderPageBatch(supabase, client))
-      const details = await withP7FishbowlSession((client) => hydrateSalesOrderDetailBatch(supabase, client))
-      result = { started, pages, details }
+      result = await processIncrementalChunk(supabase)
     }
 
     await logSyncEvent({
@@ -159,12 +156,23 @@ async function startIfNeeded(supabase: ReturnType<typeof createAdminClient>) {
   return withP7FishbowlSession((client) => startSalesOrderBackfill(supabase, client))
 }
 
+async function processIncrementalChunk(supabase: ReturnType<typeof createAdminClient>) {
+  const started = await startIfNeeded(supabase)
+
+  return withP7FishbowlSession(async (client) => {
+    const pages = await processSalesOrderPageBatch(supabase, client)
+    const details = await hydrateSalesOrderDetailBatch(supabase, client)
+
+    return { started, pages, details }
+  })
+}
+
 export const fishbowlSalesOrdersSync = inngest.createFunction(
   {
     id: 'fishbowl-sales-orders-sync',
     name: 'P7: Fishbowl Sales Orders Sync',
     retries: 2,
-    triggers: [{ cron: '*/15 * * * *' }],
+    triggers: [{ cron: '5,20,35,50 * * * *' }],
   },
   async ({ step }) => {
     return step.run('sync-fishbowl-sales-orders', () =>
