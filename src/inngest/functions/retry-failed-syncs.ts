@@ -4,9 +4,9 @@ import { getRetryableEvents, updateSyncEvent } from '@/lib/utils/logger'
 import { calculateNextRetry } from '@/lib/utils/retry'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getOpportunityById } from '@/lib/salesforce/queries'
-import { createFishbowlClient } from '@/lib/fishbowl/client'
 import { processP1Opportunity } from './sf-opportunity-closed'
 import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
+import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
 
 /**
  * Retry Failed Sync Events
@@ -53,77 +53,92 @@ export const retryFailedSyncs = inngest.createFunction(
 
           try {
             const sfClient = createSalesforceClient()
-            const fbClient = createFishbowlClient()
-            await runWithAuthCircuitBreaker(
-              {
-                system: 'salesforce',
-                automation: 'P1_OPP_TO_SO',
-                sourceSystem: 'salesforce',
-                targetSystem: 'fishbowl',
-              },
-              () => sfClient.connect()
-            )
-            await runWithAuthCircuitBreaker(
-              {
-                system: 'fishbowl',
-                automation: 'P1_OPP_TO_SO',
-                sourceSystem: 'salesforce',
-                targetSystem: 'fishbowl',
-              },
-              () => fbClient.authenticate()
-            )
+            try {
+              await runWithAuthCircuitBreaker(
+                {
+                  system: 'salesforce',
+                  automation: 'P1_OPP_TO_SO',
+                  sourceSystem: 'salesforce',
+                  targetSystem: 'fishbowl',
+                },
+                () => sfClient.connect()
+              )
 
-            const opp = await getOpportunityById(sfClient, event.source_record_id)
-            if (!opp) {
+              await withFishbowlSession(
+                {
+                  automation: 'P1_OPP_TO_SO',
+                  sourceSystem: 'salesforce',
+                  targetSystem: 'fishbowl',
+                },
+                async (fbClient) => {
+                  const opp = await getOpportunityById(sfClient, event.source_record_id!)
+                  if (!opp) {
+                    await updateSyncEvent(event.id!, {
+                      status: 'failed',
+                      errorMessage: 'Opportunity not found in Salesforce',
+                      nextRetryAt: null,
+                      completedAt: new Date().toISOString(),
+                    })
+                    return
+                  }
+
+                  const result = await processP1Opportunity({
+                    opp,
+                    sfClient,
+                    fbClient,
+                    existingEventId: event.id!,
+                    retryCount: currentRetryCount + 1,
+                    maxRetries: event.max_retries ?? 4,
+                    notesPrefix: 'Retry sync from Salesforce Opportunity',
+                    sourcePayload: event.payload,
+                  })
+
+                  if (result.status === 'processed') {
+                    retriedCount++
+                  } else if (result.status === 'failed' && !result.errorMessage) {
+                    await updateSyncEvent(event.id!, {
+                      status: 'failed',
+                      errorMessage: 'Retry failed without a reported error',
+                      nextRetryAt: null,
+                      completedAt: new Date().toISOString(),
+                    })
+                  }
+
+                  if (
+                    result.status === 'failed' &&
+                    !result.nextRetryAt &&
+                    currentRetryCount + 1 >= (event.max_retries ?? 4)
+                  ) {
+                    logger.log('error', 'P1_OPP_TO_SO', `Max retries exhausted for event ${event.id}`, {
+                      sourceRecordId: event.source_record_id,
+                    })
+                  }
+
+                  if (result.status === 'failed' && result.nextRetryAt) {
+                    logger.log('warn', 'P1_OPP_TO_SO', `Scheduled retry for event ${event.id}`, {
+                      sourceRecordId: event.source_record_id,
+                      retryCount: currentRetryCount + 1,
+                    })
+                  }
+                }
+              )
+            } finally {
+              await sfClient.disconnect().catch(() => {})
+            }
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+            if (error instanceof FishbowlSessionLockError) {
               await updateSyncEvent(event.id!, {
-                status: 'failed',
-                errorMessage: 'Opportunity not found in Salesforce',
-                nextRetryAt: null,
+                status: 'dismissed',
+                errorMessage,
+                retryCount: currentRetryCount + 1,
+                nextRetryAt: calculateNextRetry(currentRetryCount + 1, event.max_retries ?? 4)?.toISOString() || null,
                 completedAt: new Date().toISOString(),
               })
               return
             }
 
-            const result = await processP1Opportunity({
-              opp,
-              sfClient,
-              fbClient,
-              existingEventId: event.id!,
-              retryCount: currentRetryCount + 1,
-              maxRetries: event.max_retries ?? 4,
-              notesPrefix: 'Retry sync from Salesforce Opportunity',
-              sourcePayload: event.payload,
-            })
-
-            if (result.status === 'processed') {
-              retriedCount++
-            } else if (result.status === 'failed' && !result.errorMessage) {
-              await updateSyncEvent(event.id!, {
-                status: 'failed',
-                errorMessage: 'Retry failed without a reported error',
-                nextRetryAt: null,
-                completedAt: new Date().toISOString(),
-              })
-            }
-
-            if (
-              result.status === 'failed' &&
-              !result.nextRetryAt &&
-              currentRetryCount + 1 >= (event.max_retries ?? 4)
-            ) {
-              logger.log('error', 'P1_OPP_TO_SO', `Max retries exhausted for event ${event.id}`, {
-                sourceRecordId: event.source_record_id,
-              })
-            }
-
-            if (result.status === 'failed' && result.nextRetryAt) {
-              logger.log('warn', 'P1_OPP_TO_SO', `Scheduled retry for event ${event.id}`, {
-                sourceRecordId: event.source_record_id,
-                retryCount: currentRetryCount + 1,
-              })
-            }
-          } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error'
             const newRetryCount = currentRetryCount + 1
             const nextRetry = calculateNextRetry(newRetryCount, event.max_retries ?? 4)
 

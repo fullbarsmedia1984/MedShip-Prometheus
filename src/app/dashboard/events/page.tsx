@@ -51,7 +51,7 @@ function capitalize(s: string): string {
 
 const PAGE_SIZE = 25
 const automationKeys = Object.keys(AUTOMATION_INFO) as AutomationType[]
-const statusOptions = ['pending', 'success', 'failed', 'retrying'] as const
+const statusOptions = ['pending', 'running', 'success', 'failed', 'retrying', 'dismissed'] as const
 
 type EventsDashboardResponse = {
   result: PaginatedResult<SyncEvent>

@@ -8,17 +8,18 @@ export async function GET(request: NextRequest) {
     if (!auth.authorized) return auth.response
 
     const params = request.nextUrl.searchParams
+    const filters = {
+      automation: params.get('automation') ?? 'all',
+      status: params.get('status') ?? 'all',
+      search: params.get('search') ?? '',
+      dateFrom: params.get('dateFrom') ?? undefined,
+      dateTo: params.get('dateTo') ?? undefined,
+      page: Number(params.get('page') ?? 1),
+      pageSize: Number(params.get('pageSize') ?? 20),
+    }
     const [result, kpis] = await Promise.all([
-      getSyncEvents({
-        automation: params.get('automation') ?? 'all',
-        status: params.get('status') ?? 'all',
-        search: params.get('search') ?? '',
-        dateFrom: params.get('dateFrom') ?? undefined,
-        dateTo: params.get('dateTo') ?? undefined,
-        page: Number(params.get('page') ?? 1),
-        pageSize: Number(params.get('pageSize') ?? 20),
-      }),
-      getEventKpis(),
+      getSyncEvents(filters),
+      getEventKpis(filters),
     ])
 
     return NextResponse.json({ result, kpis })

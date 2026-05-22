@@ -312,12 +312,24 @@ function applyEventFilters(items: SyncEvent[], filters: EventFilters): SyncEvent
   return sortByCreatedDesc(filtered)
 }
 
+function isEventTelemetry(event: SyncEvent): boolean {
+  return Boolean(
+    event.payload?.circuitBreaker ||
+      (event.source_system === 'prometheus' && event.target_system === 'inngest') ||
+      event.status === 'dismissed' ||
+      event.status === 'pending'
+  )
+}
+
 function getEventKpisFromEvents(events: SyncEvent[], today: string): EventKpis {
   const total = events.length
-  const successes = events.filter((e) => e.status === 'success').length
-  const successRate = total > 0 ? Math.round((successes / total) * 1000) / 10 : 0
+  const outcomeEvents = events.filter((e) => !isEventTelemetry(e) && (e.status === 'success' || e.status === 'failed'))
+  const successes = outcomeEvents.filter((e) => e.status === 'success').length
+  const successRate = outcomeEvents.length > 0
+    ? Math.round((successes / outcomeEvents.length) * 1000) / 10
+    : 0
 
-  const completed = events.filter((e) => e.completed_at)
+  const completed = events.filter((e) => e.completed_at && !isEventTelemetry(e))
   const totalDuration = completed.reduce((sum, e) => {
     const dur = new Date(e.completed_at!).getTime() - new Date(e.created_at).getTime()
     return sum + Math.max(dur, 0)
@@ -325,7 +337,7 @@ function getEventKpisFromEvents(events: SyncEvent[], today: string): EventKpis {
   const avgDurationMs = completed.length > 0 ? Math.round(totalDuration / completed.length) : 0
 
   const failuresToday = events.filter(
-    (e) => e.status === 'failed' && e.created_at.startsWith(today)
+    (e) => !isEventTelemetry(e) && e.status === 'failed' && e.created_at.startsWith(today)
   ).length
 
   return { total, successRate, avgDurationMs, failuresToday }
@@ -1119,10 +1131,11 @@ export interface EventKpis {
   failuresToday: number
 }
 
-export async function getEventKpis(): Promise<EventKpis> {
+export async function getEventKpis(filters: EventFilters = {}): Promise<EventKpis> {
   void await getDataSourceMode()
   const events = await getLiveSyncEvents()
-  return getEventKpisFromEvents(events, new Date().toISOString().slice(0, 10))
+  const items = applyEventFilters(events, filters)
+  return getEventKpisFromEvents(items, new Date().toISOString().slice(0, 10))
 }
 
 // ---------------------------------------------------------------------------

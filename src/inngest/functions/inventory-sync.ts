@@ -4,10 +4,10 @@ import { logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createSalesforceClient } from '@/lib/salesforce/client'
 import { bulkUpdateProductInventory } from '@/lib/salesforce/mutations'
-import { createFishbowlClient } from '@/lib/fishbowl/client'
 import { getAllInventory } from '@/lib/fishbowl/inventory'
 import type { SFProductUpdate } from '@/lib/salesforce/types'
 import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
+import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
 
 async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = false) {
   const startTime = Date.now()
@@ -17,19 +17,15 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
     fullSync,
   })
 
-  const fbClient = createFishbowlClient()
   try {
-    await runWithAuthCircuitBreaker(
+    const inventory = await withFishbowlSession(
       {
-        system: 'fishbowl',
         automation: 'P2_INVENTORY_SYNC',
         sourceSystem: 'fishbowl',
         targetSystem: 'prometheus',
       },
-      () => fbClient.authenticate()
+      (fbClient) => getAllInventory(fbClient)
     )
-
-    const inventory = await getAllInventory(fbClient)
     const supabase = createAdminClient()
 
     for (let i = 0; i < inventory.length; i += 100) {
@@ -106,8 +102,28 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
     })
 
     return { synced: inventory.length, sfUpdates: updateResult }
-  } finally {
-    await fbClient.logout()
+  } catch (error) {
+    if (error instanceof FishbowlSessionLockError) {
+      await logSyncEvent({
+        automation: 'P2_INVENTORY_SYNC',
+        sourceSystem: 'fishbowl',
+        targetSystem: 'prometheus',
+        status: 'dismissed',
+        payload: { triggeredBy, fullSync },
+        errorMessage: error.message,
+      })
+
+      await updateSyncSchedule('P2_INVENTORY_SYNC', {
+        lastRunAt: new Date().toISOString(),
+        lastRunStatus: 'skipped',
+        lastRunDurationMs: Date.now() - startTime,
+        recordsProcessed: 0,
+      })
+
+      return { synced: 0, skipped: true, reason: error.message }
+    }
+
+    throw error
   }
 }
 

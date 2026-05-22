@@ -100,7 +100,14 @@ export type AutomationType =
   | 'P6_LOW_STOCK_CHECK'
   | 'P7_FB_SO_SYNC';
 
-export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'internal';
+export type SystemName =
+  | 'salesforce'
+  | 'fishbowl'
+  | 'quickbooks'
+  | 'easypost'
+  | 'internal'
+  | 'prometheus'
+  | 'inngest';
 
 export type SyncStatus = 'pending' | 'running' | 'success' | 'failed' | 'retrying' | 'dismissed';
 
