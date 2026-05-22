@@ -293,7 +293,7 @@ export async function processP1Opportunity({
 /**
  * P1: Salesforce Opportunity Closed -> Fishbowl Sales Order
  *
- * Cron trigger polls Salesforce every 2 minutes for newly closed-won
+ * Cron trigger polls Salesforce for newly closed-won
  * opportunities. Event trigger processes a specific opportunity from manual
  * requests or Salesforce webhooks.
  */
@@ -301,9 +301,9 @@ export const sfOpportunityClosed = inngest.createFunction(
   {
     id: 'sf-opportunity-closed',
     name: 'P1: SF Opportunity -> Fishbowl SO',
-    retries: 3,
+    retries: 0,
     triggers: [
-      { cron: '*/2 * * * *' },
+      { cron: '*/15 * * * *' },
       { event: 'salesforce/opportunity.closed' },
     ],
   },
@@ -487,7 +487,39 @@ export const sfOpportunityClosed = inngest.createFunction(
         return markP1Skipped(startTime, error.message)
       }
 
-      throw error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown P1 failure'
+      const triggeredBy = isOpportunityEvent ? 'event' : 'schedule'
+
+      logger.log('error', 'P1_OPP_TO_SO', `Top-level P1 failure: ${errorMessage}`, {
+        triggeredBy,
+        opportunityId,
+      })
+
+      await logSyncEvent({
+        automation: 'P1_OPP_TO_SO',
+        sourceSystem: 'salesforce',
+        targetSystem: 'fishbowl',
+        sourceRecordId: opportunityId,
+        status: 'failed',
+        payload: {
+          triggeredBy,
+          opportunityId,
+          phase: 'top_level',
+        },
+        errorMessage,
+        idempotencyKey: opportunityId
+          ? `p1-top-level:${opportunityId}:${new Date().toISOString().slice(0, 13)}`
+          : `p1-top-level:${triggeredBy}:${new Date().toISOString().slice(0, 13)}`,
+      })
+
+      await updateSyncSchedule('P1_OPP_TO_SO', {
+        lastRunAt: new Date().toISOString(),
+        lastRunStatus: 'failed',
+        lastRunDurationMs: Date.now() - startTime,
+        recordsProcessed: 0,
+      })
+
+      return { processed: 0, failed: 1, errorMessage }
     } finally {
       await sfClient.disconnect().catch(() => {})
     }
