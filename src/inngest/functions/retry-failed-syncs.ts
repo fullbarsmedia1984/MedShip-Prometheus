@@ -11,7 +11,7 @@ import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/se
 /**
  * Retry Failed Sync Events
  *
- * Runs every minute. Picks up failed sync events that are due for retry
+ * Runs periodically. Picks up failed sync events that are due for retry
  * and re-dispatches them to the appropriate automation logic.
  */
 export const retryFailedSyncs = inngest.createFunction(
@@ -19,7 +19,7 @@ export const retryFailedSyncs = inngest.createFunction(
     id: 'retry-failed-syncs',
     name: 'Retry Failed Sync Events',
     retries: 0,
-    triggers: [{ cron: '* * * * *' }],
+    triggers: [{ cron: '*/15 * * * *' }],
   },
   async ({ step }) => {
     const retryableEvents = await step.run('get-retryable', () => getRetryableEvents())

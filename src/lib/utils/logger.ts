@@ -197,13 +197,16 @@ class Logger {
    */
   async getRetryableEvents(): Promise<SyncEvent[]> {
     const now = new Date().toISOString()
-    const scanLimit = 200
-    const returnLimit = 50
+    const scanLimit = 50
+    const returnLimit = 25
 
     const { data, error } = await this.supabase
       .from('sync_events')
-      .select('*')
-      .or('status.eq.failed,status.eq.retrying')
+      .select(
+        'id,automation,source_system,target_system,source_record_id,status,payload,error_message,retry_count,max_retries,next_retry_at'
+      )
+      .in('status', ['failed', 'retrying'])
+      .not('next_retry_at', 'is', null)
       .lte('next_retry_at', now)
       .order('next_retry_at', { ascending: true })
       .limit(scanLimit)

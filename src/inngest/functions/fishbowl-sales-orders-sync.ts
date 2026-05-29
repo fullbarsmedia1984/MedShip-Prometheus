@@ -86,6 +86,14 @@ async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action =
   const supabase = createAdminClient()
 
   try {
+    if (triggeredBy === 'schedule' && !(await isP7ScheduleActive(supabase))) {
+      return {
+        action,
+        skipped: true,
+        reason: 'P7_FB_SO_SYNC is disabled in sync_schedules',
+      }
+    }
+
     let result: Record<string, unknown>
     let salesforceMirror: MirrorResult | null = null
 
@@ -163,13 +171,31 @@ async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action =
   }
 }
 
+async function isP7ScheduleActive(supabase: ReturnType<typeof createAdminClient>) {
+  const { data, error } = await supabase
+    .from('sync_schedules')
+    .select('is_active')
+    .eq('automation', 'P7_FB_SO_SYNC')
+    .maybeSingle()
+
+  if (error) {
+    console.warn('Could not read P7 sync schedule; allowing scheduled run', {
+      error: error.message,
+    })
+    return true
+  }
+
+  return data?.is_active !== false
+}
+
 async function startIfNeeded(supabase: ReturnType<typeof createAdminClient>) {
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('fishbowl_so_page_checkpoints')
-    .select('*', { count: 'exact', head: true })
+    .select('id')
+    .limit(1)
 
   if (error) throw new Error(`Could not check Fishbowl SO checkpoints: ${error.message}`)
-  if ((count ?? 0) > 0) return { skipped: true, reason: 'checkpoints_exist' }
+  if ((data ?? []).length > 0) return { skipped: true, reason: 'checkpoints_exist' }
 
   return withP7FishbowlSession((client) => startSalesOrderBackfill(supabase, client))
 }
