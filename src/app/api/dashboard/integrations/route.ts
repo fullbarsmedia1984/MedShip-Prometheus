@@ -32,7 +32,7 @@ async function safeCount(
   const supabase = createAdminClient()
   const baseQuery = supabase
     .from(table)
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
   const query = build ? build(baseQuery) : baseQuery
   const { count, error } = await query
 

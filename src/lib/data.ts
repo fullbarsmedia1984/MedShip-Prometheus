@@ -475,6 +475,18 @@ async function getLiveSyncEvents(): Promise<SyncEvent[]> {
   )
 }
 
+async function getRecentLiveSyncEvents(limit = 500): Promise<SyncEvent[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('sync_events')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data ?? []) as SyncEvent[]
+}
+
 async function getLiveFieldMappings(): Promise<FieldMapping[]> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
@@ -570,7 +582,7 @@ async function getLiveIntegrationStatus(): Promise<IntegrationStatusData[]> {
 
   if (error) throw error
 
-  const events = await getLiveSyncEvents()
+  const events = await getRecentLiveSyncEvents()
   if ((!schedules || schedules.length === 0) && events.length === 0) return []
 
   const scheduleRows = ((schedules ?? []) as SyncScheduleRow[])
