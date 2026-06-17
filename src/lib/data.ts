@@ -51,6 +51,7 @@ export interface OrderFilters {
   scope?: 'business' | 'all'
   page?: number
   pageSize?: number
+  includeItems?: boolean
 }
 
 export interface InventoryFilters {
@@ -69,6 +70,7 @@ export interface EventFilters {
   dateTo?: string
   page?: number
   pageSize?: number
+  includePayload?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +203,7 @@ type CanonicalSalesOrderRow = {
   sf_opportunity_id: string | null
   canonical_state: 'quote' | 'order' | 'void' | 'unknown'
   last_synced_at: string | null
+  data_quality_flags: string[] | null
 }
 
 type CanonicalSalesOrderItemRow = {
@@ -220,6 +223,7 @@ const QUALITY_INCOMPLETE_LINES = 'missing_line_items'
 const QUALITY_ZERO_VALUE = 'zero_value'
 const QUALITY_HISTORICAL = 'historical'
 const TEST_RECORD_PATTERN = /(^|\b)(test|testing|do not use|sample|warehouse)/i
+const SALES_ORDER_HEADER_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
 
 type SfProductCategoryRow = {
   sf_id: string
@@ -389,6 +393,26 @@ function salesOrderQualityFlags(input: {
   return [...flags]
 }
 
+function getSalesOrderFlags(
+  row: CanonicalSalesOrderRow,
+  amount: number,
+  lineItemCount: number,
+  quoteDaysOpen?: number | null
+) {
+  if (Array.isArray(row.data_quality_flags) && row.data_quality_flags.length > 0) {
+    return row.data_quality_flags
+  }
+
+  return salesOrderQualityFlags({
+    soNumber: row.so_number,
+    customerName: row.customer_name,
+    salesperson: row.salesperson,
+    amount,
+    lineItemCount,
+    quoteDaysOpen,
+  })
+}
+
 function warnEmptyLiveTable(tableName: string, surface: string): void {
   console.warn(`${tableName} returned no live rows; ${surface} is returning an empty live result`)
 }
@@ -465,14 +489,16 @@ async function getLiveInventoryProducts(): Promise<Product[]> {
   })
 }
 
-async function getLiveSyncEvents(): Promise<SyncEvent[]> {
+async function getLiveSyncEvents(limit = 1000): Promise<SyncEvent[]> {
   const supabase = createAdminClient()
-  return fetchAllRows<SyncEvent>(() =>
-    supabase
-      .from('sync_events')
-      .select('*')
-      .order('created_at', { ascending: false }) as unknown as SupabaseRangeQuery<SyncEvent>
-  )
+  const { data, error } = await supabase
+    .from('sync_events')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data ?? []) as SyncEvent[]
 }
 
 async function getRecentLiveSyncEvents(limit = 500): Promise<SyncEvent[]> {
@@ -890,67 +916,68 @@ function mapFishbowlOrderStatus(status: string): Order['status'] {
   return 'Pending'
 }
 
-async function getLiveOrders(): Promise<Order[]> {
+async function fetchSalesOrderItemsForNumbers(
+  orderNumbers: string[]
+): Promise<Map<string, OrderItem[]>> {
   const supabase = createAdminClient()
-  const orderRows = await fetchAllRows<CanonicalSalesOrderRow>(() =>
-      supabase
-        .from('canonical_orders')
-        .select('id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at')
-        .order('date_issued', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
-    ).catch((error) => {
+  const uniqueOrderNumbers = [...new Set(orderNumbers.filter(Boolean))]
+  const itemsByOrder = new Map<string, OrderItem[]>()
+
+  for (let index = 0; index < uniqueOrderNumbers.length; index += 100) {
+    const chunk = uniqueOrderNumbers.slice(index, index + 100)
+    const { data, error } = await supabase
+      .from('fb_sales_order_items')
+      .select('id, sales_order_number, part_number, part_description, sf_product_id, quantity, unit_price, total_price')
+      .in('sales_order_number', chunk)
+      .order('line_number', { ascending: true })
+
+    if (error) throw error
+
+    for (const item of (data ?? []) as CanonicalSalesOrderItemRow[]) {
+      const items = itemsByOrder.get(item.sales_order_number) ?? []
+      const quantity = toNumber(item.quantity)
+      const unitPrice = toNumber(item.unit_price)
+      const total = toNumber(item.total_price) || quantity * unitPrice
+      items.push({
+        productId: item.sf_product_id ?? item.part_number ?? item.id,
+        productName: item.part_description ?? item.part_number ?? 'Unknown Product',
+        sku: item.part_number ?? '',
+        quantity,
+        unitPrice: roundCurrency(unitPrice),
+        total: roundCurrency(total),
+      })
+      itemsByOrder.set(item.sales_order_number, items)
+    }
+  }
+
+  return itemsByOrder
+}
+
+async function getLiveOrderRows(): Promise<CanonicalSalesOrderRow[]> {
+  const supabase = createAdminClient()
+  return fetchAllRows<CanonicalSalesOrderRow>(() =>
+    supabase
+      .from('canonical_orders')
+      .select(SALES_ORDER_HEADER_SELECT)
+      .order('date_issued', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+  ).catch((error) => {
       if (isMissingRelationError(error)) {
         warnEmptyLiveTable('canonical_orders', 'orders')
         return []
       }
       throw error
     })
+}
 
-  if (orderRows.length === 0) return []
-
-  const orderNumbers = new Set(orderRows.map((row) => row.so_number))
-
-  const lineItems = await fetchAllRows<CanonicalSalesOrderItemRow>(() =>
-      supabase
-        .from('fb_sales_order_items')
-        .select('id, sales_order_number, part_number, part_description, sf_product_id, quantity, unit_price, total_price')
-        .order('sales_order_number') as unknown as SupabaseRangeQuery<CanonicalSalesOrderItemRow>
-    ).catch((error) => {
-      console.warn('Live Fishbowl sales order item query failed; orders will use header totals only:', error)
-      return []
-    })
-
-  const itemsByOrder = new Map<string, OrderItem[]>()
-  for (const item of lineItems) {
-    if (!orderNumbers.has(item.sales_order_number)) continue
-
-    const items = itemsByOrder.get(item.sales_order_number) ?? []
-    const quantity = toNumber(item.quantity)
-    const unitPrice = toNumber(item.unit_price)
-    const total = toNumber(item.total_price) || quantity * unitPrice
-    items.push({
-      productId: item.sf_product_id ?? item.part_number ?? item.id,
-      productName: item.part_description ?? item.part_number ?? 'Unknown Product',
-      sku: item.part_number ?? '',
-      quantity,
-      unitPrice: roundCurrency(unitPrice),
-      total: roundCurrency(total),
-    })
-    itemsByOrder.set(item.sales_order_number, items)
-  }
-
-  return orderRows.map((row) => {
-    const items = itemsByOrder.get(row.so_number) ?? []
+function mapCanonicalOrderRow(
+  row: CanonicalSalesOrderRow,
+  items: OrderItem[] = []
+): Order {
     const subtotal = toNumber(row.subtotal_amount) ||
       toNumber(row.total_amount) ||
       items.reduce((sum, item) => sum + item.total, 0)
     const date = row.date_issued ?? row.date_created ?? row.last_synced_at ?? new Date().toISOString()
-    const flags = salesOrderQualityFlags({
-      soNumber: row.so_number,
-      customerName: row.customer_name,
-      salesperson: row.salesperson,
-      amount: subtotal,
-      lineItemCount: items.length,
-    })
+    const flags = getSalesOrderFlags(row, subtotal, items.length)
 
     return {
       id: row.id,
@@ -969,7 +996,11 @@ async function getLiveOrders(): Promise<Order[]> {
       dataQualityFlags: flags,
       lineItemCount: items.length,
     }
-  })
+}
+
+async function getLiveOrders(): Promise<Order[]> {
+  const orderRows = await getLiveOrderRows()
+  return orderRows.map((row) => mapCanonicalOrderRow(row))
 }
 
 // ---------------------------------------------------------------------------
@@ -1043,28 +1074,52 @@ async function getLiveCategorySales(): Promise<CategorySales[]> {
 
 export async function getOrders(filters: OrderFilters = {}): Promise<PaginatedResult<Order>> {
   void await getDataSourceMode()
-  const orders = await getLiveOrders()
-  const items = applyOrderFilters(orders, filters)
-  return paginate(items, filters.page, filters.pageSize)
+  const orderRows = await getLiveOrderRows()
+  const headerOrders = orderRows.map((row) => mapCanonicalOrderRow(row))
+  const filteredOrders = applyOrderFilters(headerOrders, filters)
+  const paginated = paginate(filteredOrders, filters.page, filters.pageSize)
+
+  if (filters.includeItems === false || paginated.data.length === 0) {
+    return paginated
+  }
+
+  const itemsByOrder = await fetchSalesOrderItemsForNumbers(
+    paginated.data.map((order) => order.orderNumber)
+  ).catch((error) => {
+    console.warn('Live Fishbowl sales order item page query failed; orders will use header totals only:', error)
+    return new Map<string, OrderItem[]>()
+  })
+  const rowsByOrderNumber = new Map(orderRows.map((row) => [row.so_number, row]))
+
+  return {
+    ...paginated,
+    data: paginated.data.map((order) => {
+      const row = rowsByOrderNumber.get(order.orderNumber)
+      if (!row) return order
+      return mapCanonicalOrderRow(row, itemsByOrder.get(order.orderNumber) ?? [])
+    }),
+  }
 }
 
 export async function getOrderById(id: string): Promise<Order | null> {
   void await getDataSourceMode()
   const decodedId = decodeURIComponent(id)
-  const orders = await getLiveOrders()
+  const orderRows = await getLiveOrderRows()
+  const row = orderRows.find((order) => order.id === decodedId || order.so_number === decodedId)
+  if (!row) return null
 
-  return orders.find(
-    (order) => order.id === decodedId || order.orderNumber === decodedId
-  ) ?? null
+  const itemsByOrder = await fetchSalesOrderItemsForNumbers([row.so_number]).catch((error) => {
+    console.warn('Live Fishbowl sales order item detail query failed; order will use header totals only:', error)
+    return new Map<string, OrderItem[]>()
+  })
+
+  return mapCanonicalOrderRow(row, itemsByOrder.get(row.so_number) ?? [])
 }
 
 export async function getRecentOrders(limit = 10): Promise<Order[]> {
   void await getDataSourceMode()
-  const orders = await getLiveOrders()
-
-  return [...orders]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, limit)
+  const result = await getOrders({ page: 1, pageSize: limit })
+  return result.data
 }
 
 export async function getSalesReps(): Promise<SalesRep[]> {
@@ -1130,10 +1185,51 @@ export async function getInventoryAlerts(limit = 5): Promise<Product[]> {
 
 export async function getSyncEvents(filters: EventFilters = {}): Promise<PaginatedResult<SyncEvent>> {
   void await getDataSourceMode()
-  const events = await getLiveSyncEvents()
-  const items = applyEventFilters(events, filters)
+  const supabase = createAdminClient()
+  const page = Math.max(1, filters.page ?? 1)
+  const pageSize = Math.min(Math.max(1, filters.pageSize ?? 25), 100)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+  const columns = filters.includePayload === false
+    ? 'id,created_at,automation,source_system,target_system,source_record_id,target_record_id,status,error_message,retry_count,max_retries,next_retry_at,completed_at,idempotency_key'
+    : '*'
 
-  return paginate(items, filters.page, filters.pageSize || 25)
+  let query = supabase
+    .from('sync_events')
+    .select(columns, { count: 'estimated' })
+    .order('created_at', { ascending: false })
+
+  if (filters.automation && filters.automation !== 'all') {
+    query = query.eq('automation', filters.automation)
+  }
+  if (filters.status && filters.status !== 'all') {
+    query = query.eq('status', filters.status)
+  }
+  if (filters.dateFrom) {
+    query = query.gte('created_at', filters.dateFrom)
+  }
+  if (filters.dateTo) {
+    query = query.lte('created_at', filters.dateTo)
+  }
+  if (filters.search) {
+    const search = filters.search.replace(/[%*,]/g, '').trim()
+    if (search) {
+      query = query.or(
+        `source_record_id.ilike.%${search}%,target_record_id.ilike.%${search}%,error_message.ilike.%${search}%`
+      )
+    }
+  }
+
+  const { data, count, error } = await query.range(from, to)
+  if (error) throw error
+
+  return {
+    data: (data ?? []) as unknown as SyncEvent[],
+    total: count ?? 0,
+    page,
+    pageSize,
+    totalPages: Math.ceil((count ?? 0) / pageSize),
+  }
 }
 
 export interface EventKpis {
@@ -1145,7 +1241,7 @@ export interface EventKpis {
 
 export async function getEventKpis(filters: EventFilters = {}): Promise<EventKpis> {
   void await getDataSourceMode()
-  const events = await getLiveSyncEvents()
+  const events = await getLiveSyncEvents(1000)
   const items = applyEventFilters(events, filters)
   return getEventKpisFromEvents(items, new Date().toISOString().slice(0, 10))
 }
@@ -1156,11 +1252,17 @@ export async function getEventKpis(filters: EventFilters = {}): Promise<EventKpi
 
 export async function getFailedSyncs(): Promise<SyncEvent[]> {
   void await getDataSourceMode()
-  const events = await getLiveSyncEvents()
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('sync_events')
+    .select('*')
+    .in('status', ['failed', 'retrying'])
+    .order('created_at', { ascending: false })
+    .limit(250)
 
-  return sortByCreatedDesc(events).filter(
-    (e) => e.status === 'failed' || e.status === 'retrying'
-  )
+  if (error) throw error
+
+  return (data ?? []) as SyncEvent[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1399,57 +1501,48 @@ export interface QuoteFilters {
   scope?: 'active' | 'business' | 'all'
   page?: number
   pageSize?: number
+  includeItems?: boolean
 }
 
-export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedResult<SeedQuote>> {
-  void await getDataSourceMode()
+async function getLiveQuoteRows(): Promise<CanonicalSalesOrderRow[]> {
   const supabase = createAdminClient()
-  const rows = await fetchAllRows<CanonicalSalesOrderRow>(() =>
-      supabase
-        .from('canonical_quotes')
-        .select('id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at')
-        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
-    ).catch((error) => {
+  return fetchAllRows<CanonicalSalesOrderRow>(() =>
+    supabase
+      .from('canonical_quotes')
+      .select(SALES_ORDER_HEADER_SELECT)
+      .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+  ).catch((error) => {
       if (isMissingRelationError(error)) {
         warnEmptyLiveTable('canonical_quotes', 'quotes')
         return []
       }
       throw error
     })
+}
 
-  const quoteNumbers = new Set(rows.map((row) => row.so_number))
-  const lineItems = await fetchAllRows<CanonicalSalesOrderItemRow>(() =>
-      supabase
-        .from('fb_sales_order_items')
-        .select('id, sales_order_number, part_number, part_description, sf_product_id, quantity, unit_price, total_price')
-        .order('sales_order_number') as unknown as SupabaseRangeQuery<CanonicalSalesOrderItemRow>
-    ).catch((error) => {
-      console.warn('Live Fishbowl quote item query failed; quotes will be marked incomplete:', error)
-      return []
-    })
+async function fetchLineItemCountsForNumbers(
+  orderNumbers: string[]
+): Promise<Map<string, number>> {
+  const itemsByOrder = await fetchSalesOrderItemsForNumbers(orderNumbers)
   const lineItemCounts = new Map<string, number>()
-  for (const item of lineItems) {
-    if (!quoteNumbers.has(item.sales_order_number)) continue
-    lineItemCounts.set(item.sales_order_number, (lineItemCounts.get(item.sales_order_number) ?? 0) + 1)
+  for (const [orderNumber, items] of itemsByOrder.entries()) {
+    lineItemCounts.set(orderNumber, items.length)
   }
+  return lineItemCounts
+}
 
-  const now = Date.now()
-  const quotes = rows.map((row): SeedQuote => {
+function mapCanonicalQuoteRow(
+  row: CanonicalSalesOrderRow,
+  lineItemCount = 0,
+  now = Date.now()
+): SeedQuote {
     const dateValue = row.date_created ?? row.last_synced_at ?? new Date().toISOString()
     const created = new Date(dateValue)
     const daysOpen = Number.isNaN(created.getTime())
       ? 0
       : Math.max(0, Math.floor((now - created.getTime()) / 86_400_000))
     const amount = roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount))
-    const lineItemCount = lineItemCounts.get(row.so_number) ?? 0
-    const flags = salesOrderQualityFlags({
-      soNumber: row.so_number,
-      customerName: row.customer_name,
-      salesperson: row.salesperson,
-      amount,
-      lineItemCount,
-      quoteDaysOpen: daysSince(dateValue),
-    })
+    const flags = getSalesOrderFlags(row, amount, lineItemCount, daysSince(dateValue))
 
     return {
       id: row.so_number,
@@ -1463,7 +1556,13 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
       dataQualityFlags: flags,
       lineItemCount,
     }
-  })
+}
+
+export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedResult<SeedQuote>> {
+  void await getDataSourceMode()
+  const rows = await getLiveQuoteRows()
+  const now = Date.now()
+  const quotes = rows.map((row) => mapCanonicalQuoteRow(row, 0, now))
 
   let filtered = quotes
   const scope = filters.scope ?? 'active'
@@ -1496,7 +1595,27 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
     )
   }
 
-  return paginate(filtered, filters.page, filters.pageSize)
+  const paginated = paginate(filtered, filters.page, filters.pageSize)
+  if (filters.includeItems === false || paginated.data.length === 0) {
+    return paginated
+  }
+
+  const lineItemCounts = await fetchLineItemCountsForNumbers(
+    paginated.data.map((quote) => quote.id)
+  ).catch((error) => {
+    console.warn('Live Fishbowl quote item page query failed; quotes will use cached quality flags:', error)
+    return new Map<string, number>()
+  })
+  const rowsByQuoteNumber = new Map(rows.map((row) => [row.so_number, row]))
+
+  return {
+    ...paginated,
+    data: paginated.data.map((quote) => {
+      const row = rowsByQuoteNumber.get(quote.id)
+      if (!row) return quote
+      return mapCanonicalQuoteRow(row, lineItemCounts.get(quote.id) ?? 0, now)
+    }),
+  }
 }
 
 function mapFishbowlQuoteStatus(status: string): SeedQuote['status'] {

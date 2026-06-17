@@ -85,8 +85,8 @@ export async function GET(request: NextRequest) {
         page: Number(params.get('page') ?? 1),
         pageSize: Number(params.get('pageSize') ?? 20),
       }),
-      getQuotes({ ...filters, pageSize: 100000 }),
-      getQuotes({ ...allScopeFilters, pageSize: 100000 }),
+      getQuotes({ ...filters, pageSize: 100000, includeItems: false }),
+      getQuotes({ ...allScopeFilters, pageSize: 100000, includeItems: false }),
       getSalesOrderCoverage(supabase).catch(() => null as SalesOrderCoverage | null),
     ])
 
