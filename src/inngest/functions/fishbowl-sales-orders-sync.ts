@@ -10,6 +10,7 @@ import {
 import {
   hydrateSalesOrderDetailBatch,
   pauseSalesOrderBackfill,
+  prepareSalesOrderIncrementalCheckpoints,
   processSalesOrderPageBatch,
   retryFailedSalesOrderBackfill,
   startSalesOrderBackfill,
@@ -204,10 +205,11 @@ async function processIncrementalChunk(supabase: ReturnType<typeof createAdminCl
   const started = await startIfNeeded(supabase)
 
   return withP7FishbowlSession(async (client) => {
+    const prepared = await prepareSalesOrderIncrementalCheckpoints(supabase, client)
     const pages = await processSalesOrderPageBatch(supabase, client)
     const details = await hydrateSalesOrderDetailBatch(supabase, client)
 
-    return { started, pages, details }
+    return { started, prepared, pages, details }
   })
 }
 

@@ -206,6 +206,16 @@ type CanonicalSalesOrderRow = {
   data_quality_flags: string[] | null
 }
 
+type FishbowlSalespersonAliasRow = {
+  fishbowl_salesperson: string
+  sf_user_id: string | null
+  display_name: string
+  team: string | null
+  is_active: boolean | null
+  is_house_account: boolean | null
+  is_system_alias: boolean | null
+}
+
 type CanonicalSalesOrderItemRow = {
   id: string
   sales_order_number: string
@@ -222,8 +232,58 @@ const QUALITY_LIKELY_TEST = 'likely_test'
 const QUALITY_INCOMPLETE_LINES = 'missing_line_items'
 const QUALITY_ZERO_VALUE = 'zero_value'
 const QUALITY_HISTORICAL = 'historical'
+const QUALITY_UNKNOWN_STATE = 'unknown_state'
 const TEST_RECORD_PATTERN = /(^|\b)(test|testing|do not use|sample|warehouse)/i
 const SALES_ORDER_HEADER_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
+const SALES_ORDER_METRIC_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
+
+export interface SalesRepPerformance extends SeedSalesRep {
+  fishbowlAliases: string[]
+  mappingStatus: 'mapped' | 'unmapped' | 'house' | 'system'
+  sourceLabel: 'Fishbowl SO'
+  quoteValueMTD: number
+  quoteValueQTD: number
+  quoteValueYTD: number
+  ordersYTD: number
+  quotesYTD: number
+  lastFishbowlActivityAt: string | null
+}
+
+export interface SalesAliasGap {
+  alias: string
+  displayName: string
+  status: 'unmapped' | 'house' | 'system'
+  ordersYTD: number
+  quotesYTD: number
+  revenueYTD: number
+  latestActivityAt: string | null
+}
+
+export interface SalesDataHealth {
+  revenueSource: 'fishbowl_sales_orders'
+  pipelineSource: 'salesforce_opportunities'
+  latestFishbowlOrderDate: string | null
+  latestFishbowlQuoteDate: string | null
+  fishbowlOrderFreshnessDays: number | null
+  isFishbowlOrderStale: boolean
+  mappedAliasCount: number
+  unmappedAliasCount: number
+  houseAliasCount: number
+  systemAliasCount: number
+  unmappedAliases: SalesAliasGap[]
+  houseAndSystemAliases: SalesAliasGap[]
+  linkedSalesOrders: number
+  unlinkedSalesOrders: number
+  linkCoverage: number
+  linkRows: number
+}
+
+export interface SalesDashboardCore {
+  kpis: SalesKpis
+  reps: SalesRepPerformance[]
+  monthlyRevenue: SeedMonthlyRepRevenue[]
+  salesHealth: SalesDataHealth
+}
 
 type SfProductCategoryRow = {
   sf_id: string
@@ -1319,15 +1379,417 @@ export async function getCustomers(): Promise<Customer[]> {
 // Sales Analytics
 // ---------------------------------------------------------------------------
 
+function getSalesPeriodStarts(now = new Date()) {
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  const qtrStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1).toISOString().split('T')[0]
+  const yearStart = `${now.getFullYear()}-01-01`
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]
+  const monthlyStart = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().split('T')[0]
+  return { monthStart, qtrStart, yearStart, lastMonthStart, monthlyStart }
+}
+
+const REP_COLORS = ['#1E98D5', '#0FA62C', '#1C3C6E', '#A0007E', '#E89C0C', '#D93025', '#B5C8CD', '#3AACE3']
+
+function colorFromId(id: string): string {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0
+  return REP_COLORS[Math.abs(hash) % REP_COLORS.length]
+}
+
+function salesOrderMetricDate(row: CanonicalSalesOrderRow): string | null {
+  return row.date_issued ?? row.date_completed ?? row.date_created ?? row.last_synced_at ?? null
+}
+
+function isOnOrAfter(dateValue: string | null, startDate: string): boolean {
+  return Boolean(dateValue && dateValue >= startDate)
+}
+
+function salesOrderAmount(row: CanonicalSalesOrderRow): number {
+  return roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount))
+}
+
+function metricFlags(row: CanonicalSalesOrderRow, amount: number): Set<string> {
+  const flags = new Set(row.data_quality_flags ?? [])
+  if (hasTestMarker(row.so_number, row.customer_name, row.salesperson)) flags.add(QUALITY_LIKELY_TEST)
+  if (amount <= 0) flags.add(QUALITY_ZERO_VALUE)
+  if (row.canonical_state === 'unknown') flags.add(QUALITY_UNKNOWN_STATE)
+  return flags
+}
+
+function isBusinessSalesMetric(row: CanonicalSalesOrderRow, amount: number): boolean {
+  const flags = metricFlags(row, amount)
+  return !flags.has(QUALITY_LIKELY_TEST) &&
+    !flags.has(QUALITY_ZERO_VALUE) &&
+    !flags.has(QUALITY_UNKNOWN_STATE) &&
+    row.canonical_state !== 'void'
+}
+
+function aliasKey(alias: string | null | undefined): string {
+  return (alias ?? 'Unassigned').trim().toLowerCase()
+}
+
+function defaultAliasMappingRows(): FishbowlSalespersonAliasRow[] {
+  return [
+    { fishbowl_salesperson: 'MikeF', sf_user_id: '0052E00000Ip9EmQAJ', display_name: 'Mike Franzese', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'Leo', sf_user_id: '0052E00000JxFvcQAF', display_name: 'Leo Joanidhi', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'selliott', sf_user_id: '0052E00000NdGDeQAN', display_name: 'Samantha Elliott', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'Samantha', sf_user_id: '0052E00000NdGDeQAN', display_name: 'Samantha Elliott', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'dtorres', sf_user_id: '0052E00000M1qRMQAZ', display_name: 'Danny Torres', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'Dan', sf_user_id: '0052E00000Hlo1lQAB', display_name: 'Dan Micic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'svasic', sf_user_id: '0052E00000Ip9DhQAJ', display_name: 'Stefan Vasic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'kbugarski', sf_user_id: '0052E00000Kuuj8QAB', display_name: 'Kristina Bugarski', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'Christine', sf_user_id: '0052E00000M1j73QAB', display_name: 'Christine Livingstone', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'Nikola', sf_user_id: '005Ua00000EnNsTIAV', display_name: 'Nikola Kovilic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'kdedvukaj', sf_user_id: '005Ua000008QA96IAG', display_name: 'Kendall Cook', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
+    { fishbowl_salesperson: 'admin', sf_user_id: null, display_name: 'Fishbowl Admin / Legacy', team: 'System', is_active: true, is_house_account: false, is_system_alias: true },
+    { fishbowl_salesperson: 'MedShip', sf_user_id: null, display_name: 'Medical Shipment House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false },
+    { fishbowl_salesperson: 'House Account', sf_user_id: null, display_name: 'House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false },
+    { fishbowl_salesperson: 'Warehouse', sf_user_id: null, display_name: 'Warehouse', team: 'System', is_active: true, is_house_account: false, is_system_alias: true },
+  ]
+}
+
+async function getFishbowlSalespersonMappings() {
+  const supabase = createAdminClient()
+  return fetchAllRows<FishbowlSalespersonAliasRow>(() =>
+    supabase
+      .from('fishbowl_salesperson_aliases')
+      .select('fishbowl_salesperson, sf_user_id, display_name, team, is_active, is_house_account, is_system_alias')
+      .eq('is_active', true)
+      .order('display_name') as unknown as SupabaseRangeQuery<FishbowlSalespersonAliasRow>
+  ).catch((error) => {
+    if (isMissingRelationError(error)) return defaultAliasMappingRows()
+    throw error
+  })
+}
+
+function createEmptySalesRep(input: {
+  id: string
+  name: string
+  email?: string
+  team?: string | null
+  mappingStatus: SalesRepPerformance['mappingStatus']
+}): SalesRepPerformance {
+  return {
+    id: input.id,
+    name: input.name,
+    email: input.email ?? '',
+    region: input.team ?? '',
+    color: colorFromId(input.id),
+    revenueMTD: 0,
+    revenueQTD: 0,
+    revenueYTD: 0,
+    dealsClosed: 0,
+    dealsLost: 0,
+    quotesSent: 0,
+    profileCalls: 0,
+    profileCallsChange: 0,
+    connectRate: 0,
+    avgDealSize: 0,
+    avgDaysToClose: 0,
+    pipelineValue: 0,
+    winRate: 0,
+    activityScore: 'cold',
+    fishbowlAliases: [],
+    mappingStatus: input.mappingStatus,
+    sourceLabel: 'Fishbowl SO',
+    quoteValueMTD: 0,
+    quoteValueQTD: 0,
+    quoteValueYTD: 0,
+    ordersYTD: 0,
+    quotesYTD: 0,
+    lastFishbowlActivityAt: null,
+  }
+}
+
+async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
+  const supabase = createAdminClient()
+  const now = new Date()
+  const { monthStart, qtrStart, yearStart, lastMonthStart, monthlyStart } = getSalesPeriodStarts(now)
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    return {
+      key,
+      label: date.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+    }
+  })
+
+  const [usersRes, mappings, orderRows, pipelineRes, profileCallsRes, linkRowsRes] = await Promise.all([
+    supabase.from('sf_users').select('sf_id, name, email').eq('is_active', true),
+    getFishbowlSalespersonMappings(),
+    fetchAllRows<CanonicalSalesOrderRow>(() =>
+      supabase
+        .from('fb_sales_orders')
+        .select(SALES_ORDER_METRIC_SELECT)
+        .in('canonical_state', ['order', 'quote'])
+        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+    ),
+    supabase.from('sf_opportunities').select('owner_sf_id, amount').eq('is_closed', false),
+    supabase.from('sf_profile_calls').select('owner_sf_id, ringdna_connected, activity_date').gte('activity_date', lastMonthStart),
+    supabase.from('opportunity_sales_order_links').select('*', { count: 'estimated', head: true }),
+  ])
+
+  if (usersRes.error) throw usersRes.error
+  if (pipelineRes.error) throw pipelineRes.error
+  if (profileCallsRes.error && !isMissingRelationError(profileCallsRes.error)) throw profileCallsRes.error
+  if (linkRowsRes.error && !isMissingRelationError(linkRowsRes.error)) throw linkRowsRes.error
+
+  const usersById = new Map(((usersRes.data ?? []) as SfUserRow[]).map((user) => [user.sf_id, user]))
+  const mappingsByAlias = new Map(mappings.map((row) => [aliasKey(row.fishbowl_salesperson), row]))
+  const repsById = new Map<string, SalesRepPerformance>()
+  const aliasStats = new Map<string, SalesAliasGap>()
+  const monthlyRows = months.map(({ label }) => ({ month: label } as SeedMonthlyRepRevenue))
+  const pipelineByOwner = new Map<string, number>()
+  const profileStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
+
+  for (const opp of (pipelineRes.data ?? []) as Array<Pick<SfOpportunityRow, 'owner_sf_id' | 'amount'>>) {
+    if (!opp.owner_sf_id) continue
+    pipelineByOwner.set(opp.owner_sf_id, (pipelineByOwner.get(opp.owner_sf_id) ?? 0) + toNumber(opp.amount))
+  }
+
+  for (const call of (profileCallsRes.data ?? []) as Array<{ owner_sf_id: string | null; ringdna_connected: boolean | null; activity_date: string | null }>) {
+    if (!call.owner_sf_id || !call.activity_date) continue
+    const stats = profileStatsByOwner.get(call.owner_sf_id) ?? { mtd: 0, lastMonth: 0, connected: 0 }
+    if (call.activity_date >= monthStart) {
+      stats.mtd++
+      if (call.ringdna_connected) stats.connected++
+    } else if (call.activity_date >= lastMonthStart) {
+      stats.lastMonth++
+    }
+    profileStatsByOwner.set(call.owner_sf_id, stats)
+  }
+
+  const kpis: SalesKpis = {
+    revenueMTD: 0,
+    revenueQTD: 0,
+    revenueYTD: 0,
+    quotesSentMTD: 0,
+    dealsClosedMTD: 0,
+    avgDaysToClose: 0,
+    pipelineValue: 0,
+  }
+
+  let latestFishbowlOrderDate: string | null = null
+  let latestFishbowlQuoteDate: string | null = null
+  let linkedSalesOrders = 0
+  let totalBusinessSalesOrders = 0
+
+  function getOrCreateRep(row: CanonicalSalesOrderRow, mapping: FishbowlSalespersonAliasRow | undefined) {
+    const alias = row.salesperson?.trim() || 'Unassigned'
+    if (mapping?.is_house_account || mapping?.is_system_alias) return null
+
+    const user = mapping?.sf_user_id ? usersById.get(mapping.sf_user_id) : null
+    const id = mapping?.sf_user_id ?? `fishbowl:${alias}`
+    const rep = repsById.get(id) ?? createEmptySalesRep({
+      id,
+      name: mapping?.display_name ?? user?.name ?? alias,
+      email: user?.email ?? '',
+      team: mapping?.team,
+      mappingStatus: mapping ? 'mapped' : 'unmapped',
+    })
+
+    if (!rep.fishbowlAliases.includes(alias)) rep.fishbowlAliases.push(alias)
+    repsById.set(id, rep)
+    return rep
+  }
+
+  function recordAliasGap(row: CanonicalSalesOrderRow, mapping: FishbowlSalespersonAliasRow | undefined, amount: number, metricDate: string | null) {
+    const alias = row.salesperson?.trim() || 'Unassigned'
+    if (mapping && !mapping.is_system_alias && !mapping.is_house_account) return
+
+    const status: SalesAliasGap['status'] = mapping?.is_system_alias
+      ? 'system'
+      : mapping?.is_house_account
+        ? 'house'
+        : 'unmapped'
+    const existing = aliasStats.get(alias) ?? {
+      alias,
+      displayName: mapping?.display_name ?? alias,
+      status,
+      ordersYTD: 0,
+      quotesYTD: 0,
+      revenueYTD: 0,
+      latestActivityAt: null,
+    }
+
+    if (row.canonical_state === 'order' && isOnOrAfter(metricDate, yearStart)) {
+      existing.ordersYTD++
+      existing.revenueYTD += amount
+    }
+    if (row.canonical_state === 'quote' && isOnOrAfter(metricDate, yearStart)) existing.quotesYTD++
+    if (metricDate && (!existing.latestActivityAt || metricDate > existing.latestActivityAt)) {
+      existing.latestActivityAt = metricDate
+    }
+    aliasStats.set(alias, existing)
+  }
+
+  for (const row of orderRows) {
+    const amount = salesOrderAmount(row)
+    if (!isBusinessSalesMetric(row, amount)) continue
+
+    const metricDate = salesOrderMetricDate(row)
+    const mapping = mappingsByAlias.get(aliasKey(row.salesperson))
+    recordAliasGap(row, mapping, amount, metricDate)
+
+    if (row.canonical_state === 'order') {
+      totalBusinessSalesOrders++
+      if (row.sf_opportunity_id) linkedSalesOrders++
+      if (metricDate && (!latestFishbowlOrderDate || metricDate > latestFishbowlOrderDate)) latestFishbowlOrderDate = metricDate
+      if (isOnOrAfter(metricDate, monthStart)) {
+        kpis.revenueMTD += amount
+        kpis.dealsClosedMTD++
+      }
+      if (isOnOrAfter(metricDate, qtrStart)) kpis.revenueQTD += amount
+      if (isOnOrAfter(metricDate, yearStart)) kpis.revenueYTD += amount
+    } else if (row.canonical_state === 'quote') {
+      if (metricDate && (!latestFishbowlQuoteDate || metricDate > latestFishbowlQuoteDate)) latestFishbowlQuoteDate = metricDate
+      if (isOnOrAfter(metricDate, monthStart)) kpis.quotesSentMTD++
+    }
+
+    const rep = getOrCreateRep(row, mapping)
+    if (!rep) continue
+
+    if (metricDate && (!rep.lastFishbowlActivityAt || metricDate > rep.lastFishbowlActivityAt)) {
+      rep.lastFishbowlActivityAt = metricDate
+    }
+
+    if (row.canonical_state === 'order') {
+      if (isOnOrAfter(metricDate, monthStart)) {
+        rep.revenueMTD += amount
+        rep.dealsClosed++
+      }
+      if (isOnOrAfter(metricDate, qtrStart)) rep.revenueQTD += amount
+      if (isOnOrAfter(metricDate, yearStart)) {
+        rep.revenueYTD += amount
+        rep.ordersYTD++
+      }
+
+      const monthIndex = metricDate ? months.findIndex((month) => metricDate.startsWith(month.key)) : -1
+      if (monthIndex >= 0 && metricDate && metricDate >= monthlyStart) {
+        monthlyRows[monthIndex][rep.name] = toNumber(monthlyRows[monthIndex][rep.name] as number | string | null) + amount
+      }
+    } else if (row.canonical_state === 'quote') {
+      if (isOnOrAfter(metricDate, monthStart)) {
+        rep.quotesSent++
+        rep.quoteValueMTD += amount
+      }
+      if (isOnOrAfter(metricDate, qtrStart)) rep.quoteValueQTD += amount
+      if (isOnOrAfter(metricDate, yearStart)) {
+        rep.quoteValueYTD += amount
+        rep.quotesYTD++
+      }
+
+      const normalized = row.status.toLowerCase()
+      if (isOnOrAfter(metricDate, monthStart) && ['expired', 'rejected', 'cancelled', 'canceled'].includes(normalized)) {
+        rep.dealsLost++
+      }
+    }
+  }
+
+  for (const [ownerId, pipelineValue] of pipelineByOwner.entries()) {
+    kpis.pipelineValue += pipelineValue
+    const existing = repsById.get(ownerId)
+    if (existing) {
+      existing.pipelineValue = roundCurrency(pipelineValue)
+    } else if (pipelineValue > 0) {
+      const user = usersById.get(ownerId)
+      if (!user) continue
+      const rep = createEmptySalesRep({
+        id: ownerId,
+        name: user.name ?? ownerId,
+        email: user.email ?? '',
+        mappingStatus: 'unmapped',
+      })
+      rep.pipelineValue = roundCurrency(pipelineValue)
+      repsById.set(ownerId, rep)
+    }
+  }
+
+  for (const [ownerId, stats] of profileStatsByOwner.entries()) {
+    const rep = repsById.get(ownerId)
+    if (!rep) continue
+    rep.profileCalls = stats.mtd
+    rep.profileCallsChange = stats.lastMonth > 0
+      ? Math.round(((stats.mtd - stats.lastMonth) / stats.lastMonth) * 1000) / 10
+      : 0
+    rep.connectRate = stats.mtd > 0 ? Math.round((stats.connected / stats.mtd) * 1000) / 10 : 0
+  }
+
+  const reps = Array.from(repsById.values()).map((rep) => {
+    rep.revenueMTD = roundCurrency(rep.revenueMTD)
+    rep.revenueQTD = roundCurrency(rep.revenueQTD)
+    rep.revenueYTD = roundCurrency(rep.revenueYTD)
+    rep.quoteValueMTD = roundCurrency(rep.quoteValueMTD)
+    rep.quoteValueQTD = roundCurrency(rep.quoteValueQTD)
+    rep.quoteValueYTD = roundCurrency(rep.quoteValueYTD)
+    rep.avgDealSize = rep.ordersYTD > 0 ? Math.round(rep.revenueYTD / rep.ordersYTD) : 0
+    rep.winRate = rep.ordersYTD + rep.quotesYTD > 0
+      ? Math.round((rep.ordersYTD / (rep.ordersYTD + rep.quotesYTD)) * 1000) / 10
+      : 0
+    if (rep.profileCalls >= 20 || rep.dealsClosed >= 10 || rep.revenueMTD >= 100000) rep.activityScore = 'hot'
+    else if (rep.profileCalls >= 10 || rep.dealsClosed >= 5 || rep.revenueQTD >= 100000) rep.activityScore = 'active'
+    else if (rep.profileCalls >= 5 || rep.dealsClosed >= 2 || rep.revenueYTD > 0) rep.activityScore = 'slow'
+    return rep
+  }).sort((a, b) => b.revenueYTD - a.revenueYTD)
+
+  for (const row of monthlyRows) {
+    for (const rep of reps.slice(0, 8)) {
+      row[rep.name] = roundCurrency(toNumber(row[rep.name] as number | string | null))
+    }
+  }
+
+  const allAliasGaps = Array.from(aliasStats.values())
+    .map((gap) => ({ ...gap, revenueYTD: roundCurrency(gap.revenueYTD) }))
+    .sort((a, b) => b.revenueYTD - a.revenueYTD)
+  const houseAndSystemAliases = allAliasGaps.filter((gap) => gap.status === 'house' || gap.status === 'system')
+  const unmappedAliases = allAliasGaps.filter((gap) => gap.status === 'unmapped' && (gap.ordersYTD > 0 || gap.quotesYTD > 0))
+  const freshnessDays = daysSince(latestFishbowlOrderDate)
+
+  kpis.revenueMTD = roundCurrency(kpis.revenueMTD)
+  kpis.revenueQTD = roundCurrency(kpis.revenueQTD)
+  kpis.revenueYTD = roundCurrency(kpis.revenueYTD)
+  kpis.pipelineValue = roundCurrency(kpis.pipelineValue)
+
+  return {
+    kpis,
+    reps,
+    monthlyRevenue: monthlyRows,
+    salesHealth: {
+      revenueSource: 'fishbowl_sales_orders',
+      pipelineSource: 'salesforce_opportunities',
+      latestFishbowlOrderDate,
+      latestFishbowlQuoteDate,
+      fishbowlOrderFreshnessDays: freshnessDays,
+      isFishbowlOrderStale: freshnessDays === null || freshnessDays > 1,
+      mappedAliasCount: mappings.filter((row) => row.is_active !== false && !row.is_house_account && !row.is_system_alias).length,
+      unmappedAliasCount: unmappedAliases.length,
+      houseAliasCount: houseAndSystemAliases.filter((gap) => gap.status === 'house').length,
+      systemAliasCount: houseAndSystemAliases.filter((gap) => gap.status === 'system').length,
+      unmappedAliases: unmappedAliases.slice(0, 8),
+      houseAndSystemAliases: houseAndSystemAliases.slice(0, 8),
+      linkedSalesOrders,
+      unlinkedSalesOrders: Math.max(0, totalBusinessSalesOrders - linkedSalesOrders),
+      linkCoverage: totalBusinessSalesOrders > 0 ? Math.round((linkedSalesOrders / totalBusinessSalesOrders) * 1000) / 10 : 0,
+      linkRows: linkRowsRes.count ?? 0,
+    },
+  }
+}
+
+export async function getSalesDashboardCore(): Promise<SalesDashboardCore> {
+  void await getDataSourceMode()
+  return getOperationalSalesDashboardCore()
+}
+
+
 export async function getSalesLeaderboard(): Promise<SeedSalesRep[]> {
   void await getDataSourceMode()
-  const liveReps = await getLiveSalesReps()
+  const liveReps = await getOperationalSalesDashboardCore().then((core) => core.reps)
   return liveReps.sort((a, b) => b.revenueMTD - a.revenueMTD)
 }
 
-export async function getEnhancedSalesReps(): Promise<SeedSalesRep[]> {
+export async function getEnhancedSalesReps(): Promise<SalesRepPerformance[]> {
   void await getDataSourceMode()
-  return getLiveSalesReps()
+  return getOperationalSalesDashboardCore().then((core) => core.reps)
 }
 
 /**
@@ -1638,7 +2100,7 @@ function mapFishbowlQuoteStatus(status: string): SeedQuote['status'] {
 
 export async function getMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {
   void await getDataSourceMode()
-  return getLiveMonthlyRepRevenue()
+  return getOperationalSalesDashboardCore().then((core) => core.monthlyRevenue)
 }
 
 export async function getPipelineByRep(): Promise<SeedPipelineByRep[]> {
@@ -1775,16 +2237,7 @@ export interface SalesKpis {
 
 export async function getSalesKpis(): Promise<SalesKpis> {
   void await getDataSourceMode()
-  const reps = await getLiveSalesReps()
-  return {
-    revenueMTD: reps.reduce((s, r) => s + r.revenueMTD, 0),
-    revenueQTD: reps.reduce((s, r) => s + r.revenueQTD, 0),
-    revenueYTD: reps.reduce((s, r) => s + r.revenueYTD, 0),
-    quotesSentMTD: reps.reduce((s, r) => s + r.quotesSent, 0),
-    dealsClosedMTD: reps.reduce((s, r) => s + r.dealsClosed, 0),
-    avgDaysToClose: reps.length > 0 ? Math.round(reps.reduce((s, r) => s + r.avgDaysToClose, 0) / reps.length) : 0,
-    pipelineValue: reps.reduce((s, r) => s + r.pipelineValue, 0),
-  }
+  return getOperationalSalesDashboardCore().then((core) => core.kpis)
 }
 
 // ---------------------------------------------------------------------------

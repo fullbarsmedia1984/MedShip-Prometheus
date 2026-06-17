@@ -9,6 +9,7 @@ import { RevenueByRepChart } from '@/components/charts/RevenueByRepChart'
 import { PipelineByRepChart } from '@/components/charts/PipelineByRepChart'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
   Table,
   TableBody,
@@ -28,24 +29,27 @@ import {
   PhoneCall,
   Zap,
   ArrowUpDown,
+  AlertTriangle,
+  Database,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
-import type { SalesKpis, ProfileCallMetricsResult, KeywordResult } from '@/lib/data'
-import type { SeedSalesRep, SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
+import type { SalesKpis, ProfileCallMetricsResult, KeywordResult, SalesRepPerformance, SalesDataHealth } from '@/lib/data'
+import type { SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
 import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
 import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
 import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
 import { CompetitorKeywordCard } from '@/components/dashboard/CompetitorKeywordCard'
 
-type SortKey = 'revenueMTD' | 'revenueQTD' | 'revenueYTD' | 'dealsClosed' | 'dealsLost' | 'winRate' | 'quotesSent' | 'avgDealSize' | 'avgDaysToClose' | 'pipelineValue'
+type SortKey = 'revenueMTD' | 'revenueQTD' | 'revenueYTD' | 'dealsClosed' | 'dealsLost' | 'winRate' | 'quotesSent' | 'quoteValueMTD' | 'avgDealSize' | 'pipelineValue'
 
 type SalesDashboardResponse = {
   kpis: SalesKpis
-  reps: SeedSalesRep[]
+  reps: SalesRepPerformance[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
   pipelineByRep: SeedPipelineByRep[]
+  salesHealth: SalesDataHealth
   quotes: SeedQuote[]
   profileCalls: SeedProfileCall[]
   weeklyVolume: SeedWeeklyCallVolume[]
@@ -59,12 +63,35 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function formatNullableDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'No data'
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return 'No data'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function MappingBadge({ status }: { status: SalesRepPerformance['mappingStatus'] }) {
+  const styles: Record<SalesRepPerformance['mappingStatus'], string> = {
+    mapped: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+    unmapped: 'border-amber-500/30 bg-amber-500/10 text-amber-700',
+    house: 'border-sky-500/30 bg-sky-500/10 text-sky-700',
+    system: 'border-slate-500/30 bg-slate-500/10 text-slate-700',
+  }
+
+  return (
+    <Badge variant="outline" className={cn('capitalize', styles[status])}>
+      {status}
+    </Badge>
+  )
+}
+
 export default function SalesPage() {
   const [loading, setLoading] = useState(true)
   const [kpis, setKpis] = useState<SalesKpis | null>(null)
-  const [reps, setReps] = useState<SeedSalesRep[]>([])
+  const [reps, setReps] = useState<SalesRepPerformance[]>([])
   const [monthlyRevenue, setMonthlyRevenue] = useState<SeedMonthlyRepRevenue[]>([])
   const [pipelineByRep, setPipelineByRep] = useState<SeedPipelineByRep[]>([])
+  const [salesHealth, setSalesHealth] = useState<SalesDataHealth | null>(null)
   const [quotes, setQuotes] = useState<SeedQuote[]>([])
   const [profileCalls, setProfileCalls] = useState<SeedProfileCall[]>([])
   const [weeklyVolume, setWeeklyVolume] = useState<SeedWeeklyCallVolume[]>([])
@@ -83,6 +110,7 @@ export default function SalesPage() {
         setReps(data.reps)
         setMonthlyRevenue(data.monthlyRevenue)
         setPipelineByRep(data.pipelineByRep)
+        setSalesHealth(data.salesHealth)
         setQuotes(data.quotes)
         setProfileCalls(data.profileCalls)
         setWeeklyVolume(data.weeklyVolume)
@@ -145,34 +173,40 @@ export default function SalesPage() {
         {/* KPI Cards */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard
-            title="Revenue MTD"
+            title="Operational Revenue MTD"
             value={`$${kpis.revenueMTD.toLocaleString()}`}
             icon={DollarSign}
             iconColor="text-medship-primary"
           />
           <KpiCard
-            title="Revenue QTD"
+            title="Operational Revenue QTD"
             value={`$${kpis.revenueQTD.toLocaleString()}`}
             icon={TrendingUp}
             iconColor="text-medship-success"
           />
           <KpiCard
-            title="Revenue YTD"
+            title="Operational Revenue YTD"
             value={`$${kpis.revenueYTD.toLocaleString()}`}
             icon={Award}
             iconColor="text-medship-secondary"
           />
           <KpiCard
-            title="Quotes Sent MTD"
-            value="Coming Soon"
+            title="Fishbowl Quotes MTD"
+            value={kpis.quotesSentMTD}
             icon={FileText}
             iconColor="text-medship-info"
           />
           <KpiCard
-            title="Deals Closed MTD"
+            title="Issued SOs MTD"
             value={kpis.dealsClosedMTD}
             icon={Target}
             iconColor="text-medship-danger"
+          />
+          <KpiCard
+            title="Salesforce Pipeline"
+            value={`$${kpis.pipelineValue.toLocaleString()}`}
+            icon={Database}
+            iconColor="text-medship-warning"
           />
           <KpiCard
             title="Profile Calls (MTD)"
@@ -186,10 +220,48 @@ export default function SalesPage() {
           />
         </div>
 
+        {salesHealth && (
+          <Card className={cn(salesHealth.isFishbowlOrderStale && 'border-amber-500/50 bg-amber-500/5')}>
+            <CardContent className="flex flex-col gap-3 p-4 text-sm md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                  salesHealth.isFishbowlOrderStale ? 'bg-amber-500/10 text-amber-700' : 'bg-emerald-500/10 text-emerald-700'
+                )}>
+                  {salesHealth.isFishbowlOrderStale ? <AlertTriangle className="h-4 w-4" /> : <Database className="h-4 w-4" />}
+                </div>
+                <div>
+                  <p className="font-semibold text-card-foreground">
+                    Revenue source: Fishbowl issued Sales Orders
+                  </p>
+                  <p className="text-muted-foreground">
+                    Latest Fishbowl SO: {formatNullableDate(salesHealth.latestFishbowlOrderDate)}
+                    {salesHealth.fishbowlOrderFreshnessDays !== null && ` (${salesHealth.fishbowlOrderFreshnessDays}d old)`}
+                    . Salesforce remains the source for pipeline.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                <Badge variant="outline">Mapped aliases: {salesHealth.mappedAliasCount}</Badge>
+                <Badge variant="outline" className={salesHealth.unmappedAliasCount > 0 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700' : ''}>
+                  Unmapped: {salesHealth.unmappedAliasCount}
+                </Badge>
+                <Badge variant="outline">SO links: {salesHealth.linkCoverage}%</Badge>
+                <Badge variant="outline">Link rows: {salesHealth.linkRows}</Badge>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Sales Rep Performance Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Sales Rep Performance</CardTitle>
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              Sales Rep Performance
+              <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700">
+                Fishbowl SO revenue
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
             {reps.length === 0 ? (
@@ -206,23 +278,13 @@ export default function SalesPage() {
                   <SortHeader label="Revenue MTD" field="revenueMTD" className="text-right" />
                   <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
-                  <SortHeader label="Deals Closed" field="dealsClosed" className="text-center" />
-                  <SortHeader label="Deals Lost" field="dealsLost" className="hidden text-center lg:table-cell" />
-                  <SortHeader label="Win Rate" field="winRate" className="text-center" />
-                  <TableHead className="hidden text-center md:table-cell">
-                    <span className="inline-flex items-center justify-center gap-2">
-                      Quotes Sent
-                      <ComingSoonBadge />
-                    </span>
-                  </TableHead>
-                  <SortHeader label="Avg Deal Size" field="avgDealSize" className="hidden text-right lg:table-cell" />
-                  <TableHead className="hidden text-center lg:table-cell">
-                    <span className="inline-flex items-center justify-center gap-2">
-                      Avg Days
-                      <ComingSoonBadge />
-                    </span>
-                  </TableHead>
-                  <SortHeader label="Pipeline" field="pipelineValue" className="hidden text-right md:table-cell" />
+                  <SortHeader label="Issued SOs" field="dealsClosed" className="text-center" />
+                  <SortHeader label="Quotes MTD" field="quotesSent" className="hidden text-center md:table-cell" />
+                  <SortHeader label="Quote Value" field="quoteValueMTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label="SO Conv." field="winRate" className="text-center" />
+                  <SortHeader label="Avg SO" field="avgDealSize" className="hidden text-right lg:table-cell" />
+                  <SortHeader label="SF Pipeline" field="pipelineValue" className="hidden text-right md:table-cell" />
+                  <TableHead className="hidden text-center lg:table-cell">Mapping</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -245,7 +307,9 @@ export default function SalesPage() {
                           </div>
                           <div>
                             <p className="font-semibold leading-tight text-card-foreground">{rep.name}</p>
-                            <p className="text-[0.7rem] text-muted-foreground">{rep.region}</p>
+                            <p className="max-w-[13rem] truncate text-[0.7rem] text-muted-foreground">
+                              {rep.fishbowlAliases.length > 0 ? rep.fishbowlAliases.join(', ') : 'Salesforce only'}
+                            </p>
                           </div>
                         </div>
                       </TableCell>
@@ -253,16 +317,14 @@ export default function SalesPage() {
                       <TableCell className="hidden text-right tabular-nums xl:table-cell">${rep.revenueQTD.toLocaleString()}</TableCell>
                       <TableCell className="hidden text-right tabular-nums xl:table-cell">${rep.revenueYTD.toLocaleString()}</TableCell>
                       <TableCell className="text-center font-medium">{rep.dealsClosed}</TableCell>
-                      <TableCell className="hidden text-center font-medium lg:table-cell">{rep.dealsLost}</TableCell>
+                      <TableCell className="hidden text-center font-medium md:table-cell">{rep.quotesSent}</TableCell>
+                      <TableCell className="hidden text-right tabular-nums xl:table-cell">${rep.quoteValueMTD.toLocaleString()}</TableCell>
                       <TableCell className={cn('text-center font-semibold', winRateColor)}>{rep.winRate.toFixed(1)}%</TableCell>
-                      <TableCell className="hidden text-center font-medium md:table-cell">
-                        <ComingSoonBadge />
-                      </TableCell>
                       <TableCell className="hidden text-right tabular-nums lg:table-cell">${rep.avgDealSize.toLocaleString()}</TableCell>
-                      <TableCell className="hidden text-center lg:table-cell">
-                        <ComingSoonBadge />
-                      </TableCell>
                       <TableCell className="hidden text-right tabular-nums md:table-cell">${rep.pipelineValue.toLocaleString()}</TableCell>
+                      <TableCell className="hidden text-center lg:table-cell">
+                        <MappingBadge status={rep.mappingStatus} />
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -271,6 +333,92 @@ export default function SalesPage() {
             )}
           </CardContent>
         </Card>
+
+        {salesHealth && (salesHealth.unmappedAliases.length > 0 || salesHealth.houseAndSystemAliases.length > 0) && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Fishbowl Alias Mapping
+                  {salesHealth.unmappedAliases.length > 0 && (
+                    <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700">
+                      Needs Mapping
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {salesHealth.unmappedAliases.length === 0 ? (
+                  <div className="p-5 text-sm text-muted-foreground">All active Fishbowl aliases with YTD activity are mapped.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>Alias</TableHead>
+                        <TableHead className="text-right">YTD Revenue</TableHead>
+                        <TableHead className="text-center">SOs</TableHead>
+                        <TableHead className="text-center">Quotes</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {salesHealth.unmappedAliases.map((alias) => (
+                        <TableRow key={alias.alias}>
+                          <TableCell>
+                            <p className="font-semibold text-card-foreground">{alias.alias}</p>
+                            <p className="text-xs text-muted-foreground">Latest {formatNullableDate(alias.latestActivityAt)}</p>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums">${alias.revenueYTD.toLocaleString()}</TableCell>
+                          <TableCell className="text-center tabular-nums">{alias.ordersYTD}</TableCell>
+                          <TableCell className="text-center tabular-nums">{alias.quotesYTD}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  House / System Visibility
+                  <Badge variant="outline">Not in leaderboard</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {salesHealth.houseAndSystemAliases.length === 0 ? (
+                  <div className="p-5 text-sm text-muted-foreground">No house or system alias activity detected this year.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>Alias</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">YTD Revenue</TableHead>
+                        <TableHead className="text-center">SOs</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {salesHealth.houseAndSystemAliases.map((alias) => (
+                        <TableRow key={alias.alias}>
+                          <TableCell>
+                            <p className="font-semibold text-card-foreground">{alias.displayName}</p>
+                            <p className="text-xs text-muted-foreground">{alias.alias}</p>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">{alias.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums">${alias.revenueYTD.toLocaleString()}</TableCell>
+                          <TableCell className="text-center tabular-nums">{alias.ordersYTD}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Profile Call Leaderboard */}
         {profileMetrics && (

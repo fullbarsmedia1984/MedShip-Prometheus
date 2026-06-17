@@ -54,6 +54,7 @@ const DEFAULT_PAGE_SIZE = Number(process.env.FISHBOWL_SO_PAGE_SIZE ?? 100)
 const DEFAULT_PAGE_BATCH = Number(process.env.FISHBOWL_SO_PAGE_BATCH ?? 10)
 const DEFAULT_DETAIL_BATCH = Number(process.env.FISHBOWL_SO_DETAIL_BATCH ?? 250)
 const DEFAULT_MAX_ATTEMPTS = Number(process.env.FISHBOWL_SO_MAX_ATTEMPTS ?? 3)
+const DEFAULT_INCREMENTAL_PAGES = Number(process.env.FISHBOWL_SO_INCREMENTAL_PAGES ?? 5)
 
 async function insertQueueChunks(
   supabase: SupabaseClient,
@@ -218,6 +219,61 @@ export async function retryFailedSalesOrderBackfill(supabase: SupabaseClient) {
   if (pages.error) throw new Error(`Could not reset failed page checkpoints: ${pages.error.message}`)
   if (details.error) throw new Error(`Could not reset failed detail rows: ${details.error.message}`)
   return { resetFailed: true }
+}
+
+export async function prepareSalesOrderIncrementalCheckpoints(
+  supabase: SupabaseClient,
+  client: FishbowlClient
+) {
+  const pageSize = DEFAULT_PAGE_SIZE
+  const incrementalPages = Math.max(1, DEFAULT_INCREMENTAL_PAGES)
+  const run = await createRun(supabase, 'incremental', { pageSize, incrementalPages })
+
+  try {
+    const page = await getSalesOrdersPage(client, 1, pageSize)
+    const totalPages = page.totalPages
+    const sourceTotalHeadersEstimate = page.totalCount ?? totalPages * page.pageSize
+    const checkpoints = Array.from({ length: totalPages }, (_, index) => ({
+      page_number: index + 1,
+      page_size: page.pageSize,
+      status: 'pending',
+      updated_at: new Date().toISOString(),
+    }))
+
+    await insertCheckpointChunks(supabase, checkpoints)
+
+    const recentPageNumbers = Array.from(
+      { length: Math.min(incrementalPages, totalPages) },
+      (_, index) => index + 1
+    )
+
+    const { error } = await supabase
+      .from('fishbowl_so_page_checkpoints')
+      .update({
+        status: 'pending',
+        attempts: 0,
+        last_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('page_size', page.pageSize)
+      .in('page_number', recentPageNumbers)
+
+    if (error) throw new Error(`Could not requeue recent Fishbowl SO pages: ${error.message}`)
+
+    const summary = {
+      sourceTotalPages: totalPages,
+      sourcePageSize: page.pageSize,
+      sourceTotalHeadersEstimate,
+      pagesRequeued: recentPageNumbers.length,
+      pageCheckpoints: checkpoints.length,
+    }
+    await finishRun(supabase, run.id, 'success', summary)
+    return summary
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await finishRun(supabase, run.id, 'failed', {}, message)
+    throw error
+  }
 }
 
 export async function processSalesOrderPageBatch(

@@ -18,13 +18,7 @@ interface RevenueByRepChartProps {
   data: SeedMonthlyRepRevenue[]
 }
 
-const repColors: Record<string, string> = {
-  'Sarah Mitchell': '#1E98D5',
-  'James Thornton': '#0FA62C',
-  'Maria Gonzalez': '#1C3C6E',
-  'David Kim': '#A0007E',
-  'Lisa Chen': '#E89C0C',
-}
+const palette = ['#1E98D5', '#0FA62C', '#1C3C6E', '#A0007E', '#E89C0C', '#D93025', '#B5C8CD', '#3AACE3']
 
 function formatYAxis(value: number): string {
   return `$${Math.round(value / 1000)}k`
@@ -53,7 +47,9 @@ function CustomTooltip({ active, payload, label }: {
 }
 
 export function RevenueByRepChart({ data }: RevenueByRepChartProps) {
-  const repNames = Object.keys(repColors)
+  const repNames = Array.from(
+    new Set(data.flatMap((row) => Object.keys(row).filter((key) => key !== 'month')))
+  ).slice(0, 8)
 
   return (
     <Card>
@@ -97,8 +93,8 @@ export function RevenueByRepChart({ data }: RevenueByRepChartProps) {
                 key={name}
                 dataKey={name}
                 stackId="revenue"
-                fill={repColors[name]}
-                radius={name === 'Lisa Chen' ? [3, 3, 0, 0] : undefined}
+                fill={palette[repNames.indexOf(name) % palette.length]}
+                radius={repNames.indexOf(name) === repNames.length - 1 ? [3, 3, 0, 0] : undefined}
               />
             ))}
           </BarChart>

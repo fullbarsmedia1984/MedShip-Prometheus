@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/auth'
 import {
-  getSalesKpis,
-  getEnhancedSalesReps,
-  getMonthlyRepRevenue,
+  getSalesDashboardCore,
   getPipelineByRep,
   getQuotes,
   getProfileCalls,
@@ -19,9 +17,7 @@ export async function GET() {
     if (!auth.authorized) return auth.response
 
     const [
-      kpis,
-      reps,
-      monthlyRevenue,
+      salesCore,
       pipelineByRep,
       quotes,
       profileCalls,
@@ -30,9 +26,7 @@ export async function GET() {
       profileMetrics,
       competitorKeywords,
     ] = await Promise.all([
-      getSalesKpis(),
-      getEnhancedSalesReps(),
-      getMonthlyRepRevenue(),
+      getSalesDashboardCore(),
       getPipelineByRep(),
       getQuotes({ pageSize: 40 }),
       getProfileCalls({ pageSize: 50 }),
@@ -43,9 +37,10 @@ export async function GET() {
     ])
 
     return NextResponse.json({
-      kpis,
-      reps,
-      monthlyRevenue,
+      kpis: salesCore.kpis,
+      reps: salesCore.reps,
+      monthlyRevenue: salesCore.monthlyRevenue,
+      salesHealth: salesCore.salesHealth,
       pipelineByRep,
       quotes: quotes.data,
       profileCalls: profileCalls.data,
