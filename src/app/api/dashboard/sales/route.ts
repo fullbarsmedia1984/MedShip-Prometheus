@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { unstable_cache } from 'next/cache'
 import { requireApiAuth } from '@/lib/auth'
 import {
+  SALES_DASHBOARD_CACHE_TAG,
   getSalesDashboardCore,
   getPipelineByRep,
   getQuotes,
@@ -11,11 +13,8 @@ import {
   getTopCompetitorKeywords,
 } from '@/lib/data'
 
-export async function GET() {
-  try {
-    const auth = await requireApiAuth()
-    if (!auth.authorized) return auth.response
-
+const getSalesDashboardPayload = unstable_cache(
+  async () => {
     const [
       salesCore,
       pipelineByRep,
@@ -36,7 +35,7 @@ export async function GET() {
       getTopCompetitorKeywords(10),
     ])
 
-    return NextResponse.json({
+    return {
       kpis: salesCore.kpis,
       reps: salesCore.reps,
       monthlyRevenue: salesCore.monthlyRevenue,
@@ -48,7 +47,21 @@ export async function GET() {
       outcomeBreakdown,
       profileMetrics,
       competitorKeywords,
-    })
+    }
+  },
+  ['sales-dashboard-payload'],
+  {
+    revalidate: 60,
+    tags: [SALES_DASHBOARD_CACHE_TAG],
+  }
+)
+
+export async function GET() {
+  try {
+    const auth = await requireApiAuth()
+    if (!auth.authorized) return auth.response
+
+    return NextResponse.json(await getSalesDashboardPayload())
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },

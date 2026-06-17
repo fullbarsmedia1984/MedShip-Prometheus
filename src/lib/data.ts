@@ -130,6 +130,7 @@ type SupabaseRangeQuery<T> = {
 }
 
 const PAGE_FETCH_SIZE = 1000
+export const SALES_DASHBOARD_CACHE_TAG = 'sales-dashboard'
 const LIVE_AUTOMATIONS = new Set<AutomationType>([
   'SF_FULL_SYNC',
   'SF_INCREMENTAL_SYNC',
@@ -1547,6 +1548,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       label: date.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
     }
   })
+  const metricQueryStart = [yearStart, monthlyStart].sort()[0]
 
   const [usersRes, mappings, orderRows, pipelineRes, profileCallsRes, linkRowsRes] = await Promise.all([
     supabase.from('sf_users').select('sf_id, name, email').eq('is_active', true),
@@ -1556,6 +1558,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         .from('fb_sales_orders')
         .select(SALES_ORDER_METRIC_SELECT)
         .in('canonical_state', ['order', 'quote'])
+        .or(`date_issued.gte.${metricQueryStart},date_completed.gte.${metricQueryStart},date_created.gte.${metricQueryStart}`)
         .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
     ),
     supabase.from('sf_opportunities').select('owner_sf_id, amount').eq('is_closed', false),

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireApiAuth } from '@/lib/auth'
+import { SALES_DASHBOARD_CACHE_TAG } from '@/lib/data'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 type RosterRequest = {
@@ -66,6 +68,8 @@ export async function PATCH(request: NextRequest) {
 
       if (error) throw error
     }
+
+    revalidateTag(SALES_DASHBOARD_CACHE_TAG, { expire: 0 })
 
     return NextResponse.json({ selectedAliases: uniqueAliases })
   } catch (error) {
