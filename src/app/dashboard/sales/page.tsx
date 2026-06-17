@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { QuoteStatusBadge } from '@/components/dashboard/QuoteStatusBadge'
 import { EmptyState } from '@/components/dashboard/EmptyState'
@@ -10,6 +10,7 @@ import { PipelineByRepChart } from '@/components/charts/PipelineByRepChart'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -31,6 +32,8 @@ import {
   ArrowUpDown,
   AlertTriangle,
   Database,
+  Save,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
@@ -99,32 +102,93 @@ export default function SalesPage() {
   const [profileMetrics, setProfileMetrics] = useState<ProfileCallMetricsResult | null>(null)
   const [competitorKeywords, setCompetitorKeywords] = useState<KeywordResult[]>([])
   const [keywordFilter, setKeywordFilter] = useState<string | undefined>(undefined)
+  const [selectedRosterAliases, setSelectedRosterAliases] = useState<string[]>([])
+  const [savingRoster, setSavingRoster] = useState(false)
+  const [rosterError, setRosterError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('revenueMTD')
   const [sortAsc, setSortAsc] = useState(false)
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await fetchJson<SalesDashboardResponse>('/api/dashboard/sales')
-        setKpis(data.kpis)
-        setReps(data.reps)
-        setMonthlyRevenue(data.monthlyRevenue)
-        setPipelineByRep(data.pipelineByRep)
-        setSalesHealth(data.salesHealth)
-        setQuotes(data.quotes)
-        setProfileCalls(data.profileCalls)
-        setWeeklyVolume(data.weeklyVolume)
-        setOutcomeBreakdown(data.outcomeBreakdown)
-        setProfileMetrics(data.profileMetrics)
-        setCompetitorKeywords(data.competitorKeywords)
-      } catch (error) {
-        console.error('Failed to load sales data:', error)
-      } finally {
-        setLoading(false)
-      }
+  const loadData = useCallback(async () => {
+    try {
+      const data = await fetchJson<SalesDashboardResponse>('/api/dashboard/sales')
+      setKpis(data.kpis)
+      setReps(data.reps)
+      setMonthlyRevenue(data.monthlyRevenue)
+      setPipelineByRep(data.pipelineByRep)
+      setSalesHealth(data.salesHealth)
+      setSelectedRosterAliases(data.salesHealth.rosterOptions.filter((option) => option.isSelected).map((option) => option.fishbowlSalesperson))
+      setQuotes(data.quotes)
+      setProfileCalls(data.profileCalls)
+      setWeeklyVolume(data.weeklyVolume)
+      setOutcomeBreakdown(data.outcomeBreakdown)
+      setProfileMetrics(data.profileMetrics)
+      setCompetitorKeywords(data.competitorKeywords)
+    } catch (error) {
+      console.error('Failed to load sales data:', error)
+    } finally {
+      setLoading(false)
     }
-    loadData()
   }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const rosterGroups = useMemo(() => {
+    const groups = new Map<string, {
+      key: string
+      displayName: string
+      aliases: string[]
+      latestActivityAt: string | null
+    }>()
+
+    for (const option of salesHealth?.rosterOptions ?? []) {
+      const key = option.sfUserId ?? option.displayName
+      const group = groups.get(key) ?? {
+        key,
+        displayName: option.displayName,
+        aliases: [],
+        latestActivityAt: null,
+      }
+      group.aliases.push(option.fishbowlSalesperson)
+      if (option.latestActivityAt && (!group.latestActivityAt || option.latestActivityAt > group.latestActivityAt)) {
+        group.latestActivityAt = option.latestActivityAt
+      }
+      groups.set(key, group)
+    }
+
+    return Array.from(groups.values())
+  }, [salesHealth])
+
+  const toggleRosterGroup = (aliases: string[]) => {
+    setRosterError(null)
+    setSelectedRosterAliases((current) => {
+      const selected = new Set(current)
+      const shouldRemove = aliases.some((alias) => selected.has(alias))
+      for (const alias of aliases) {
+        if (shouldRemove) selected.delete(alias)
+        else selected.add(alias)
+      }
+      return [...selected]
+    })
+  }
+
+  const saveRoster = async () => {
+    setRosterError(null)
+    setSavingRoster(true)
+    try {
+      await fetchJson<{ selectedAliases: string[] }>('/api/dashboard/sales/roster', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedAliases: selectedRosterAliases }),
+      })
+      await loadData()
+    } catch (error) {
+      setRosterError(error instanceof Error ? error.message : 'Could not save roster')
+    } finally {
+      setSavingRoster(false)
+    }
+  }
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -141,6 +205,8 @@ export default function SalesPage() {
   })
 
   const topPerformerId = sortedReps[0]?.id
+  const activeMetricLabel = salesHealth?.activeMetricPeriodLabel ?? 'MTD'
+  const shortMetricLabel = salesHealth?.isMetricPeriodFallback ? activeMetricLabel : 'MTD'
 
   if (loading || !kpis) {
     return (
@@ -173,7 +239,7 @@ export default function SalesPage() {
         {/* KPI Cards */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard
-            title="Operational Revenue MTD"
+            title={`Operational Revenue ${shortMetricLabel}`}
             value={`$${kpis.revenueMTD.toLocaleString()}`}
             icon={DollarSign}
             iconColor="text-medship-primary"
@@ -191,13 +257,13 @@ export default function SalesPage() {
             iconColor="text-medship-secondary"
           />
           <KpiCard
-            title="Fishbowl Quotes MTD"
+            title={`Fishbowl Quotes ${shortMetricLabel}`}
             value={kpis.quotesSentMTD}
             icon={FileText}
             iconColor="text-medship-info"
           />
           <KpiCard
-            title="Issued SOs MTD"
+            title={`Issued SOs ${shortMetricLabel}`}
             value={kpis.dealsClosedMTD}
             icon={Target}
             iconColor="text-medship-danger"
@@ -238,6 +304,7 @@ export default function SalesPage() {
                     Latest Fishbowl SO: {formatNullableDate(salesHealth.latestFishbowlOrderDate)}
                     {salesHealth.fishbowlOrderFreshnessDays !== null && ` (${salesHealth.fishbowlOrderFreshnessDays}d old)`}
                     . Salesforce remains the source for pipeline.
+                    {salesHealth.isMetricPeriodFallback && ` Showing latest available Fishbowl period: ${salesHealth.activeMetricPeriodLabel}.`}
                   </p>
                 </div>
               </div>
@@ -248,6 +315,64 @@ export default function SalesPage() {
                 </Badge>
                 <Badge variant="outline">SO links: {salesHealth.linkCoverage}%</Badge>
                 <Badge variant="outline">Link rows: {salesHealth.linkRows}</Badge>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {salesHealth && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                Active Sales Roster
+                <Badge variant="outline">{selectedRosterAliases.length} aliases selected</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {rosterGroups.map((group) => {
+                  const isSelected = group.aliases.some((alias) => selectedRosterAliases.includes(alias))
+                  return (
+                    <label
+                      key={group.key}
+                      className={cn(
+                        'flex min-h-24 cursor-pointer flex-col justify-between rounded-lg border p-3 transition-colors',
+                        isSelected
+                          ? 'border-medship-primary/40 bg-medship-primary/5'
+                          : 'border-[#D6DEE3] bg-card hover:bg-muted/30'
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleRosterGroup(group.aliases)}
+                          className="h-4 w-4 accent-medship-primary"
+                        />
+                        <span className="font-semibold text-card-foreground">{group.displayName}</span>
+                      </span>
+                      <span className="mt-2 text-xs text-muted-foreground">
+                        {group.aliases.join(', ')}
+                      </span>
+                      <span className="mt-1 text-xs text-muted-foreground">
+                        Latest {formatNullableDate(group.latestActivityAt)}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button onClick={saveRoster} disabled={savingRoster || selectedRosterAliases.length === 0}>
+                  <Save className="h-4 w-4" />
+                  {savingRoster ? 'Saving' : 'Save Roster'}
+                </Button>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  Showing selected roster in leaderboard and operational period metrics.
+                </div>
+                {rosterError && (
+                  <p className="text-sm font-medium text-medship-danger">{rosterError}</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -275,11 +400,11 @@ export default function SalesPage() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Rep</TableHead>
-                  <SortHeader label="Revenue MTD" field="revenueMTD" className="text-right" />
+                  <SortHeader label={`Revenue ${shortMetricLabel}`} field="revenueMTD" className="text-right" />
                   <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
-                  <SortHeader label="Issued SOs" field="dealsClosed" className="text-center" />
-                  <SortHeader label="Quotes MTD" field="quotesSent" className="hidden text-center md:table-cell" />
+                  <SortHeader label={`Issued SOs ${shortMetricLabel}`} field="dealsClosed" className="text-center" />
+                  <SortHeader label={`Quotes ${shortMetricLabel}`} field="quotesSent" className="hidden text-center md:table-cell" />
                   <SortHeader label="Quote Value" field="quoteValueMTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="SO Conv." field="winRate" className="text-center" />
                   <SortHeader label="Avg SO" field="avgDealSize" className="hidden text-right lg:table-cell" />

@@ -214,6 +214,8 @@ type FishbowlSalespersonAliasRow = {
   is_active: boolean | null
   is_house_account: boolean | null
   is_system_alias: boolean | null
+  show_on_sales_dashboard: boolean | null
+  dashboard_sort_order: number | null
 }
 
 type CanonicalSalesOrderItemRow = {
@@ -259,6 +261,16 @@ export interface SalesAliasGap {
   latestActivityAt: string | null
 }
 
+export interface SalesRosterOption {
+  fishbowlSalesperson: string
+  displayName: string
+  sfUserId: string | null
+  team: string | null
+  isSelected: boolean
+  sortOrder: number | null
+  latestActivityAt: string | null
+}
+
 export interface SalesDataHealth {
   revenueSource: 'fishbowl_sales_orders'
   pipelineSource: 'salesforce_opportunities'
@@ -276,6 +288,11 @@ export interface SalesDataHealth {
   unlinkedSalesOrders: number
   linkCoverage: number
   linkRows: number
+  activeMetricPeriodLabel: string
+  activeMetricPeriodStart: string
+  activeMetricPeriodEnd: string
+  isMetricPeriodFallback: boolean
+  rosterOptions: SalesRosterOption[]
 }
 
 export interface SalesDashboardCore {
@@ -1404,6 +1421,22 @@ function isOnOrAfter(dateValue: string | null, startDate: string): boolean {
   return Boolean(dateValue && dateValue >= startDate)
 }
 
+function isWithinPeriod(dateValue: string | null, startDate: string, endDate: string): boolean {
+  return Boolean(dateValue && dateValue >= startDate && dateValue < endDate)
+}
+
+function monthPeriodForDate(dateValue: string | null, fallbackNow = new Date()) {
+  const date = dateValue ? new Date(dateValue) : fallbackNow
+  const safeDate = Number.isNaN(date.getTime()) ? fallbackNow : date
+  const start = new Date(safeDate.getFullYear(), safeDate.getMonth(), 1)
+  const end = new Date(safeDate.getFullYear(), safeDate.getMonth() + 1, 1)
+  return {
+    start: start.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0],
+    label: safeDate.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+  }
+}
+
 function salesOrderAmount(row: CanonicalSalesOrderRow): number {
   return roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount))
 }
@@ -1430,21 +1463,21 @@ function aliasKey(alias: string | null | undefined): string {
 
 function defaultAliasMappingRows(): FishbowlSalespersonAliasRow[] {
   return [
-    { fishbowl_salesperson: 'MikeF', sf_user_id: '0052E00000Ip9EmQAJ', display_name: 'Mike Franzese', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'Leo', sf_user_id: '0052E00000JxFvcQAF', display_name: 'Leo Joanidhi', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'selliott', sf_user_id: '0052E00000NdGDeQAN', display_name: 'Samantha Elliott', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'Samantha', sf_user_id: '0052E00000NdGDeQAN', display_name: 'Samantha Elliott', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'dtorres', sf_user_id: '0052E00000M1qRMQAZ', display_name: 'Danny Torres', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'Dan', sf_user_id: '0052E00000Hlo1lQAB', display_name: 'Dan Micic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'svasic', sf_user_id: '0052E00000Ip9DhQAJ', display_name: 'Stefan Vasic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'kbugarski', sf_user_id: '0052E00000Kuuj8QAB', display_name: 'Kristina Bugarski', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'Christine', sf_user_id: '0052E00000M1j73QAB', display_name: 'Christine Livingstone', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'Nikola', sf_user_id: '005Ua00000EnNsTIAV', display_name: 'Nikola Kovilic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'kdedvukaj', sf_user_id: '005Ua000008QA96IAG', display_name: 'Kendall Cook', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false },
-    { fishbowl_salesperson: 'admin', sf_user_id: null, display_name: 'Fishbowl Admin / Legacy', team: 'System', is_active: true, is_house_account: false, is_system_alias: true },
-    { fishbowl_salesperson: 'MedShip', sf_user_id: null, display_name: 'Medical Shipment House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false },
-    { fishbowl_salesperson: 'House Account', sf_user_id: null, display_name: 'House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false },
-    { fishbowl_salesperson: 'Warehouse', sf_user_id: null, display_name: 'Warehouse', team: 'System', is_active: true, is_house_account: false, is_system_alias: true },
+    { fishbowl_salesperson: 'MikeF', sf_user_id: '0052E00000Ip9EmQAJ', display_name: 'Mike Franzese', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: true, dashboard_sort_order: 10 },
+    { fishbowl_salesperson: 'Leo', sf_user_id: '0052E00000JxFvcQAF', display_name: 'Leo Joanidhi', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: true, dashboard_sort_order: 50 },
+    { fishbowl_salesperson: 'selliott', sf_user_id: '0052E00000NdGDeQAN', display_name: 'Samantha Elliott', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: true, dashboard_sort_order: 30 },
+    { fishbowl_salesperson: 'Samantha', sf_user_id: '0052E00000NdGDeQAN', display_name: 'Samantha Elliott', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: true, dashboard_sort_order: 31 },
+    { fishbowl_salesperson: 'dtorres', sf_user_id: '0052E00000M1qRMQAZ', display_name: 'Danny Torres', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: true, dashboard_sort_order: 20 },
+    { fishbowl_salesperson: 'Dan', sf_user_id: '0052E00000Hlo1lQAB', display_name: 'Dan Micic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'svasic', sf_user_id: '0052E00000Ip9DhQAJ', display_name: 'Stefan Vasic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: true, dashboard_sort_order: 40 },
+    { fishbowl_salesperson: 'kbugarski', sf_user_id: '0052E00000Kuuj8QAB', display_name: 'Kristina Bugarski', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'Christine', sf_user_id: '0052E00000M1j73QAB', display_name: 'Christine Livingstone', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'Nikola', sf_user_id: '005Ua00000EnNsTIAV', display_name: 'Nikola Kovilic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'kdedvukaj', sf_user_id: '005Ua000008QA96IAG', display_name: 'Kendall Cook', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'admin', sf_user_id: null, display_name: 'Fishbowl Admin / Legacy', team: 'System', is_active: true, is_house_account: false, is_system_alias: true, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'MedShip', sf_user_id: null, display_name: 'Medical Shipment House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'House Account', sf_user_id: null, display_name: 'House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'Warehouse', sf_user_id: null, display_name: 'Warehouse', team: 'System', is_active: true, is_house_account: false, is_system_alias: true, show_on_sales_dashboard: false, dashboard_sort_order: null },
   ]
 }
 
@@ -1453,8 +1486,9 @@ async function getFishbowlSalespersonMappings() {
   return fetchAllRows<FishbowlSalespersonAliasRow>(() =>
     supabase
       .from('fishbowl_salesperson_aliases')
-      .select('fishbowl_salesperson, sf_user_id, display_name, team, is_active, is_house_account, is_system_alias')
+      .select('fishbowl_salesperson, sf_user_id, display_name, team, is_active, is_house_account, is_system_alias, show_on_sales_dashboard, dashboard_sort_order')
       .eq('is_active', true)
+      .order('dashboard_sort_order', { ascending: true, nullsFirst: false })
       .order('display_name') as unknown as SupabaseRangeQuery<FishbowlSalespersonAliasRow>
   ).catch((error) => {
     if (isMissingRelationError(error)) return defaultAliasMappingRows()
@@ -1536,8 +1570,19 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
 
   const usersById = new Map(((usersRes.data ?? []) as SfUserRow[]).map((user) => [user.sf_id, user]))
   const mappingsByAlias = new Map(mappings.map((row) => [aliasKey(row.fishbowl_salesperson), row]))
+  const selectedDashboardAliases = new Set(
+    mappings
+      .filter((row) => row.show_on_sales_dashboard && !row.is_house_account && !row.is_system_alias)
+      .map((row) => aliasKey(row.fishbowl_salesperson))
+  )
+  const selectedDashboardUserIds = new Set(
+    mappings
+      .filter((row) => row.show_on_sales_dashboard && row.sf_user_id && !row.is_house_account && !row.is_system_alias)
+      .map((row) => row.sf_user_id as string)
+  )
   const repsById = new Map<string, SalesRepPerformance>()
   const aliasStats = new Map<string, SalesAliasGap>()
+  const latestActivityByAlias = new Map<string, string>()
   const monthlyRows = months.map(({ label }) => ({ month: label } as SeedMonthlyRepRevenue))
   const pipelineByOwner = new Map<string, number>()
   const profileStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
@@ -1573,10 +1618,42 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   let latestFishbowlQuoteDate: string | null = null
   let linkedSalesOrders = 0
   let totalBusinessSalesOrders = 0
+  const businessRows = orderRows
+    .map((row) => ({ row, amount: salesOrderAmount(row), metricDate: salesOrderMetricDate(row) }))
+    .filter(({ row, amount }) => isBusinessSalesMetric(row, amount))
+
+  for (const { row, metricDate } of businessRows) {
+    const alias = row.salesperson?.trim() || 'Unassigned'
+    if (metricDate && (!latestActivityByAlias.get(alias) || metricDate > latestActivityByAlias.get(alias)!)) {
+      latestActivityByAlias.set(alias, metricDate)
+    }
+    if (row.canonical_state === 'order' && metricDate && (!latestFishbowlOrderDate || metricDate > latestFishbowlOrderDate)) {
+      latestFishbowlOrderDate = metricDate
+    }
+    if (row.canonical_state === 'quote' && metricDate && (!latestFishbowlQuoteDate || metricDate > latestFishbowlQuoteDate)) {
+      latestFishbowlQuoteDate = metricDate
+    }
+  }
+
+  const currentMonthOrderCount = businessRows.filter(({ row, metricDate }) =>
+    row.canonical_state === 'order' && isOnOrAfter(metricDate, monthStart)
+  ).length
+  const currentMonthQuoteCount = businessRows.filter(({ row, metricDate }) =>
+    row.canonical_state === 'quote' && isOnOrAfter(metricDate, monthStart)
+  ).length
+  const activeMonth = (currentMonthOrderCount === 0 && currentMonthQuoteCount === 0 && latestFishbowlOrderDate)
+    ? monthPeriodForDate(latestFishbowlOrderDate, now)
+    : {
+        start: monthStart,
+        end: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0],
+        label: now.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+      }
+  const isMetricPeriodFallback = activeMonth.start !== monthStart
 
   function getOrCreateRep(row: CanonicalSalesOrderRow, mapping: FishbowlSalespersonAliasRow | undefined) {
     const alias = row.salesperson?.trim() || 'Unassigned'
     if (mapping?.is_house_account || mapping?.is_system_alias) return null
+    if (!selectedDashboardAliases.has(aliasKey(alias))) return null
 
     const user = mapping?.sf_user_id ? usersById.get(mapping.sf_user_id) : null
     const id = mapping?.sf_user_id ?? `fishbowl:${alias}`
@@ -1623,27 +1700,27 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     aliasStats.set(alias, existing)
   }
 
-  for (const row of orderRows) {
-    const amount = salesOrderAmount(row)
-    if (!isBusinessSalesMetric(row, amount)) continue
-
-    const metricDate = salesOrderMetricDate(row)
+  for (const { row, amount, metricDate } of businessRows) {
     const mapping = mappingsByAlias.get(aliasKey(row.salesperson))
+    const isSelectedRosterRow = Boolean(
+      mapping &&
+      !mapping.is_house_account &&
+      !mapping.is_system_alias &&
+      selectedDashboardAliases.has(aliasKey(row.salesperson))
+    )
     recordAliasGap(row, mapping, amount, metricDate)
 
     if (row.canonical_state === 'order') {
       totalBusinessSalesOrders++
       if (row.sf_opportunity_id) linkedSalesOrders++
-      if (metricDate && (!latestFishbowlOrderDate || metricDate > latestFishbowlOrderDate)) latestFishbowlOrderDate = metricDate
-      if (isOnOrAfter(metricDate, monthStart)) {
+      if (isSelectedRosterRow && isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         kpis.revenueMTD += amount
         kpis.dealsClosedMTD++
       }
-      if (isOnOrAfter(metricDate, qtrStart)) kpis.revenueQTD += amount
-      if (isOnOrAfter(metricDate, yearStart)) kpis.revenueYTD += amount
+      if (isSelectedRosterRow && isOnOrAfter(metricDate, qtrStart)) kpis.revenueQTD += amount
+      if (isSelectedRosterRow && isOnOrAfter(metricDate, yearStart)) kpis.revenueYTD += amount
     } else if (row.canonical_state === 'quote') {
-      if (metricDate && (!latestFishbowlQuoteDate || metricDate > latestFishbowlQuoteDate)) latestFishbowlQuoteDate = metricDate
-      if (isOnOrAfter(metricDate, monthStart)) kpis.quotesSentMTD++
+      if (isSelectedRosterRow && isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) kpis.quotesSentMTD++
     }
 
     const rep = getOrCreateRep(row, mapping)
@@ -1654,7 +1731,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     }
 
     if (row.canonical_state === 'order') {
-      if (isOnOrAfter(metricDate, monthStart)) {
+      if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.revenueMTD += amount
         rep.dealsClosed++
       }
@@ -1669,7 +1746,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         monthlyRows[monthIndex][rep.name] = toNumber(monthlyRows[monthIndex][rep.name] as number | string | null) + amount
       }
     } else if (row.canonical_state === 'quote') {
-      if (isOnOrAfter(metricDate, monthStart)) {
+      if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.quotesSent++
         rep.quoteValueMTD += amount
       }
@@ -1680,7 +1757,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       }
 
       const normalized = row.status.toLowerCase()
-      if (isOnOrAfter(metricDate, monthStart) && ['expired', 'rejected', 'cancelled', 'canceled'].includes(normalized)) {
+      if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end) && ['expired', 'rejected', 'cancelled', 'canceled'].includes(normalized)) {
         rep.dealsLost++
       }
     }
@@ -1691,7 +1768,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     const existing = repsById.get(ownerId)
     if (existing) {
       existing.pipelineValue = roundCurrency(pipelineValue)
-    } else if (pipelineValue > 0) {
+    } else if (pipelineValue > 0 && selectedDashboardUserIds.has(ownerId)) {
       const user = usersById.get(ownerId)
       if (!user) continue
       const rep = createEmptySalesRep({
@@ -1744,6 +1821,21 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   const houseAndSystemAliases = allAliasGaps.filter((gap) => gap.status === 'house' || gap.status === 'system')
   const unmappedAliases = allAliasGaps.filter((gap) => gap.status === 'unmapped' && (gap.ordersYTD > 0 || gap.quotesYTD > 0))
   const freshnessDays = daysSince(latestFishbowlOrderDate)
+  const rosterOptions = mappings
+    .filter((row) => !row.is_house_account && !row.is_system_alias)
+    .map((row) => ({
+      fishbowlSalesperson: row.fishbowl_salesperson,
+      displayName: row.display_name,
+      sfUserId: row.sf_user_id,
+      team: row.team,
+      isSelected: Boolean(row.show_on_sales_dashboard),
+      sortOrder: row.dashboard_sort_order,
+      latestActivityAt: latestActivityByAlias.get(row.fishbowl_salesperson) ?? null,
+    }))
+    .sort((a, b) => {
+      if (a.isSelected !== b.isSelected) return a.isSelected ? -1 : 1
+      return (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999) || a.displayName.localeCompare(b.displayName)
+    })
 
   kpis.revenueMTD = roundCurrency(kpis.revenueMTD)
   kpis.revenueQTD = roundCurrency(kpis.revenueQTD)
@@ -1771,6 +1863,11 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       unlinkedSalesOrders: Math.max(0, totalBusinessSalesOrders - linkedSalesOrders),
       linkCoverage: totalBusinessSalesOrders > 0 ? Math.round((linkedSalesOrders / totalBusinessSalesOrders) * 1000) / 10 : 0,
       linkRows: linkRowsRes.count ?? 0,
+      activeMetricPeriodLabel: activeMonth.label,
+      activeMetricPeriodStart: activeMonth.start,
+      activeMetricPeriodEnd: activeMonth.end,
+      isMetricPeriodFallback,
+      rosterOptions,
     },
   }
 }
