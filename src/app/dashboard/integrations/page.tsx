@@ -168,6 +168,46 @@ function buildP7StatusText(
   return `Last P7 status: ${coverage.lastRunStatus ?? coverage.backfillStatus}. Last checked ${formatRelativeTime(coverage.lastRunAt ?? undefined)}.`
 }
 
+function getP7CacheSummary(coverage: SalesOrderCoverage | null): {
+  status: 'healthy' | 'warning' | 'error'
+  label: string
+  detail: string
+} | null {
+  if (!coverage) return null
+
+  const cacheCounts = `${coverage.cachedHeaders.toLocaleString()} headers and ${coverage.cachedLineItems.toLocaleString()} lines cached`
+
+  if (coverage.pagesFailed > 0 || coverage.detailFailed > 0) {
+    return {
+      status: 'warning',
+      label: 'SO cache needs retry',
+      detail: `${cacheCounts}; ${coverage.pagesFailed.toLocaleString()} pages and ${coverage.detailFailed.toLocaleString()} detail rows are failed.`,
+    }
+  }
+
+  if (coverage.backfillStatus === 'complete') {
+    return {
+      status: 'healthy',
+      label: 'SO cache complete',
+      detail: `${cacheCounts}. Incremental run health is tracked separately above.`,
+    }
+  }
+
+  if (coverage.pagesRunning > 0 || coverage.detailRunning > 0 || coverage.backfillStatus === 'running') {
+    return {
+      status: 'warning',
+      label: 'SO cache building',
+      detail: `${coverage.pagesCompleted.toLocaleString()} of ${coverage.pageCheckpoints.toLocaleString()} pages complete; ${coverage.detailHydrated.toLocaleString()} of ${coverage.detailQueued.toLocaleString()} details hydrated.`,
+    }
+  }
+
+  return {
+    status: 'error',
+    label: 'SO cache not complete',
+    detail: `${cacheCounts}; backfill status is ${coverage.backfillStatus.replace('_', ' ')}.`,
+  }
+}
+
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
   const [connections, setConnections] = useState<ConnectionConfig[]>([])
@@ -350,6 +390,8 @@ export default function IntegrationsPage() {
               const enabled = enabledMap[item.automation] ?? true
               const isComingSoon = item.isComingSoon === true
               const canRunNow = RUNNABLE_MANUAL_AUTOMATIONS.has(item.automation)
+              const isP7 = item.automation === 'P7_FB_SO_SYNC'
+              const p7CacheSummary = isP7 ? getP7CacheSummary(salesOrderCoverage) : null
 
               return (
                 <Card key={item.automation} className={cn('shadow-sm', !enabled && 'opacity-60')}>
@@ -391,19 +433,36 @@ export default function IntegrationsPage() {
                             <p className="font-medium">{item.lastRunDurationMs} ms</p>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Records</span>
+                            <span className="text-muted-foreground">{isP7 ? 'Last run rows' : 'Records'}</span>
                             <p className="font-medium">{item.recordsProcessed}</p>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Success rate</span>
+                            <span className="text-muted-foreground">{isP7 ? 'Run success (7d)' : 'Success rate'}</span>
                             <p className="font-medium">{item.successRate}%</p>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-3">
                           <SparklineChart data={item.last7Days} height={36} width={140} />
-                          <span className="text-[10px] text-muted-foreground">7-day trend</span>
+                          <span className="text-[10px] text-muted-foreground">{isP7 ? 'incremental trend' : '7-day trend'}</span>
                         </div>
+
+                        {p7CacheSummary && (
+                          <div
+                            className={cn(
+                              'border-l-2 py-1 pl-3 text-xs',
+                              p7CacheSummary.status === 'healthy' && 'border-medship-success',
+                              p7CacheSummary.status === 'warning' && 'border-medship-warning',
+                              p7CacheSummary.status === 'error' && 'border-medship-danger'
+                            )}
+                          >
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <Database className="h-3.5 w-3.5" />
+                              <span>{p7CacheSummary.label}</span>
+                            </div>
+                            <p className="mt-1 text-muted-foreground">{p7CacheSummary.detail}</p>
+                          </div>
+                        )}
                       </>
                     )}
 

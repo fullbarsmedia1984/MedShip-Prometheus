@@ -35,6 +35,10 @@ function asRawPayload(value: unknown): JsonObject {
   return JSON.parse(JSON.stringify(value)) as JsonObject
 }
 
+function rawPayloadFrom(value: { rawPayload?: JsonObject }) {
+  return value.rawPayload ?? asRawPayload(value)
+}
+
 function supplierStatusForFixture() {
   return 'Active'
 }
@@ -63,7 +67,7 @@ export async function importHerculesPricing(
       counters.rowsSeen += 1
 
       try {
-        const catalogRawPayload = asRawPayload(item)
+        const catalogRawPayload = rawPayloadFrom(item)
         const catalogItem = await repository.upsertCatalogItem({
           sourceKey: hashParts('hercules_catalog_item', [item.supplierItemId]),
           sourcePayloadHash: hashPayload(catalogRawPayload),
@@ -110,7 +114,7 @@ export async function importHerculesPricing(
           })
           recordUpsert(counters, supplier.created)
 
-          const offerRawPayload = asRawPayload(offer)
+          const offerRawPayload = rawPayloadFrom(offer)
           const vendorOfferSourceKey = hashParts('hercules_vendor_offer', [
             item.supplierItemId,
             supplierIdentity,
@@ -134,17 +138,24 @@ export async function importHerculesPricing(
           recordUpsert(counters, vendorOffer.created)
 
           for (const uom of offer.uoms) {
-            const contractPrice = parseContractPrice(uom.contractPrice)
+            const parsedContractPrice = parseContractPrice(uom.contractPrice)
+            const contractPrice = {
+              ...parsedContractPrice,
+              status: uom.contractPriceStatus ?? parsedContractPrice.status,
+            }
             const listPriceAmount = parseMoneyAmount(uom.listPrice)
             const uomCode = cleanText(uom.uomCode)
             const vendorPartNumber = cleanText(uom.vendorPartNumber)
             const packageName = cleanText(uom.package)
-            const perQuantity = numberOrNull(uom.perQuantity)
-            const uomRawPayload = asRawPayload(uom)
+            const parsedPerQuantity = numberOrNull(uom.parsedPerQuantity)
+            const perQuantity = parsedPerQuantity ?? numberOrNull(uom.perQuantity)
+            const uomRawPayload = rawPayloadFrom(uom)
 
-            if (contractPrice.status === 'contract_available') {
+            if (contractPrice.amount !== null) {
               counters.numericContractPriceCount += 1
-            } else if (contractPrice.status === 'list_only_request_quote') {
+            }
+
+            if (contractPrice.status === 'list_only_request_quote') {
               counters.requestQuotePriceCount += 1
             } else if (contractPrice.status === 'list_only') {
               counters.listOnlyPriceCount += 1
@@ -178,6 +189,9 @@ export async function importHerculesPricing(
               uomTitle: cleanText(uom.uomTitle),
               package: packageName,
               perQuantity,
+              rawPerText: cleanText(uom.rawPerText),
+              parsedPerQuantity,
+              parsedPerUom: cleanText(uom.parsedPerUom),
               listPriceAmount,
               contractPriceAmount: contractPrice.amount,
               contractPriceStatus: contractPrice.status,
@@ -192,6 +206,9 @@ export async function importHerculesPricing(
               gtin: cleanText(uom.gtin),
               hcpcs: cleanText(uom.hcpcs),
               volume: cleanText(uom.volume),
+              volumeUom: cleanText(uom.volumeUom),
+              isDefault: uom.isDefault ?? null,
+              quantityAvailable: numberOrNull(uom.quantityAvailable),
               availability: cleanText(uom.availability),
               isCostEligible: eligibility.isCostEligible,
               costIneligibilityReason: eligibility.costIneligibilityReason,

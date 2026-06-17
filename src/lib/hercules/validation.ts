@@ -1,8 +1,20 @@
 import type {
+  HerculesContractPriceStatus,
   HerculesOfferUomPayload,
   HerculesSupplierItemPayload,
   HerculesVendorOfferPayload,
 } from './types'
+
+const CONTRACT_PRICE_STATUSES = new Set<HerculesContractPriceStatus>([
+  'contract_available',
+  'list_only_request_quote',
+  'list_only',
+  'not_provided',
+  'unavailable',
+  'expired',
+  'parse_error',
+  'unknown',
+])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -40,6 +52,30 @@ function optionalBoolean(value: unknown, field: string): boolean {
   return value
 }
 
+function optionalBooleanOrNull(value: unknown, field: string): boolean | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'boolean') {
+    throw new Error(`Invalid Hercules payload: ${field} must be a boolean or null`)
+  }
+  return value
+}
+
+function optionalRawPayload(value: unknown, field: string) {
+  if (value === null || value === undefined) return undefined
+  if (!isRecord(value)) {
+    throw new Error(`Invalid Hercules payload: ${field} must be an object`)
+  }
+  return value
+}
+
+function optionalContractPriceStatus(value: unknown, field: string) {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string' || !CONTRACT_PRICE_STATUSES.has(value as HerculesContractPriceStatus)) {
+    throw new Error(`Invalid Hercules payload: ${field} must be a valid contract price status`)
+  }
+  return value as HerculesContractPriceStatus
+}
+
 function stringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value)) {
     throw new Error(`Invalid Hercules payload: ${field} must be an array`)
@@ -64,8 +100,23 @@ function validateUom(value: unknown, index: number): HerculesOfferUomPayload {
     uomTitle: optionalString(value.uomTitle, `uoms[${index}].uomTitle`),
     listPrice: optionalStringOrNumber(value.listPrice, `uoms[${index}].listPrice`),
     contractPrice: optionalStringOrNumber(value.contractPrice, `uoms[${index}].contractPrice`),
+    contractPriceStatus: optionalContractPriceStatus(
+      value.contractPriceStatus,
+      `uoms[${index}].contractPriceStatus`
+    ),
     package: optionalString(value.package, `uoms[${index}].package`),
     perQuantity: optionalStringOrNumber(value.perQuantity, `uoms[${index}].perQuantity`),
+    rawPerText: optionalString(value.rawPerText, `uoms[${index}].rawPerText`),
+    parsedPerQuantity: optionalStringOrNumber(
+      value.parsedPerQuantity,
+      `uoms[${index}].parsedPerQuantity`
+    ),
+    parsedPerUom: optionalString(value.parsedPerUom, `uoms[${index}].parsedPerUom`),
+    isDefault: optionalBooleanOrNull(value.isDefault, `uoms[${index}].isDefault`),
+    quantityAvailable: optionalStringOrNumber(
+      value.quantityAvailable,
+      `uoms[${index}].quantityAvailable`
+    ),
     weight: optionalStringOrNumber(value.weight, `uoms[${index}].weight`),
     weightUnit: optionalString(value.weightUnit, `uoms[${index}].weightUnit`),
     length: optionalStringOrNumber(value.length, `uoms[${index}].length`),
@@ -75,7 +126,9 @@ function validateUom(value: unknown, index: number): HerculesOfferUomPayload {
     gtin: optionalString(value.gtin, `uoms[${index}].gtin`),
     hcpcs: optionalString(value.hcpcs, `uoms[${index}].hcpcs`),
     volume: optionalString(value.volume, `uoms[${index}].volume`),
+    volumeUom: optionalString(value.volumeUom, `uoms[${index}].volumeUom`),
     availability: optionalString(value.availability, `uoms[${index}].availability`),
+    rawPayload: optionalRawPayload(value.rawPayload, `uoms[${index}].rawPayload`),
   }
 }
 
@@ -105,6 +158,7 @@ function validateVendorOffer(value: unknown, index: number): HerculesVendorOffer
       `vendorOffers[${index}].minimumOrderQuantity`
     ),
     uoms: value.uoms.map(validateUom),
+    rawPayload: optionalRawPayload(value.rawPayload, `vendorOffers[${index}].rawPayload`),
   }
 }
 
@@ -142,5 +196,6 @@ export function validateHerculesSupplierItemPayload(
     status: optionalString(value.status, 'status'),
     images: stringArray(value.images, 'images'),
     vendorOffers: value.vendorOffers.map(validateVendorOffer),
+    rawPayload: optionalRawPayload(value.rawPayload, 'rawPayload'),
   }
 }

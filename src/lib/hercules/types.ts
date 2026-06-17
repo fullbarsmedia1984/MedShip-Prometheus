@@ -48,8 +48,14 @@ export type HerculesOfferUomPayload = {
   uomTitle: string | null
   listPrice: string | number | null
   contractPrice: string | number | null
+  contractPriceStatus?: HerculesContractPriceStatus | null
   package: string | null
   perQuantity: number | string | null
+  rawPerText?: string | null
+  parsedPerQuantity?: number | string | null
+  parsedPerUom?: string | null
+  isDefault?: boolean | null
+  quantityAvailable?: number | string | null
   weight?: number | string | null
   weightUnit?: string | null
   length?: number | string | null
@@ -59,7 +65,9 @@ export type HerculesOfferUomPayload = {
   gtin?: string | null
   hcpcs?: string | null
   volume?: string | null
+  volumeUom?: string | null
   availability?: string | null
+  rawPayload?: JsonObject
 }
 
 export type HerculesVendorOfferPayload = {
@@ -71,6 +79,7 @@ export type HerculesVendorOfferPayload = {
   leadTime: string | null
   minimumOrderQuantity: number | string | null
   uoms: HerculesOfferUomPayload[]
+  rawPayload?: JsonObject
 }
 
 export type HerculesSupplierItemPayload = {
@@ -86,6 +95,7 @@ export type HerculesSupplierItemPayload = {
   status: string | null
   images: string[]
   vendorOffers: HerculesVendorOfferPayload[]
+  rawPayload?: JsonObject
 }
 
 export type HerculesPricingSource = {
@@ -184,6 +194,9 @@ export type HerculesOfferUomRecord = {
   uomTitle: string | null
   package: string | null
   perQuantity: number | null
+  rawPerText: string | null
+  parsedPerQuantity: number | null
+  parsedPerUom: string | null
   listPriceAmount: number | null
   contractPriceAmount: number | null
   contractPriceStatus: HerculesContractPriceStatus
@@ -198,6 +211,9 @@ export type HerculesOfferUomRecord = {
   gtin: string | null
   hcpcs: string | null
   volume: string | null
+  volumeUom: string | null
+  isDefault: boolean | null
+  quantityAvailable: number | null
   availability: string | null
   isCostEligible: boolean
   costIneligibilityReason: HerculesCostIneligibilityReason | null

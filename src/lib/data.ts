@@ -501,16 +501,15 @@ async function getLiveSyncEvents(limit = 1000): Promise<SyncEvent[]> {
   return (data ?? []) as SyncEvent[]
 }
 
-async function getRecentLiveSyncEvents(limit = 500): Promise<SyncEvent[]> {
+async function getLiveSyncEventsSince(since: string): Promise<SyncEvent[]> {
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('sync_events')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit)
-
-  if (error) throw error
-  return (data ?? []) as SyncEvent[]
+  return fetchAllRows<SyncEvent>(() =>
+    supabase
+      .from('sync_events')
+      .select('*')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false }) as unknown as SupabaseRangeQuery<SyncEvent>
+  )
 }
 
 async function getLiveFieldMappings(): Promise<FieldMapping[]> {
@@ -559,6 +558,10 @@ function getEventDurationMs(event: SyncEvent | undefined): number {
   return Math.max(duration, 0)
 }
 
+function isIntegrationOutcomeEvent(event: SyncEvent): boolean {
+  return !isEventTelemetry(event) && (event.status === 'success' || event.status === 'failed')
+}
+
 function buildLast7Days(events: SyncEvent[]): { date: string; success: number; failed: number }[] {
   const now = new Date()
   const days: { date: string; success: number; failed: number }[] = []
@@ -567,7 +570,7 @@ function buildLast7Days(events: SyncEvent[]): { date: string; success: number; f
     const day = new Date(now)
     day.setDate(now.getDate() - offset)
     const date = day.toISOString().slice(0, 10)
-    const dayEvents = events.filter((event) => event.created_at.startsWith(date))
+    const dayEvents = events.filter((event) => event.created_at.startsWith(date) && isIntegrationOutcomeEvent(event))
     days.push({
       date,
       success: dayEvents.filter((event) => event.status === 'success').length,
@@ -583,19 +586,21 @@ function getIntegrationHealth(
   events: SyncEvent[],
   successRate: number
 ): IntegrationStatusData['status'] {
+  const outcomeEvents = events.filter(isIntegrationOutcomeEvent)
+
   if (!schedule && events.length === 0) return 'warning'
   if (schedule?.is_active === false) return 'warning'
   if (schedule?.last_run_status === 'failed') return 'error'
   if (schedule?.last_run_status === 'partial') return 'warning'
   if (schedule?.last_run_status && schedule.last_run_status !== 'success') return 'warning'
-  if (events.some((event) => event.status === 'failed' && event.retry_count >= event.max_retries)) {
+  if (outcomeEvents.some((event) => event.status === 'failed' && event.retry_count >= event.max_retries)) {
     return 'error'
   }
-  if (events.some((event) => event.status === 'failed' || event.status === 'retrying')) {
+  if (outcomeEvents.some((event) => event.status === 'failed')) {
     return 'warning'
   }
-  if (events.length > 0 && successRate < 80) return 'error'
-  if (events.length > 0 && successRate < 95) return 'warning'
+  if (outcomeEvents.length > 0 && successRate < 80) return 'error'
+  if (outcomeEvents.length > 0 && successRate < 95) return 'warning'
   return 'healthy'
 }
 
@@ -608,7 +613,11 @@ async function getLiveIntegrationStatus(): Promise<IntegrationStatusData[]> {
 
   if (error) throw error
 
-  const events = await getRecentLiveSyncEvents()
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6)
+  sevenDaysAgo.setUTCHours(0, 0, 0, 0)
+
+  const events = await getLiveSyncEventsSince(sevenDaysAgo.toISOString())
   if ((!schedules || schedules.length === 0) && events.length === 0) return []
 
   const scheduleRows = ((schedules ?? []) as SyncScheduleRow[])
@@ -623,9 +632,9 @@ async function getLiveIntegrationStatus(): Promise<IntegrationStatusData[]> {
   return Array.from(automationSet).map((automation) => {
     const schedule = schedulesByAutomation.get(automation)
     const automationEvents = sortByCreatedDesc(events.filter((event) => event.automation === automation))
-    const latestEvent = automationEvents[0]
-    const successful = automationEvents.filter((event) => event.status === 'success').length
-    const completed = automationEvents.filter((event) => event.status === 'success' || event.status === 'failed')
+    const completed = automationEvents.filter(isIntegrationOutcomeEvent)
+    const latestEvent = completed[0] ?? automationEvents[0]
+    const successful = completed.filter((event) => event.status === 'success').length
     const successRate = completed.length > 0
       ? Math.round((successful / completed.length) * 1000) / 10
       : schedule?.last_run_status === 'success'
