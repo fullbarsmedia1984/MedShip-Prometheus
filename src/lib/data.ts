@@ -312,10 +312,19 @@ export interface SalesDataHealth {
   rosterOptions: SalesRosterOption[]
 }
 
+export interface MonthlyBusinessRevenue {
+  month: string
+  newBusinessRevenue: number
+  recurringBusinessRevenue: number
+  newBusinessOrders: number
+  recurringBusinessOrders: number
+}
+
 export interface SalesDashboardCore {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
+  monthlyBusinessRevenue: MonthlyBusinessRevenue[]
   salesHealth: SalesDataHealth
 }
 
@@ -1652,6 +1661,13 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   const aliasStats = new Map<string, SalesAliasGap>()
   const latestActivityByAlias = new Map<string, string>()
   const monthlyRows = months.map(({ label }) => ({ month: label } as SeedMonthlyRepRevenue))
+  const monthlyBusinessRows = months.map(({ label }) => ({
+    month: label,
+    newBusinessRevenue: 0,
+    recurringBusinessRevenue: 0,
+    newBusinessOrders: 0,
+    recurringBusinessOrders: 0,
+  }))
   const pipelineByOwner = new Map<string, number>()
   const profileStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
 
@@ -1856,6 +1872,13 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       const monthIndex = metricDate ? months.findIndex((month) => metricDate.startsWith(month.key)) : -1
       if (monthIndex >= 0 && metricDate && metricDate >= monthlyStart) {
         monthlyRows[monthIndex][rep.name] = toNumber(monthlyRows[monthIndex][rep.name] as number | string | null) + amount
+        if (businessClassification === 'new_business') {
+          monthlyBusinessRows[monthIndex].newBusinessRevenue += amount
+          monthlyBusinessRows[monthIndex].newBusinessOrders++
+        } else if (businessClassification === 'recurring_business') {
+          monthlyBusinessRows[monthIndex].recurringBusinessRevenue += amount
+          monthlyBusinessRows[monthIndex].recurringBusinessOrders++
+        }
       }
     } else if (row.canonical_state === 'quote') {
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
@@ -1932,6 +1955,10 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       row[rep.name] = roundCurrency(toNumber(row[rep.name] as number | string | null))
     }
   }
+  for (const row of monthlyBusinessRows) {
+    row.newBusinessRevenue = roundCurrency(row.newBusinessRevenue)
+    row.recurringBusinessRevenue = roundCurrency(row.recurringBusinessRevenue)
+  }
 
   const allAliasGaps = Array.from(aliasStats.values())
     .map((gap) => ({ ...gap, revenueYTD: roundCurrency(gap.revenueYTD) }))
@@ -1973,6 +2000,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     kpis,
     reps,
     monthlyRevenue: monthlyRows,
+    monthlyBusinessRevenue: monthlyBusinessRows,
     salesHealth: {
       revenueSource: 'fishbowl_sales_orders',
       pipelineSource: 'salesforce_opportunities',
