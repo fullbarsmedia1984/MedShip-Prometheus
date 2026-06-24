@@ -203,6 +203,9 @@ type CanonicalSalesOrderRow = {
   subtotal_amount: number | string | null
   sf_opportunity_id: string | null
   canonical_state: 'quote' | 'order' | 'void' | 'unknown'
+  business_classification: 'new_business' | 'recurring_business' | null
+  prior_issued_so_number: string | null
+  prior_issued_order_at: string | null
   last_synced_at: string | null
   data_quality_flags: string[] | null
 }
@@ -237,13 +240,23 @@ const QUALITY_ZERO_VALUE = 'zero_value'
 const QUALITY_HISTORICAL = 'historical'
 const QUALITY_UNKNOWN_STATE = 'unknown_state'
 const TEST_RECORD_PATTERN = /(^|\b)(test|testing|do not use|sample|warehouse)/i
-const SALES_ORDER_HEADER_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
-const SALES_ORDER_METRIC_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
+const SALES_ORDER_HEADER_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, business_classification, prior_issued_so_number, prior_issued_order_at, last_synced_at, data_quality_flags'
+const SALES_ORDER_METRIC_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, business_classification, prior_issued_so_number, prior_issued_order_at, last_synced_at, data_quality_flags'
 
 export interface SalesRepPerformance extends SeedSalesRep {
   fishbowlAliases: string[]
   mappingStatus: 'mapped' | 'unmapped' | 'house' | 'system'
   sourceLabel: 'Fishbowl SO'
+  newBusinessRevenueMTD: number
+  newBusinessRevenueQTD: number
+  newBusinessRevenueYTD: number
+  recurringBusinessRevenueMTD: number
+  recurringBusinessRevenueQTD: number
+  recurringBusinessRevenueYTD: number
+  newBusinessOrdersMTD: number
+  recurringBusinessOrdersMTD: number
+  newBusinessOrdersYTD: number
+  recurringBusinessOrdersYTD: number
   quoteValueMTD: number
   quoteValueQTD: number
   quoteValueYTD: number
@@ -289,6 +302,7 @@ export interface SalesDataHealth {
   unlinkedSalesOrders: number
   linkCoverage: number
   linkRows: number
+  newBusinessDefinition: string
   activeMetricPeriodLabel: string
   activeMetricPeriodStart: string
   activeMetricPeriodEnd: string
@@ -1442,6 +1456,14 @@ function salesOrderAmount(row: CanonicalSalesOrderRow): number {
   return roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount))
 }
 
+function salesOrderBusinessClassification(row: CanonicalSalesOrderRow): 'new_business' | 'recurring_business' | null {
+  if (row.canonical_state !== 'order') return null
+  if (row.business_classification === 'new_business' || row.business_classification === 'recurring_business') {
+    return row.business_classification
+  }
+  return null
+}
+
 function metricFlags(row: CanonicalSalesOrderRow, amount: number): Set<string> {
   const flags = new Set(row.data_quality_flags ?? [])
   if (hasTestMarker(row.so_number, row.customer_name, row.salesperson)) flags.add(QUALITY_LIKELY_TEST)
@@ -1527,6 +1549,16 @@ function createEmptySalesRep(input: {
     fishbowlAliases: [],
     mappingStatus: input.mappingStatus,
     sourceLabel: 'Fishbowl SO',
+    newBusinessRevenueMTD: 0,
+    newBusinessRevenueQTD: 0,
+    newBusinessRevenueYTD: 0,
+    recurringBusinessRevenueMTD: 0,
+    recurringBusinessRevenueQTD: 0,
+    recurringBusinessRevenueYTD: 0,
+    newBusinessOrdersMTD: 0,
+    recurringBusinessOrdersMTD: 0,
+    newBusinessOrdersYTD: 0,
+    recurringBusinessOrdersYTD: 0,
     quoteValueMTD: 0,
     quoteValueQTD: 0,
     quoteValueYTD: 0,
@@ -1611,6 +1643,15 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     revenueMTD: 0,
     revenueQTD: 0,
     revenueYTD: 0,
+    newBusinessRevenueMTD: 0,
+    newBusinessRevenueQTD: 0,
+    newBusinessRevenueYTD: 0,
+    recurringBusinessRevenueMTD: 0,
+    recurringBusinessRevenueQTD: 0,
+    recurringBusinessRevenueYTD: 0,
+    newBusinessOrdersMTD: 0,
+    recurringBusinessOrdersMTD: 0,
+    newBusinessMixMTD: 0,
     quotesSentMTD: 0,
     dealsClosedMTD: 0,
     avgDaysToClose: 0,
@@ -1714,14 +1755,30 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     recordAliasGap(row, mapping, amount, metricDate)
 
     if (row.canonical_state === 'order') {
+      const businessClassification = salesOrderBusinessClassification(row)
       totalBusinessSalesOrders++
       if (row.sf_opportunity_id) linkedSalesOrders++
       if (isSelectedRosterRow && isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         kpis.revenueMTD += amount
         kpis.dealsClosedMTD++
+        if (businessClassification === 'new_business') {
+          kpis.newBusinessRevenueMTD += amount
+          kpis.newBusinessOrdersMTD++
+        } else if (businessClassification === 'recurring_business') {
+          kpis.recurringBusinessRevenueMTD += amount
+          kpis.recurringBusinessOrdersMTD++
+        }
       }
-      if (isSelectedRosterRow && isOnOrAfter(metricDate, qtrStart)) kpis.revenueQTD += amount
-      if (isSelectedRosterRow && isOnOrAfter(metricDate, yearStart)) kpis.revenueYTD += amount
+      if (isSelectedRosterRow && isOnOrAfter(metricDate, qtrStart)) {
+        kpis.revenueQTD += amount
+        if (businessClassification === 'new_business') kpis.newBusinessRevenueQTD += amount
+        else if (businessClassification === 'recurring_business') kpis.recurringBusinessRevenueQTD += amount
+      }
+      if (isSelectedRosterRow && isOnOrAfter(metricDate, yearStart)) {
+        kpis.revenueYTD += amount
+        if (businessClassification === 'new_business') kpis.newBusinessRevenueYTD += amount
+        else if (businessClassification === 'recurring_business') kpis.recurringBusinessRevenueYTD += amount
+      }
     } else if (row.canonical_state === 'quote') {
       if (isSelectedRosterRow && isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) kpis.quotesSentMTD++
     }
@@ -1734,14 +1791,33 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     }
 
     if (row.canonical_state === 'order') {
+      const businessClassification = salesOrderBusinessClassification(row)
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.revenueMTD += amount
         rep.dealsClosed++
+        if (businessClassification === 'new_business') {
+          rep.newBusinessRevenueMTD += amount
+          rep.newBusinessOrdersMTD++
+        } else if (businessClassification === 'recurring_business') {
+          rep.recurringBusinessRevenueMTD += amount
+          rep.recurringBusinessOrdersMTD++
+        }
       }
-      if (isOnOrAfter(metricDate, qtrStart)) rep.revenueQTD += amount
+      if (isOnOrAfter(metricDate, qtrStart)) {
+        rep.revenueQTD += amount
+        if (businessClassification === 'new_business') rep.newBusinessRevenueQTD += amount
+        else if (businessClassification === 'recurring_business') rep.recurringBusinessRevenueQTD += amount
+      }
       if (isOnOrAfter(metricDate, yearStart)) {
         rep.revenueYTD += amount
         rep.ordersYTD++
+        if (businessClassification === 'new_business') {
+          rep.newBusinessRevenueYTD += amount
+          rep.newBusinessOrdersYTD++
+        } else if (businessClassification === 'recurring_business') {
+          rep.recurringBusinessRevenueYTD += amount
+          rep.recurringBusinessOrdersYTD++
+        }
       }
 
       const monthIndex = metricDate ? months.findIndex((month) => metricDate.startsWith(month.key)) : -1
@@ -1799,6 +1875,12 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     rep.revenueMTD = roundCurrency(rep.revenueMTD)
     rep.revenueQTD = roundCurrency(rep.revenueQTD)
     rep.revenueYTD = roundCurrency(rep.revenueYTD)
+    rep.newBusinessRevenueMTD = roundCurrency(rep.newBusinessRevenueMTD)
+    rep.newBusinessRevenueQTD = roundCurrency(rep.newBusinessRevenueQTD)
+    rep.newBusinessRevenueYTD = roundCurrency(rep.newBusinessRevenueYTD)
+    rep.recurringBusinessRevenueMTD = roundCurrency(rep.recurringBusinessRevenueMTD)
+    rep.recurringBusinessRevenueQTD = roundCurrency(rep.recurringBusinessRevenueQTD)
+    rep.recurringBusinessRevenueYTD = roundCurrency(rep.recurringBusinessRevenueYTD)
     rep.quoteValueMTD = roundCurrency(rep.quoteValueMTD)
     rep.quoteValueQTD = roundCurrency(rep.quoteValueQTD)
     rep.quoteValueYTD = roundCurrency(rep.quoteValueYTD)
@@ -1843,6 +1925,15 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   kpis.revenueMTD = roundCurrency(kpis.revenueMTD)
   kpis.revenueQTD = roundCurrency(kpis.revenueQTD)
   kpis.revenueYTD = roundCurrency(kpis.revenueYTD)
+  kpis.newBusinessRevenueMTD = roundCurrency(kpis.newBusinessRevenueMTD)
+  kpis.newBusinessRevenueQTD = roundCurrency(kpis.newBusinessRevenueQTD)
+  kpis.newBusinessRevenueYTD = roundCurrency(kpis.newBusinessRevenueYTD)
+  kpis.recurringBusinessRevenueMTD = roundCurrency(kpis.recurringBusinessRevenueMTD)
+  kpis.recurringBusinessRevenueQTD = roundCurrency(kpis.recurringBusinessRevenueQTD)
+  kpis.recurringBusinessRevenueYTD = roundCurrency(kpis.recurringBusinessRevenueYTD)
+  kpis.newBusinessMixMTD = kpis.dealsClosedMTD > 0
+    ? Math.round((kpis.newBusinessOrdersMTD / kpis.dealsClosedMTD) * 1000) / 10
+    : 0
   kpis.pipelineValue = roundCurrency(kpis.pipelineValue)
 
   return {
@@ -1866,6 +1957,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       unlinkedSalesOrders: Math.max(0, totalBusinessSalesOrders - linkedSalesOrders),
       linkCoverage: totalBusinessSalesOrders > 0 ? Math.round((linkedSalesOrders / totalBusinessSalesOrders) * 1000) / 10 : 0,
       linkRows: linkRowsRes.count ?? 0,
+      newBusinessDefinition: 'New Business means an issued Fishbowl Sales Order where the same customer had no prior issued Sales Order in the previous 12 months. Recurring Business is the inverse.',
       activeMetricPeriodLabel: activeMonth.label,
       activeMetricPeriodStart: activeMonth.start,
       activeMetricPeriodEnd: activeMonth.end,
@@ -2329,6 +2421,15 @@ export interface SalesKpis {
   revenueMTD: number
   revenueQTD: number
   revenueYTD: number
+  newBusinessRevenueMTD: number
+  newBusinessRevenueQTD: number
+  newBusinessRevenueYTD: number
+  recurringBusinessRevenueMTD: number
+  recurringBusinessRevenueQTD: number
+  recurringBusinessRevenueYTD: number
+  newBusinessOrdersMTD: number
+  recurringBusinessOrdersMTD: number
+  newBusinessMixMTD: number
   quotesSentMTD: number
   dealsClosedMTD: number
   avgDaysToClose: number

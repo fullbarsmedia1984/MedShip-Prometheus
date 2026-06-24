@@ -45,7 +45,19 @@ import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
 import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
 import { CompetitorKeywordCard } from '@/components/dashboard/CompetitorKeywordCard'
 
-type SortKey = 'revenueMTD' | 'revenueQTD' | 'revenueYTD' | 'dealsClosed' | 'dealsLost' | 'winRate' | 'quotesSent' | 'quoteValueMTD' | 'avgDealSize' | 'pipelineValue'
+type SortKey =
+  | 'revenueMTD'
+  | 'revenueQTD'
+  | 'revenueYTD'
+  | 'newBusinessRevenueMTD'
+  | 'recurringBusinessRevenueMTD'
+  | 'dealsClosed'
+  | 'dealsLost'
+  | 'winRate'
+  | 'quotesSent'
+  | 'quoteValueMTD'
+  | 'avgDealSize'
+  | 'pipelineValue'
 
 type SalesDashboardResponse = {
   kpis: SalesKpis
@@ -237,12 +249,30 @@ export default function SalesPage() {
 
       <div className="space-y-6 p-6">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             title={`Operational Revenue ${shortMetricLabel}`}
             value={`$${kpis.revenueMTD.toLocaleString()}`}
             icon={DollarSign}
             iconColor="text-medship-primary"
+          />
+          <KpiCard
+            title={`New Business Revenue ${shortMetricLabel}`}
+            value={`$${kpis.newBusinessRevenueMTD.toLocaleString()}`}
+            icon={Zap}
+            iconColor="text-medship-success"
+          />
+          <KpiCard
+            title={`Recurring Revenue ${shortMetricLabel}`}
+            value={`$${kpis.recurringBusinessRevenueMTD.toLocaleString()}`}
+            icon={Users}
+            iconColor="text-medship-info"
+          />
+          <KpiCard
+            title={`New Business Mix ${shortMetricLabel}`}
+            value={`${kpis.newBusinessMixMTD.toFixed(1)}%`}
+            icon={Target}
+            iconColor="text-medship-warning"
           />
           <KpiCard
             title="Operational Revenue QTD"
@@ -305,6 +335,9 @@ export default function SalesPage() {
                     {salesHealth.fishbowlOrderFreshnessDays !== null && ` (${salesHealth.fishbowlOrderFreshnessDays}d old)`}
                     . Salesforce remains the source for pipeline.
                     {salesHealth.isMetricPeriodFallback && ` Showing latest available Fishbowl period: ${salesHealth.activeMetricPeriodLabel}.`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {salesHealth.newBusinessDefinition}
                   </p>
                 </div>
               </div>
@@ -398,11 +431,13 @@ export default function SalesPage() {
             ) : (
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Rep</TableHead>
-                  <SortHeader label={`Revenue ${shortMetricLabel}`} field="revenueMTD" className="text-right" />
-                  <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
-                  <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Rep</TableHead>
+                    <SortHeader label={`Revenue ${shortMetricLabel}`} field="revenueMTD" className="text-right" />
+                    <SortHeader label={`New Biz ${shortMetricLabel}`} field="newBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                    <SortHeader label={`Recurring ${shortMetricLabel}`} field="recurringBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                    <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
+                    <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label={`Issued SOs ${shortMetricLabel}`} field="dealsClosed" className="text-center" />
                   <SortHeader label={`Quotes ${shortMetricLabel}`} field="quotesSent" className="hidden text-center md:table-cell" />
                   <SortHeader label="Quote Value" field="quoteValueMTD" className="hidden text-right xl:table-cell" />
@@ -439,6 +474,14 @@ export default function SalesPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">${rep.revenueMTD.toLocaleString()}</TableCell>
+                      <TableCell className="hidden text-right tabular-nums xl:table-cell">
+                        <div className="font-semibold">${rep.newBusinessRevenueMTD.toLocaleString()}</div>
+                        <div className="text-[0.7rem] text-muted-foreground">{rep.newBusinessOrdersMTD} SOs</div>
+                      </TableCell>
+                      <TableCell className="hidden text-right tabular-nums xl:table-cell">
+                        <div className="font-semibold">${rep.recurringBusinessRevenueMTD.toLocaleString()}</div>
+                        <div className="text-[0.7rem] text-muted-foreground">{rep.recurringBusinessOrdersMTD} SOs</div>
+                      </TableCell>
                       <TableCell className="hidden text-right tabular-nums xl:table-cell">${rep.revenueQTD.toLocaleString()}</TableCell>
                       <TableCell className="hidden text-right tabular-nums xl:table-cell">${rep.revenueYTD.toLocaleString()}</TableCell>
                       <TableCell className="text-center font-medium">{rep.dealsClosed}</TableCell>
