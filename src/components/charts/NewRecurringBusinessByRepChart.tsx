@@ -18,9 +18,7 @@ interface NewRecurringBusinessByRepChartProps {
   data: MonthlyBusinessRevenueByRep[]
 }
 
-const repPalette = ['#1C3C6E', '#1E98D5', '#0FA62C', '#A0007E', '#E89C0C', '#D93025', '#B5C8CD', '#3AACE3']
-const newBusinessColor = '#0FA62C'
-const recurringColor = '#1E98D5'
+const repPalette = ['#1C3C6E', '#1E98D5', '#0FA62C', '#A0007E', '#E89C0C', '#D93025', '#667085', '#3AACE3']
 
 function formatYAxis(value: number): string {
   return `$${Math.round(value / 1000)}k`
@@ -58,7 +56,13 @@ function CustomTooltip({ active, payload, label }: {
       <p className="mb-2 text-[0.813rem] font-medium text-[#1C3C6E]">{label}</p>
       {rows.map((entry) => (
         <p key={`${entry.rep}-${entry.type}`} className="flex items-center gap-2 text-[0.75rem] text-[#576671]">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-sm"
+            style={{
+              backgroundColor: entry.color,
+              opacity: entry.type === 'Recurring' ? 0.45 : 1,
+            }}
+          />
           <span className="truncate">{entry.rep} {entry.type}:</span>
           <span className="ml-auto font-semibold" style={{ color: entry.color }}>
             ${entry.value.toLocaleString()}
@@ -68,6 +72,31 @@ function CustomTooltip({ active, payload, label }: {
       <p className="mt-1 border-t border-[#D6DEE3] pt-1 text-[0.75rem] font-semibold text-[#1C3C6E]">
         Total: ${total.toLocaleString()}
       </p>
+    </div>
+  )
+}
+
+function CustomLegend({ repNames }: { repNames: string[] }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.75rem] text-[#576671]">
+      {repNames.map((repName, index) => {
+        const color = repPalette[index % repPalette.length]
+
+        return (
+          <span key={repName} className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+            {repName}
+          </span>
+        )
+      })}
+      <span className="ml-1 inline-flex items-center gap-1.5 border-l border-[#D6DEE3] pl-4">
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-[#1C3C6E]" />
+        New
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-[#1C3C6E]" style={{ opacity: 0.45 }} />
+        Recurring
+      </span>
     </div>
   )
 }
@@ -114,9 +143,8 @@ export function NewRecurringBusinessByRepChart({ data }: NewRecurringBusinessByR
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: '0.75rem', fontFamily: 'Outfit' }}
+                verticalAlign="bottom"
+                content={<CustomLegend repNames={repNames} />}
               />
               {repNames.flatMap((repName, index) => {
                 const repColor = repPalette[index % repPalette.length]
@@ -126,14 +154,15 @@ export function NewRecurringBusinessByRepChart({ data }: NewRecurringBusinessByR
                     dataKey={`${repName} - New`}
                     name={`${repName} New`}
                     stackId={repName}
-                    fill={newBusinessColor}
+                    fill={repColor}
                   />,
                   <Bar
                     key={`${repName} - Recurring`}
                     dataKey={`${repName} - Recurring`}
                     name={`${repName} Recurring`}
                     stackId={repName}
-                    fill={recurringColor}
+                    fill={repColor}
+                    fillOpacity={0.38}
                     stroke={repColor}
                     strokeWidth={1}
                     radius={[3, 3, 0, 0]}
