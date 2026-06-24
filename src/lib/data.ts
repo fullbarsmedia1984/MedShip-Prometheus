@@ -240,8 +240,10 @@ const QUALITY_ZERO_VALUE = 'zero_value'
 const QUALITY_HISTORICAL = 'historical'
 const QUALITY_UNKNOWN_STATE = 'unknown_state'
 const TEST_RECORD_PATTERN = /(^|\b)(test|testing|do not use|sample|warehouse)/i
-const SALES_ORDER_HEADER_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, business_classification, prior_issued_so_number, prior_issued_order_at, last_synced_at, data_quality_flags'
-const SALES_ORDER_METRIC_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, business_classification, prior_issued_so_number, prior_issued_order_at, last_synced_at, data_quality_flags'
+const SALES_ORDER_BASE_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
+const SALES_ORDER_BUSINESS_SELECT = 'business_classification, prior_issued_so_number, prior_issued_order_at'
+const SALES_ORDER_HEADER_SELECT = `${SALES_ORDER_BASE_SELECT}, ${SALES_ORDER_BUSINESS_SELECT}`
+const SALES_ORDER_METRIC_SELECT = SALES_ORDER_HEADER_SELECT
 
 export interface SalesRepPerformance extends SeedSalesRep {
   fishbowlAliases: string[]
@@ -512,6 +514,23 @@ function warnEmptyLiveTable(tableName: string, surface: string): void {
 function isMissingRelationError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
   return message.includes('42P01') || message.toLowerCase().includes('could not find the table')
+}
+
+function isMissingSalesOrderBusinessColumnsError(error: unknown): boolean {
+  const payload = error as { code?: string; message?: string; details?: string; hint?: string } | null | undefined
+  const message = [
+    payload?.code,
+    payload?.message,
+    payload?.details,
+    payload?.hint,
+    error instanceof Error ? error.message : String(error),
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  return message.includes('business_classification') ||
+    message.includes('prior_issued_so_number') ||
+    message.includes('prior_issued_order_at') ||
+    message.includes('sales_order_metric_at') ||
+    message.includes('pgrst204')
 }
 
 function inferCategory(partNumber: string): Product['category'] {
@@ -1519,6 +1538,27 @@ async function getFishbowlSalespersonMappings() {
   })
 }
 
+async function getSalesOrderMetricRows(metricQueryStart: string): Promise<CanonicalSalesOrderRow[]> {
+  const supabase = createAdminClient()
+  const buildQuery = (selectColumns: string) =>
+    fetchAllRows<CanonicalSalesOrderRow>(() =>
+      supabase
+        .from('fb_sales_orders')
+        .select(selectColumns)
+        .in('canonical_state', ['order', 'quote'])
+        .or(`date_issued.gte.${metricQueryStart},date_completed.gte.${metricQueryStart},date_created.gte.${metricQueryStart}`)
+        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+    )
+
+  try {
+    return await buildQuery(SALES_ORDER_METRIC_SELECT)
+  } catch (error) {
+    if (!isMissingSalesOrderBusinessColumnsError(error)) throw error
+    console.warn('fb_sales_orders business classification columns are unavailable; loading Sales dashboard without New/Recurring split')
+    return buildQuery(SALES_ORDER_BASE_SELECT)
+  }
+}
+
 function createEmptySalesRep(input: {
   id: string
   name: string
@@ -1585,14 +1625,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   const [usersRes, mappings, orderRows, pipelineRes, profileCallsRes, linkRowsRes] = await Promise.all([
     supabase.from('sf_users').select('sf_id, name, email').eq('is_active', true),
     getFishbowlSalespersonMappings(),
-    fetchAllRows<CanonicalSalesOrderRow>(() =>
-      supabase
-        .from('fb_sales_orders')
-        .select(SALES_ORDER_METRIC_SELECT)
-        .in('canonical_state', ['order', 'quote'])
-        .or(`date_issued.gte.${metricQueryStart},date_completed.gte.${metricQueryStart},date_created.gte.${metricQueryStart}`)
-        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
-    ),
+    getSalesOrderMetricRows(metricQueryStart),
     supabase.from('sf_opportunities').select('owner_sf_id, amount').eq('is_closed', false),
     supabase.from('sf_profile_calls').select('owner_sf_id, ringdna_connected, activity_date').gte('activity_date', lastMonthStart),
     supabase.from('opportunity_sales_order_links').select('*', { count: 'estimated', head: true }),
