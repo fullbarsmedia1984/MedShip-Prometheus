@@ -320,11 +320,17 @@ export interface MonthlyBusinessRevenue {
   recurringBusinessOrders: number
 }
 
+export interface MonthlyBusinessRevenueByRep {
+  month: string
+  [key: string]: string | number
+}
+
 export interface SalesDashboardCore {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
   monthlyBusinessRevenue: MonthlyBusinessRevenue[]
+  monthlyBusinessRevenueByRep: MonthlyBusinessRevenueByRep[]
   salesHealth: SalesDataHealth
 }
 
@@ -1668,6 +1674,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     newBusinessOrders: 0,
     recurringBusinessOrders: 0,
   }))
+  const monthlyBusinessByRepRows = months.map(({ label }) => ({ month: label } as MonthlyBusinessRevenueByRep))
   const pipelineByOwner = new Map<string, number>()
   const profileStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
 
@@ -1875,9 +1882,11 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         if (businessClassification === 'new_business') {
           monthlyBusinessRows[monthIndex].newBusinessRevenue += amount
           monthlyBusinessRows[monthIndex].newBusinessOrders++
+          monthlyBusinessByRepRows[monthIndex][`${rep.name} - New`] = toNumber(monthlyBusinessByRepRows[monthIndex][`${rep.name} - New`] as number | string | null) + amount
         } else if (businessClassification === 'recurring_business') {
           monthlyBusinessRows[monthIndex].recurringBusinessRevenue += amount
           monthlyBusinessRows[monthIndex].recurringBusinessOrders++
+          monthlyBusinessByRepRows[monthIndex][`${rep.name} - Recurring`] = toNumber(monthlyBusinessByRepRows[monthIndex][`${rep.name} - Recurring`] as number | string | null) + amount
         }
       }
     } else if (row.canonical_state === 'quote') {
@@ -1959,6 +1968,11 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     row.newBusinessRevenue = roundCurrency(row.newBusinessRevenue)
     row.recurringBusinessRevenue = roundCurrency(row.recurringBusinessRevenue)
   }
+  for (const row of monthlyBusinessByRepRows) {
+    for (const key of Object.keys(row)) {
+      if (key !== 'month') row[key] = roundCurrency(toNumber(row[key] as number | string | null))
+    }
+  }
 
   const allAliasGaps = Array.from(aliasStats.values())
     .map((gap) => ({ ...gap, revenueYTD: roundCurrency(gap.revenueYTD) }))
@@ -2001,6 +2015,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     reps,
     monthlyRevenue: monthlyRows,
     monthlyBusinessRevenue: monthlyBusinessRows,
+    monthlyBusinessRevenueByRep: monthlyBusinessByRepRows,
     salesHealth: {
       revenueSource: 'fishbowl_sales_orders',
       pipelineSource: 'salesforce_opportunities',
