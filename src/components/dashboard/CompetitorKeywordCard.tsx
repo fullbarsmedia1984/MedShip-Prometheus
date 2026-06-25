@@ -59,19 +59,19 @@ export function CompetitorKeywordCard({ keywords, onKeywordClick }: CompetitorKe
   const totalMentions = keywords.reduce((s, k) => s + k.mentions, 0)
 
   return (
-    <Card className="overflow-hidden border-medship-danger/20 shadow-lg">
-      <CardHeader className="border-b border-border/50 bg-gradient-to-r from-medship-danger/[0.06] via-medship-danger/[0.02] to-transparent pb-4">
+    <Card className="overflow-hidden border-medship-primary/20 shadow-lg">
+      <CardHeader className="border-b border-border/50 bg-gradient-to-r from-medship-primary/[0.06] via-medship-primary/[0.02] to-transparent pb-4">
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="flex items-center gap-2.5">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-danger/10">
-                <Radar className="h-4 w-4 text-medship-danger" />
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-primary/10">
+                <Radar className="h-4 w-4 text-medship-primary" />
               </span>
-              Competitor Intelligence
+              RingDNA Keywords
               {keywords.length === 0 && <ComingSoonBadge />}
             </CardTitle>
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Top keywords from RingDNA call recordings
+              Top structured keywords from RingDNA call activity
             </p>
           </div>
           <div className="flex items-center gap-4 text-right">
@@ -168,7 +168,7 @@ export function CompetitorKeywordCard({ keywords, onKeywordClick }: CompetitorKe
 
         {keywords.length === 0 && (
           <ComingSoonPanel
-            title="Competitor intelligence"
+            title="RingDNA keywords"
             description="Live RingDNA keyword data is not available yet."
             className="m-5 min-h-40"
           />

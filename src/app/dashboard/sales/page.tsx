@@ -30,22 +30,26 @@ import {
   Award,
   Phone,
   PhoneCall,
+  PhoneOutgoing,
   Zap,
   ArrowUpDown,
   AlertTriangle,
   Database,
   Save,
   Users,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
-import type { SalesKpis, ProfileCallMetricsResult, KeywordResult, SalesRepPerformance, SalesDataHealth, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep } from '@/lib/data'
+import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep } from '@/lib/data'
 import type { SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
 import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
 import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
 import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
-import { CompetitorKeywordCard } from '@/components/dashboard/CompetitorKeywordCard'
+import { CallActivitySummaryCard } from '@/components/dashboard/CallActivitySummaryCard'
+import { RingDnaRepActivityCharts } from '@/components/charts/RingDnaRepActivityCharts'
 
 type SortKey =
   | 'revenueMTD'
@@ -74,7 +78,7 @@ type SalesDashboardResponse = {
   weeklyVolume: SeedWeeklyCallVolume[]
   outcomeBreakdown: Array<{ outcome: string; count: number; percentage: number; color: string }>
   profileMetrics: ProfileCallMetricsResult
-  competitorKeywords: KeywordResult[]
+  callActivitySummary: CallActivitySummary
 }
 
 function formatDate(dateStr: string): string {
@@ -118,9 +122,9 @@ export default function SalesPage() {
   const [weeklyVolume, setWeeklyVolume] = useState<SeedWeeklyCallVolume[]>([])
   const [outcomeBreakdown, setOutcomeBreakdown] = useState<Array<{ outcome: string; count: number; percentage: number; color: string }>>([])
   const [profileMetrics, setProfileMetrics] = useState<ProfileCallMetricsResult | null>(null)
-  const [competitorKeywords, setCompetitorKeywords] = useState<KeywordResult[]>([])
-  const [keywordFilter, setKeywordFilter] = useState<string | undefined>(undefined)
+  const [callActivitySummary, setCallActivitySummary] = useState<CallActivitySummary | null>(null)
   const [selectedRosterAliases, setSelectedRosterAliases] = useState<string[]>([])
+  const [rosterExpanded, setRosterExpanded] = useState(false)
   const [savingRoster, setSavingRoster] = useState(false)
   const [rosterError, setRosterError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('revenueMTD')
@@ -142,13 +146,16 @@ export default function SalesPage() {
       setWeeklyVolume(data.weeklyVolume)
       setOutcomeBreakdown(data.outcomeBreakdown)
       setProfileMetrics(data.profileMetrics)
-      setCompetitorKeywords(data.competitorKeywords)
+      setCallActivitySummary(data.callActivitySummary)
     } catch (error) {
       console.error('Failed to load sales data:', error)
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const currentDailyCallActivity = callActivitySummary?.daily[callActivitySummary.daily.length - 1] ?? null
+  const currentMonthlyCallActivity = callActivitySummary?.monthly[callActivitySummary.monthly.length - 1] ?? null
 
   useEffect(() => {
     loadData()
@@ -313,7 +320,7 @@ export default function SalesPage() {
             iconColor="text-medship-warning"
           />
           <KpiCard
-            title="Profile Calls (MTD)"
+            title="RingDNA Calls (MTD)"
             value={profileMetrics?.totalMTD ?? 0}
             change={profileMetrics && profileMetrics.totalLastMonth > 0
               ? Math.round(((profileMetrics.totalMTD - profileMetrics.totalLastMonth) / profileMetrics.totalLastMonth) * 1000) / 10
@@ -363,12 +370,24 @@ export default function SalesPage() {
 
         {salesHealth && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
               <CardTitle className="flex flex-wrap items-center gap-2">
                 Active Sales Roster
                 <Badge variant="outline">{selectedRosterAliases.length} aliases selected</Badge>
+                <Badge variant="outline">{rosterGroups.length} reps</Badge>
               </CardTitle>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRosterExpanded((expanded) => !expanded)}
+                aria-expanded={rosterExpanded}
+              >
+                {rosterExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                {rosterExpanded ? 'Hide Roster' : 'Show Roster'}
+              </Button>
             </CardHeader>
+            {rosterExpanded && (
             <CardContent>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                 {rosterGroups.map((group) => {
@@ -416,6 +435,7 @@ export default function SalesPage() {
                 )}
               </div>
             </CardContent>
+            )}
           </Card>
         )}
 
@@ -439,13 +459,13 @@ export default function SalesPage() {
             ) : (
             <Table>
               <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Rep</TableHead>
-                    <SortHeader label={`Revenue ${shortMetricLabel}`} field="revenueMTD" className="text-right" />
-                    <SortHeader label={`New Biz ${shortMetricLabel}`} field="newBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
-                    <SortHeader label={`Recurring ${shortMetricLabel}`} field="recurringBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
-                    <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
-                    <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Rep</TableHead>
+                  <SortHeader label={`Revenue ${shortMetricLabel}`} field="revenueMTD" className="text-right" />
+                  <SortHeader label={`New Biz ${shortMetricLabel}`} field="newBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label={`Recurring ${shortMetricLabel}`} field="recurringBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label={`Issued SOs ${shortMetricLabel}`} field="dealsClosed" className="text-center" />
                   <SortHeader label={`Quotes ${shortMetricLabel}`} field="quotesSent" className="hidden text-center md:table-cell" />
                   <SortHeader label="Quote Value" field="quoteValueMTD" className="hidden text-right xl:table-cell" />
@@ -596,7 +616,7 @@ export default function SalesPage() {
           </div>
         )}
 
-        {/* Profile Call Leaderboard */}
+        {/* Call Activity Leaderboard */}
         {profileMetrics && (
           <ProfileCallLeaderboard reps={reps} metrics={profileMetrics} />
         )}
@@ -609,12 +629,12 @@ export default function SalesPage() {
           <PipelineByRepChart data={pipelineByRep} />
         </div>
 
-        {/* Profile Call Activity Section */}
+        {/* RingDNA Call Activity Section */}
 
         {/* Row 1: Call KPIs */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
-            title="Total Profile Calls MTD"
+            title="Total RingDNA Calls MTD"
             value={profileMetrics?.totalMTD ?? 0}
             change={profileMetrics && profileMetrics.totalLastMonth > 0
               ? Math.round(((profileMetrics.totalMTD - profileMetrics.totalLastMonth) / profileMetrics.totalLastMonth) * 1000) / 10
@@ -632,22 +652,24 @@ export default function SalesPage() {
             iconColor="text-medship-success"
           />
           <KpiCard
-            title="Avg Call Duration"
-            value={`${profileMetrics?.avgDuration ?? 0}m`}
+            title="Outbound Calls Today"
+            value={currentDailyCallActivity?.outboundCalls ?? 0}
             change={0}
-            changeLabel="from RingDNA"
+            changeLabel="same Salesforce cadence"
+            icon={PhoneOutgoing}
+            iconColor="text-medship-warning"
+          />
+          <KpiCard
+            title="Call Time MTD"
+            value={`${currentMonthlyCallActivity?.totalDurationMin ?? 0}m`}
+            change={0}
+            changeLabel="company total"
             icon={Clock}
             iconColor="text-medship-info"
           />
-          <KpiCard
-            title="Conversion to Opp"
-            value={`${profileMetrics?.conversionRate ?? 0}%`}
-            change={0}
-            changeLabel="calls to opportunities"
-            icon={Zap}
-            iconColor="text-medship-secondary"
-          />
         </div>
+
+        <CallActivitySummaryCard summary={callActivitySummary} />
 
         {/* Row 2: Charts side by side */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -659,18 +681,12 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* Row 3: Competitor Intelligence */}
-        <CompetitorKeywordCard
-          keywords={competitorKeywords}
-          onKeywordClick={(keyword) => setKeywordFilter(keyword)}
-        />
+        <RingDnaRepActivityCharts summary={callActivitySummary} reps={reps} />
 
-        {/* Row 4: Profile Call Log Table */}
+        {/* Row 4: RingDNA Call Log Table */}
         <ProfileCallTable
           calls={profileCalls}
           reps={reps}
-          keywordFilter={keywordFilter}
-          onClearKeywordFilter={() => setKeywordFilter(undefined)}
         />
 
         {/* Quote Activity */}

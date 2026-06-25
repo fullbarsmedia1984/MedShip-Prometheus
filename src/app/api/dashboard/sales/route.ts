@@ -10,10 +10,10 @@ import {
   getProfileCallMetrics,
   getWeeklyCallVolume,
   getCallOutcomeBreakdown,
-  getTopCompetitorKeywords,
+  getCallActivitySummary,
 } from '@/lib/data'
-import type { ProfileCallMetricsResult, KeywordResult } from '@/lib/data'
-import type { SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
+import type { CallActivitySummary, ProfileCallMetricsResult } from '@/lib/data'
+import type { SeedPipelineByRep, SeedProfileCall, SeedQuote, SeedWeeklyCallVolume } from '@/lib/seed-data'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -41,6 +41,17 @@ const EMPTY_PROFILE_METRICS: ProfileCallMetricsResult = {
   conversionRate: 0,
   connectRate: 0,
   avgDuration: 0,
+  voicemailCount: 0,
+  voicemailRate: 0,
+  byRep: [],
+}
+
+const EMPTY_CALL_ACTIVITY_SUMMARY: CallActivitySummary = {
+  generatedAt: new Date(0).toISOString(),
+  latestActivityDate: null,
+  daily: [],
+  weekly: [],
+  monthly: [],
   byRep: [],
 }
 
@@ -54,7 +65,7 @@ const getSalesDashboardPayload = unstable_cache(
       weeklyVolume,
       outcomeBreakdown,
       profileMetrics,
-      competitorKeywords,
+      callActivitySummary,
     ] = await Promise.all([
       optionalPart<SeedPipelineByRep[]>('pipeline by rep', () => getPipelineByRep(), []),
       optionalPart('quote activity', () => getQuotes({ pageSize: 40 }), { data: [] as SeedQuote[], total: 0, page: 1, pageSize: 40, totalPages: 0 }),
@@ -62,7 +73,7 @@ const getSalesDashboardPayload = unstable_cache(
       optionalPart<SeedWeeklyCallVolume[]>('weekly call volume', () => getWeeklyCallVolume(), []),
       optionalPart<Array<{ outcome: string; count: number; percentage: number; color: string }>>('call outcome breakdown', () => getCallOutcomeBreakdown(), []),
       optionalPart<ProfileCallMetricsResult>('profile metrics', () => getProfileCallMetrics(), EMPTY_PROFILE_METRICS),
-      optionalPart<KeywordResult[]>('competitor keywords', () => getTopCompetitorKeywords(10), []),
+      optionalPart<CallActivitySummary>('call activity summary', () => getCallActivitySummary(), EMPTY_CALL_ACTIVITY_SUMMARY),
     ])
 
     return {
@@ -78,7 +89,7 @@ const getSalesDashboardPayload = unstable_cache(
       weeklyVolume,
       outcomeBreakdown,
       profileMetrics,
-      competitorKeywords,
+      callActivitySummary,
     }
   },
   ['sales-dashboard-payload'],
