@@ -98,7 +98,7 @@ export default async function TamDashboardPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex flex-col">
-      <Header title="Nursing TAM" />
+      <Header title="TAM" />
 
       <main className="space-y-6 p-4 md:p-6">
         <Card>
@@ -106,7 +106,7 @@ export default async function TamDashboardPage({ searchParams }: PageProps) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-semibold text-card-foreground">
-                  Nursing TAM Explorer
+                  TAM
                 </h1>
                 <Badge variant="outline" className="capitalize">
                   {scenario} scenario

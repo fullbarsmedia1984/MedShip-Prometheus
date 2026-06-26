@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default function TamContactsPage() {
   return (
     <div className="flex flex-col">
-      <Header title="Nursing TAM Contacts" />
+      <Header title="TAM Contacts" />
       <main className="space-y-6 p-4 md:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
