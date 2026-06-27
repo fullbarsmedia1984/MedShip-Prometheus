@@ -315,9 +315,11 @@ function KeplerMapInner({
                       stroked: true,
                       filled: true,
                       enable3d: true,
+                      fixedHeight: false,
                       wireframe: false,
-                      heightRange: [0, 460],
-                      elevationScale: 4,
+                      heightRange: [0, 900],
+                      elevationScale: 9,
+                      enableElevationZoomFactor: true,
                       colorRange: {
                         name: 'Enrollment yellow-red',
                         type: 'sequential',
@@ -329,7 +331,7 @@ function KeplerMapInner({
                   visualChannels: {
                     colorField: { name: 'est_annual_enrollment', type: 'integer' },
                     colorScale: 'quantile',
-                    heightField: { name: 'est_annual_enrollment', type: 'integer' },
+                    heightField: { name: 'elevation', type: 'integer' },
                     heightScale: 'sqrt',
                   },
                 },
@@ -404,6 +406,7 @@ function KeplerMapInner({
               zoom: 3,
               pitch: visible.hexbin ? 48 : 0,
               bearing: visible.hexbin ? -10 : 0,
+              dragRotate: visible.hexbin,
             },
             mapStyle: {
               styleType: 'light',
