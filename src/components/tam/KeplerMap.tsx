@@ -228,13 +228,34 @@ function KeplerMapInner({
                   type: 'hexagon',
                   config: {
                     dataId: 'tam_institutions',
-                    label: 'Enrollment Hexbin',
+                    label: 'Enrollment Hexbin 3D',
                     columns: { lat: 'lat', lng: 'lng' },
                     isVisible: visible.hexbin,
+                    visConfig: {
+                      opacity: 0.86,
+                      worldUnitSize: 42,
+                      coverage: 0.82,
+                      sizeRange: [0, 620],
+                      percentile: [0, 100],
+                      elevationPercentile: [0, 100],
+                      elevationScale: 7,
+                      enableElevationZoomFactor: true,
+                      enable3d: true,
+                      colorAggregation: 'sum',
+                      sizeAggregation: 'sum',
+                      colorRange: {
+                        name: 'Enrollment volume',
+                        type: 'sequential',
+                        category: 'Custom',
+                        colors: ['#E0F2FE', '#7DD3FC', '#22D3EE', '#14B8A6', '#0F766E', '#134E4A'],
+                      },
+                    },
                   },
                   visualChannels: {
                     colorField: { name: 'est_annual_enrollment', type: 'integer' },
                     colorScale: 'quantile',
+                    sizeField: { name: 'est_annual_enrollment', type: 'integer' },
+                    sizeScale: 'sqrt',
                   },
                 },
                 {
@@ -265,6 +286,35 @@ function KeplerMapInner({
                     colorScale: 'quantile',
                   },
                 },
+                {
+                  id: 'tam_hex_tier_halos',
+                  type: 'point',
+                  config: {
+                    dataId: 'tam_institutions',
+                    label: 'Tier Halos',
+                    columns: { lat: 'lat', lng: 'lng' },
+                    isVisible: visible.hexbin,
+                    visConfig: {
+                      radius: 9,
+                      fixedRadius: true,
+                      opacity: 0.96,
+                      outline: true,
+                      filled: false,
+                      thickness: 2.2,
+                      strokeColor: [255, 255, 255],
+                      strokeColorRange: {
+                        name: 'MedShip tiers',
+                        type: 'qualitative',
+                        category: 'Custom',
+                        colors: ['#38BDF8', '#22C55E', '#F59E0B', '#A78BFA', '#F43F5E', '#94A3B8'],
+                      },
+                    },
+                  },
+                  visualChannels: {
+                    strokeColorField: { name: 'tier', type: 'string' },
+                    strokeColorScale: 'ordinal',
+                  },
+                },
               ],
               interactionConfig: {
                 tooltip: {
@@ -293,6 +343,8 @@ function KeplerMapInner({
               latitude: 39.5,
               longitude: -98.35,
               zoom: 3,
+              pitch: visible.hexbin ? 48 : 0,
+              bearing: visible.hexbin ? -10 : 0,
             },
             mapStyle: {
               styleType: 'light',
