@@ -328,18 +328,57 @@ function KeplerMapInner({
           display: none;
         }
 
+        .tam-kepler-map .map-popover__layer-info > table {
+          display: grid;
+          grid-template-columns: minmax(7rem, auto) minmax(9rem, 1fr);
+          column-gap: 12px;
+          row-gap: 7px;
+          width: 100%;
+          min-width: 240px;
+        }
+
+        .tam-kepler-map .map-popover__layer-info > table tbody,
+        .tam-kepler-map .map-popover__layer-info > table tr {
+          display: contents;
+        }
+
         .tam-kepler-map .layer-hover-info__row:first-child .row__name {
           display: none;
         }
 
         .tam-kepler-map .layer-hover-info__row:first-child .row__value {
+          grid-column: 1 / -1;
           display: block;
-          max-width: 260px;
+          max-width: 280px;
+          padding-bottom: 2px;
+          border-bottom: 1px solid var(--border);
+          text-align: left;
           font-size: 13px;
           font-weight: 700;
           line-height: 1.25;
           color: var(--popover-foreground);
           white-space: normal;
+        }
+
+        .tam-kepler-map .layer-hover-info__row:not(:first-child) .row__name {
+          min-width: 0;
+          text-align: left;
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0;
+          white-space: normal;
+        }
+
+        .tam-kepler-map .layer-hover-info__row:not(:first-child) .row__value {
+          min-width: 0;
+          max-width: 180px;
+          text-align: right;
+          font-size: 11px;
+          color: var(--popover-foreground);
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
       `}</style>
       <KeplerGl
