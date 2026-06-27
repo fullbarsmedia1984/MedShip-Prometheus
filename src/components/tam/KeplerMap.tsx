@@ -335,6 +335,12 @@ function KeplerMapInner({
           row-gap: 7px;
           width: 100%;
           min-width: 240px;
+          color: #ffffff;
+        }
+
+        .tam-kepler-map .map-popover__layer-info,
+        .tam-kepler-map .map-popover__layer-info * {
+          color: #ffffff !important;
         }
 
         .tam-kepler-map .map-popover__layer-info > table tbody,
@@ -351,12 +357,12 @@ function KeplerMapInner({
           display: block;
           max-width: 280px;
           padding-bottom: 2px;
-          border-bottom: 1px solid var(--border);
+          border-bottom: 1px solid rgb(255 255 255 / 0.22);
           text-align: left;
           font-size: 13px;
           font-weight: 700;
           line-height: 1.25;
-          color: var(--popover-foreground);
+          color: #ffffff;
           white-space: normal;
         }
 
@@ -365,7 +371,7 @@ function KeplerMapInner({
           text-align: left;
           font-size: 10px;
           font-weight: 600;
-          color: var(--muted-foreground);
+          color: #ffffff;
           text-transform: uppercase;
           letter-spacing: 0;
           white-space: normal;
@@ -376,7 +382,7 @@ function KeplerMapInner({
           max-width: 180px;
           text-align: right;
           font-size: 11px;
-          color: var(--popover-foreground);
+          color: #ffffff;
           white-space: normal;
           overflow-wrap: anywhere;
         }
