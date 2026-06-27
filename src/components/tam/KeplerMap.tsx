@@ -62,9 +62,9 @@ type KeplerMapProps = {
 }
 
 const HEX_HEIGHT_SCALE: Record<HexHeightMode, number> = {
-  short: 90,
-  medium: 180,
-  tall: 315,
+  short: 31,
+  medium: 61,
+  tall: 107,
 }
 
 const reducers = combineReducers({
