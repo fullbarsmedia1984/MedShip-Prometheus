@@ -180,8 +180,21 @@ export type TamInstitutionListRow = Pick<
 
 export type TamGeoRow = Pick<
   TamInstitutionListRow,
-  'id' | 'name' | 'city' | 'state' | 'lat' | 'lng' | 'programs' | 'contacts'
->
+  'id' | 'name' | 'city' | 'state' | 'lat' | 'lng' | 'contacts'
+> & {
+  program_count: number
+  accredited_program_count: number
+  accreditation_rate: number
+  programs: Pick<
+    TamProgramRow,
+    | 'id'
+    | 'tier'
+    | 'accreditor'
+    | 'state_board_approved'
+    | 'annual_completions'
+    | 'est_annual_enrollment'
+  >[]
+}
 
 export type TamContactListParams = TamInstitutionFilters &
   TamPagination & {
@@ -457,6 +470,8 @@ export async function listTamGeo(params: TamInstitutionFilters = {}) {
           select json_agg(json_build_object(
             'id', p.id,
             'tier', p.tier,
+            'accreditor', p.accreditor,
+            'state_board_approved', p.state_board_approved,
             'annual_completions', p.annual_completions,
             'est_annual_enrollment', p.est_annual_enrollment
           ) order by p.tier)
@@ -464,6 +479,33 @@ export async function listTamGeo(params: TamInstitutionFilters = {}) {
           where p.institution_id = i.id
           ${tierSql}
         ), '[]'::json) as programs,
+        coalesce((
+          select count(*)::int
+          from ${TAM_SCHEMA}.programs p
+          where p.institution_id = i.id
+          ${tierSql}
+        ), 0) as program_count,
+        coalesce((
+          select count(*)::int
+          from ${TAM_SCHEMA}.programs p
+          where p.institution_id = i.id
+            and (p.accreditor <> 'none' or p.state_board_approved is true)
+          ${tierSql}
+        ), 0) as accredited_program_count,
+        coalesce((
+          select round(
+            (
+              count(*) filter (
+                where p.accreditor <> 'none' or p.state_board_approved is true
+              )::numeric
+              / nullif(count(*)::numeric, 0)
+            ) * 100,
+            1
+          )::float
+          from ${TAM_SCHEMA}.programs p
+          where p.institution_id = i.id
+          ${tierSql}
+        ), 0) as accreditation_rate,
         coalesce((
           select json_agg(json_build_object(
             'id', c.id,

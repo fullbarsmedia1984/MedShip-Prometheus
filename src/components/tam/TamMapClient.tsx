@@ -153,7 +153,7 @@ export function TamMapClient() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mapMode, setMapMode] = useState<'point' | 'heatmap' | 'hexbin'>('point')
-  const [stateMetric, setStateMetric] = useState<'total_tam' | 'n_programs'>('total_tam')
+  const [stateMetric, setStateMetric] = useState<'none' | 'total_tam' | 'n_programs'>('none')
 
   const query = useMemo(
     () => buildQuery({ scenario, state, tier, contactRole, contactHasEmail }),
@@ -250,9 +250,12 @@ export function TamMapClient() {
           </select>
           <select
             value={stateMetric}
-            onChange={(event) => setStateMetric(event.target.value as 'total_tam' | 'n_programs')}
+            onChange={(event) =>
+              setStateMetric(event.target.value as 'none' | 'total_tam' | 'n_programs')
+            }
             className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
           >
+            <option value="none">No state overlay</option>
             <option value="total_tam">State TAM $</option>
             <option value="n_programs">State programs</option>
           </select>
