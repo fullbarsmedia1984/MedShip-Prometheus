@@ -154,6 +154,10 @@ export function TamMapClient() {
   const [error, setError] = useState<string | null>(null)
   const [mapMode, setMapMode] = useState<'point' | 'heatmap' | 'hexbin'>('point')
   const [stateMetric, setStateMetric] = useState<'none' | 'total_tam' | 'n_programs'>('none')
+  const [markerSizeMetric, setMarkerSizeMetric] = useState<
+    'accreditation_rate' | 'est_annual_enrollment'
+  >('accreditation_rate')
+  const [showEnrollmentHeatmap, setShowEnrollmentHeatmap] = useState(false)
 
   const query = useMemo(
     () => buildQuery({ scenario, state, tier, contactRole, contactHasEmail }),
@@ -190,7 +194,7 @@ export function TamMapClient() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-8">
+        <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-10">
           <select
             value={scenario}
             onChange={(event) => setScenario(event.target.value as TamScenario)}
@@ -249,6 +253,18 @@ export function TamMapClient() {
             <option value="hexbin">Hexbin</option>
           </select>
           <select
+            value={markerSizeMetric}
+            onChange={(event) =>
+              setMarkerSizeMetric(
+                event.target.value as 'accreditation_rate' | 'est_annual_enrollment'
+              )
+            }
+            className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
+          >
+            <option value="accreditation_rate">Size: approval</option>
+            <option value="est_annual_enrollment">Size: enrollment</option>
+          </select>
+          <select
             value={stateMetric}
             onChange={(event) =>
               setStateMetric(event.target.value as 'none' | 'total_tam' | 'n_programs')
@@ -259,6 +275,16 @@ export function TamMapClient() {
             <option value="total_tam">State TAM $</option>
             <option value="n_programs">State programs</option>
           </select>
+          <label className="flex h-8 items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showEnrollmentHeatmap}
+              disabled={mapMode !== 'point'}
+              onChange={(event) => setShowEnrollmentHeatmap(event.target.checked)}
+              className="h-4 w-4 accent-medship-primary disabled:opacity-50"
+            />
+            Heat
+          </label>
           <Button onClick={loadData}>
             <Search className="h-4 w-4" />
             Apply
@@ -280,6 +306,8 @@ export function TamMapClient() {
           stateGeojson={choroplethGeojson}
           stateMetric={stateMetric}
           mapMode={mapMode}
+          markerSizeMetric={markerSizeMetric}
+          showEnrollmentHeatmap={showEnrollmentHeatmap}
           mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''}
         />
       )}

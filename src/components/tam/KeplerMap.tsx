@@ -13,6 +13,7 @@ import type { ProtoDataset } from '@kepler.gl/types/actions'
 import type { TamGeoRow } from '@/lib/tam/supabase'
 
 type MapMode = 'point' | 'heatmap' | 'hexbin'
+type MarkerSizeMetric = 'accreditation_rate' | 'est_annual_enrollment'
 type StateMetric = 'none' | 'total_tam' | 'n_programs'
 type StateFeatureCollection = {
   type: 'FeatureCollection'
@@ -30,6 +31,8 @@ type KeplerMapProps = {
   stateGeojson: StateFeatureCollection | null
   stateMetric: StateMetric
   mapMode: MapMode
+  markerSizeMetric: MarkerSizeMetric
+  showEnrollmentHeatmap: boolean
   mapboxToken: string
 }
 
@@ -52,6 +55,12 @@ function modeLayerVisibility(mode: MapMode) {
   }
 }
 
+function markerSizeField(metric: MarkerSizeMetric) {
+  return metric === 'est_annual_enrollment'
+    ? { name: 'est_annual_enrollment', type: 'integer' as const }
+    : { name: 'accreditation_rate', type: 'real' as const }
+}
+
 function toKeplerDataset(
   info: ProtoDataset['info'],
   data: ReturnType<typeof processRowObject>
@@ -71,6 +80,8 @@ function KeplerMapInner({
   stateGeojson,
   stateMetric,
   mapMode,
+  markerSizeMetric,
+  showEnrollmentHeatmap,
   mapboxToken,
 }: KeplerMapProps) {
   const dispatch = useDispatch()
@@ -147,6 +158,86 @@ function KeplerMapInner({
             visState: {
               layers: [
                 {
+                  id: 'tam_points',
+                  type: 'point',
+                  config: {
+                    dataId: 'tam_institutions',
+                    label: 'Institution',
+                    columns: { lat: 'lat', lng: 'lng' },
+                    isVisible: visible.point,
+                    visConfig: {
+                      radius: 12,
+                      radiusRange:
+                        markerSizeMetric === 'est_annual_enrollment'
+                          ? [5, 38]
+                          : [5, 34],
+                      opacity: 0.92,
+                      outline: true,
+                      thickness: 1.6,
+                      strokeColor: [255, 255, 255],
+                      strokeColorRange: {
+                        name: 'Enrollment stroke',
+                        type: 'sequential',
+                        category: 'Custom',
+                        colors: ['#E4EEF6', '#A8D0E4', '#57A6C8', '#197CA5', '#075985'],
+                      },
+                      colorRange: {
+                        name: 'MedShip tiers',
+                        type: 'qualitative',
+                        category: 'Custom',
+                        colors: ['#1E98D5', '#0FA62C', '#F59E0B', '#7C3AED', '#EF4444', '#64748B'],
+                      },
+                    },
+                  },
+                  visualChannels: {
+                    colorField: { name: 'tier', type: 'string' },
+                    colorScale: 'ordinal',
+                    strokeColorField: { name: 'est_annual_enrollment', type: 'integer' },
+                    strokeColorScale: 'quantile',
+                    sizeField: markerSizeField(markerSizeMetric),
+                    sizeScale:
+                      markerSizeMetric === 'est_annual_enrollment' ? 'sqrt' : 'linear',
+                  },
+                },
+                {
+                  id: 'tam_heatmap',
+                  type: 'heatmap',
+                  config: {
+                    dataId: 'tam_institutions',
+                    label: 'Enrollment Heatmap',
+                    columns: { lat: 'lat', lng: 'lng' },
+                    isVisible: visible.heatmap || (visible.point && showEnrollmentHeatmap),
+                    visConfig: {
+                      opacity: visible.point ? 0.42 : 0.76,
+                      colorRange: {
+                        name: 'Enrollment heat',
+                        type: 'sequential',
+                        category: 'Custom',
+                        colors: ['#E8F3F7', '#A7D8D8', '#56B4B0', '#168A8A', '#075E63'],
+                      },
+                      radius: 28,
+                    },
+                  },
+                  visualChannels: {
+                    weightField: { name: 'est_annual_enrollment', type: 'integer' },
+                    weightScale: 'linear',
+                  },
+                },
+                {
+                  id: 'tam_hexbin',
+                  type: 'hexagon',
+                  config: {
+                    dataId: 'tam_institutions',
+                    label: 'Enrollment Hexbin',
+                    columns: { lat: 'lat', lng: 'lng' },
+                    isVisible: visible.hexbin,
+                  },
+                  visualChannels: {
+                    colorField: { name: 'est_annual_enrollment', type: 'integer' },
+                    colorScale: 'quantile',
+                  },
+                },
+                {
                   id: 'tam_state_choropleth',
                   type: 'geojson',
                   config: {
@@ -171,64 +262,6 @@ function KeplerMapInner({
                   },
                   visualChannels: {
                     colorField: { name: stateMetric, type: 'real' },
-                    colorScale: 'quantile',
-                  },
-                },
-                {
-                  id: 'tam_points',
-                  type: 'point',
-                  config: {
-                    dataId: 'tam_institutions',
-                    label: 'Institutions',
-                    columns: { lat: 'lat', lng: 'lng' },
-                    isVisible: visible.point,
-                    visConfig: {
-                      radius: 12,
-                      radiusRange: [5, 34],
-                      opacity: 0.92,
-                      outline: true,
-                      thickness: 1.4,
-                      strokeColor: [255, 255, 255],
-                      colorRange: {
-                        name: 'MedShip tiers',
-                        type: 'qualitative',
-                        category: 'Custom',
-                        colors: ['#1E98D5', '#0FA62C', '#F59E0B', '#7C3AED', '#EF4444', '#64748B'],
-                      },
-                    },
-                  },
-                  visualChannels: {
-                    colorField: { name: 'tier', type: 'string' },
-                    colorScale: 'ordinal',
-                    sizeField: { name: 'accreditation_rate', type: 'real' },
-                    sizeScale: 'linear',
-                  },
-                },
-                {
-                  id: 'tam_heatmap',
-                  type: 'heatmap',
-                  config: {
-                    dataId: 'tam_institutions',
-                    label: 'Enrollment Heatmap',
-                    columns: { lat: 'lat', lng: 'lng' },
-                    isVisible: visible.heatmap,
-                  },
-                  visualChannels: {
-                    weightField: { name: 'est_annual_enrollment', type: 'integer' },
-                    weightScale: 'linear',
-                  },
-                },
-                {
-                  id: 'tam_hexbin',
-                  type: 'hexagon',
-                  config: {
-                    dataId: 'tam_institutions',
-                    label: 'Enrollment Hexbin',
-                    columns: { lat: 'lat', lng: 'lng' },
-                    isVisible: visible.hexbin,
-                  },
-                  visualChannels: {
-                    colorField: { name: 'est_annual_enrollment', type: 'integer' },
                     colorScale: 'quantile',
                   },
                 },
@@ -268,7 +301,15 @@ function KeplerMapInner({
         },
       })
     )
-  }, [dispatch, mapMode, rows, stateGeojson, stateMetric])
+  }, [
+    dispatch,
+    mapMode,
+    markerSizeMetric,
+    rows,
+    showEnrollmentHeatmap,
+    stateGeojson,
+    stateMetric,
+  ])
 
   function handlePointClick(info: DeckClickInfo) {
     const index = info.object?.index
@@ -281,7 +322,26 @@ function KeplerMapInner({
   }
 
   return (
-    <div className="h-[72vh] min-h-[520px] overflow-hidden rounded-lg border border-border">
+    <div className="tam-kepler-map h-[72vh] min-h-[520px] overflow-hidden rounded-lg border border-border">
+      <style jsx global>{`
+        .tam-kepler-map .map-popover__layer-name {
+          display: none;
+        }
+
+        .tam-kepler-map .layer-hover-info__row:first-child .row__name {
+          display: none;
+        }
+
+        .tam-kepler-map .layer-hover-info__row:first-child .row__value {
+          display: block;
+          max-width: 260px;
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.25;
+          color: var(--popover-foreground);
+          white-space: normal;
+        }
+      `}</style>
       <KeplerGl
         id="tam"
         mapboxApiAccessToken={mapboxToken}
