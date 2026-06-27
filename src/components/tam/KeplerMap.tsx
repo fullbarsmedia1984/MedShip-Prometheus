@@ -14,6 +14,7 @@ import type { TamGeoRow } from '@/lib/tam/supabase'
 
 type MapMode = 'point' | 'heatmap' | 'hexbin'
 type MarkerSizeMetric = 'accreditation_rate' | 'est_annual_enrollment'
+type HexHeightMode = 'short' | 'medium' | 'tall'
 type StateMetric = 'none' | 'total_tam' | 'n_programs'
 type StateFeatureCollection = {
   type: 'FeatureCollection'
@@ -55,8 +56,15 @@ type KeplerMapProps = {
   stateMetric: StateMetric
   mapMode: MapMode
   markerSizeMetric: MarkerSizeMetric
+  hexHeightMode: HexHeightMode
   showEnrollmentHeatmap: boolean
   mapboxToken: string
+}
+
+const HEX_HEIGHT_SCALE: Record<HexHeightMode, number> = {
+  short: 90,
+  medium: 180,
+  tall: 315,
 }
 
 const reducers = combineReducers({
@@ -152,6 +160,7 @@ function KeplerMapInner({
   stateMetric,
   mapMode,
   markerSizeMetric,
+  hexHeightMode,
   showEnrollmentHeatmap,
   mapboxToken,
 }: KeplerMapProps) {
@@ -318,7 +327,7 @@ function KeplerMapInner({
                       fixedHeight: false,
                       wireframe: false,
                       heightRange: [0, 900],
-                      elevationScale: 9,
+                      elevationScale: HEX_HEIGHT_SCALE[hexHeightMode],
                       enableElevationZoomFactor: true,
                       colorRange: {
                         name: 'Enrollment yellow-red',
@@ -417,6 +426,7 @@ function KeplerMapInner({
     )
   }, [
     dispatch,
+    hexHeightMode,
     institutionHexGeojson,
     mapMode,
     markerSizeMetric,

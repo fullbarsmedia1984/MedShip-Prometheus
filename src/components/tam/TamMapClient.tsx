@@ -157,6 +157,7 @@ export function TamMapClient() {
   const [markerSizeMetric, setMarkerSizeMetric] = useState<
     'accreditation_rate' | 'est_annual_enrollment'
   >('accreditation_rate')
+  const [hexHeightMode, setHexHeightMode] = useState<'short' | 'medium' | 'tall'>('short')
   const [showEnrollmentHeatmap, setShowEnrollmentHeatmap] = useState(false)
 
   const query = useMemo(
@@ -194,7 +195,7 @@ export function TamMapClient() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-10">
+        <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-11">
           <select
             value={scenario}
             onChange={(event) => setScenario(event.target.value as TamScenario)}
@@ -275,6 +276,16 @@ export function TamMapClient() {
             <option value="total_tam">State TAM $</option>
             <option value="n_programs">State programs</option>
           </select>
+          <select
+            value={hexHeightMode}
+            disabled={mapMode !== 'hexbin'}
+            onChange={(event) => setHexHeightMode(event.target.value as 'short' | 'medium' | 'tall')}
+            className="h-8 rounded-lg border border-input bg-background px-2 text-sm disabled:opacity-50"
+          >
+            <option value="short">Hex: short</option>
+            <option value="medium">Hex: medium</option>
+            <option value="tall">Hex: tall</option>
+          </select>
           <label className="flex h-8 items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
@@ -307,6 +318,7 @@ export function TamMapClient() {
           stateMetric={stateMetric}
           mapMode={mapMode}
           markerSizeMetric={markerSizeMetric}
+          hexHeightMode={hexHeightMode}
           showEnrollmentHeatmap={showEnrollmentHeatmap}
           mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''}
         />
