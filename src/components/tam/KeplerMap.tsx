@@ -23,7 +23,30 @@ type StateFeatureCollection = {
 type DeckClickInfo = {
   object?: {
     index?: number
+    id?: string
+    properties?: {
+      id?: string
+    }
   } | null
+}
+
+type InstitutionMapRow = {
+  id: string
+  name: string
+  city: string | null
+  state: string | null
+  lat: number | null
+  lng: number | null
+  tier: string
+  est_annual_enrollment: number
+  program_count: number
+  accredited_program_count: number
+  accreditation_rate: number
+  accreditation: string
+  primary_contact: string
+  primary_contact_role: string
+  primary_contact_email: string
+  primary_contact_phone: string
 }
 
 type KeplerMapProps = {
@@ -61,6 +84,54 @@ function markerSizeField(metric: MarkerSizeMetric) {
     : { name: 'accreditation_rate', type: 'real' as const }
 }
 
+function enrollmentHexRadiusKm(enrollment: number, maxEnrollment: number) {
+  if (maxEnrollment <= 0) return 5
+
+  return 5 + Math.sqrt(Math.max(enrollment, 0) / maxEnrollment) * 6
+}
+
+function createHexCoordinates(lng: number, lat: number, radiusKm: number) {
+  const latKm = 110.574
+  const lngKm = Math.max(111.32 * Math.cos((lat * Math.PI) / 180), 20)
+  const points = Array.from({ length: 6 }, (_, index) => {
+    const angle = ((60 * index + 30) * Math.PI) / 180
+    return [
+      lng + (radiusKm * Math.cos(angle)) / lngKm,
+      lat + (radiusKm * Math.sin(angle)) / latKm,
+    ]
+  })
+
+  return [...points, points[0]]
+}
+
+function toInstitutionHexGeojson(rows: InstitutionMapRow[]): StateFeatureCollection {
+  const maxEnrollment = Math.max(0, ...rows.map((row) => row.est_annual_enrollment))
+
+  return {
+    type: 'FeatureCollection',
+    features: rows
+      .filter((row) => typeof row.lat === 'number' && typeof row.lng === 'number')
+      .map((row) => ({
+        type: 'Feature',
+        properties: {
+          ...row,
+          elevation: row.est_annual_enrollment,
+          lineWidth: 1,
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            createHexCoordinates(
+              row.lng as number,
+              row.lat as number,
+              enrollmentHexRadiusKm(row.est_annual_enrollment, maxEnrollment)
+            ),
+          ],
+        },
+      })),
+  }
+}
+
 function toKeplerDataset(
   info: ProtoDataset['info'],
   data: ReturnType<typeof processRowObject>
@@ -86,7 +157,7 @@ function KeplerMapInner({
 }: KeplerMapProps) {
   const dispatch = useDispatch()
   const router = useRouter()
-  const rows = useMemo(
+  const rows = useMemo<InstitutionMapRow[]>(
     () =>
       institutions.map((institution) => {
         const primaryProgram = institution.programs[0]
@@ -126,6 +197,7 @@ function KeplerMapInner({
       }),
     [institutions]
   )
+  const institutionHexGeojson = useMemo(() => toInstitutionHexGeojson(rows), [rows])
 
   useEffect(() => {
     const visible = modeLayerVisibility(mapMode)
@@ -133,6 +205,10 @@ function KeplerMapInner({
       toKeplerDataset(
         { label: 'Nursing TAM Institutions', id: 'tam_institutions' },
         processRowObject(rows)
+      ),
+      toKeplerDataset(
+        { label: 'Nursing TAM Institution Hexes', id: 'tam_institution_hexes' },
+        processGeojson(institutionHexGeojson)
       ),
     ]
 
@@ -224,38 +300,37 @@ function KeplerMapInner({
                   },
                 },
                 {
-                  id: 'tam_hexbin',
-                  type: 'hexagon',
+                  id: 'tam_school_hexes',
+                  type: 'geojson',
                   config: {
-                    dataId: 'tam_institutions',
-                    label: 'Enrollment Hexbin 3D',
-                    columns: { lat: 'lat', lng: 'lng' },
+                    dataId: 'tam_institution_hexes',
+                    label: 'Institution Hexes',
+                    columns: { geojson: '_geojson' },
                     isVisible: visible.hexbin,
                     visConfig: {
-                      opacity: 0.86,
-                      worldUnitSize: 42,
-                      coverage: 0.82,
-                      sizeRange: [0, 620],
-                      percentile: [0, 100],
-                      elevationPercentile: [0, 100],
-                      elevationScale: 7,
-                      enableElevationZoomFactor: true,
+                      opacity: 0.9,
+                      strokeOpacity: 0.86,
+                      thickness: 0.7,
+                      strokeColor: [255, 255, 255],
+                      stroked: true,
+                      filled: true,
                       enable3d: true,
-                      colorAggregation: 'sum',
-                      sizeAggregation: 'sum',
+                      wireframe: false,
+                      heightRange: [0, 460],
+                      elevationScale: 4,
                       colorRange: {
-                        name: 'Enrollment volume',
+                        name: 'Enrollment yellow-red',
                         type: 'sequential',
                         category: 'Custom',
-                        colors: ['#E0F2FE', '#7DD3FC', '#22D3EE', '#14B8A6', '#0F766E', '#134E4A'],
+                        colors: ['#FEF3C7', '#FDE68A', '#FBBF24', '#F97316', '#DC2626', '#7F1D1D'],
                       },
                     },
                   },
                   visualChannels: {
                     colorField: { name: 'est_annual_enrollment', type: 'integer' },
                     colorScale: 'quantile',
-                    sizeField: { name: 'est_annual_enrollment', type: 'integer' },
-                    sizeScale: 'sqrt',
+                    heightField: { name: 'est_annual_enrollment', type: 'integer' },
+                    heightScale: 'sqrt',
                   },
                 },
                 {
@@ -286,40 +361,24 @@ function KeplerMapInner({
                     colorScale: 'quantile',
                   },
                 },
-                {
-                  id: 'tam_hex_tier_halos',
-                  type: 'point',
-                  config: {
-                    dataId: 'tam_institutions',
-                    label: 'Tier Halos',
-                    columns: { lat: 'lat', lng: 'lng' },
-                    isVisible: visible.hexbin,
-                    visConfig: {
-                      radius: 9,
-                      fixedRadius: true,
-                      opacity: 0.96,
-                      outline: true,
-                      filled: false,
-                      thickness: 2.2,
-                      strokeColor: [255, 255, 255],
-                      strokeColorRange: {
-                        name: 'MedShip tiers',
-                        type: 'qualitative',
-                        category: 'Custom',
-                        colors: ['#38BDF8', '#22C55E', '#F59E0B', '#A78BFA', '#F43F5E', '#94A3B8'],
-                      },
-                    },
-                  },
-                  visualChannels: {
-                    strokeColorField: { name: 'tier', type: 'string' },
-                    strokeColorScale: 'ordinal',
-                  },
-                },
               ],
               interactionConfig: {
                 tooltip: {
                   fieldsToShow: {
                     tam_institutions: [
+                      { name: 'name', format: null },
+                      { name: 'city', format: null },
+                      { name: 'state', format: null },
+                      { name: 'tier', format: null },
+                      { name: 'program_count', format: null },
+                      { name: 'accreditation', format: null },
+                      { name: 'est_annual_enrollment', format: null },
+                      { name: 'primary_contact', format: null },
+                      { name: 'primary_contact_role', format: null },
+                      { name: 'primary_contact_email', format: null },
+                      { name: 'primary_contact_phone', format: null },
+                    ],
+                    tam_institution_hexes: [
                       { name: 'name', format: null },
                       { name: 'city', format: null },
                       { name: 'state', format: null },
@@ -355,6 +414,7 @@ function KeplerMapInner({
     )
   }, [
     dispatch,
+    institutionHexGeojson,
     mapMode,
     markerSizeMetric,
     rows,
@@ -364,6 +424,12 @@ function KeplerMapInner({
   ])
 
   function handlePointClick(info: DeckClickInfo) {
+    const featureId = info.object?.properties?.id ?? info.object?.id
+    if (featureId) {
+      router.push(`/dashboard/tam/browser?institutionId=${encodeURIComponent(featureId)}`)
+      return
+    }
+
     const index = info.object?.index
     if (typeof index !== 'number') return
 
