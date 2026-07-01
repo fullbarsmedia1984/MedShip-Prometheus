@@ -7,6 +7,7 @@ import {
 } from './sales-orders'
 import { upsertSalesOrdersToCache } from './sales-order-cache'
 import { resolveSalesOrderOpportunityLinks } from './sales-order-links'
+import { selectIncrementalSalesOrderPages } from './sales-order-page-bands'
 
 type SyncRunMode = 'backfill' | 'pages' | 'details' | 'incremental'
 type SyncRunStatus = 'running' | 'success' | 'partial' | 'failed' | 'paused'
@@ -27,6 +28,10 @@ type DetailQueueRow = {
   attempts: number | null
 }
 
+type PageBatchOptions = {
+  pageNumbers?: number[]
+}
+
 export type SalesOrderCoverage = {
   sourceTotalPages: number
   sourcePageSize: number
@@ -43,6 +48,9 @@ export type SalesOrderCoverage = {
   detailRunning: number
   detailHydrated: number
   detailFailed: number
+  latestCachedSalesOrderDate: string | null
+  latestCachedDateCreated: string | null
+  latestSourceLastSeenAt: string | null
   lastRunAt: string | null
   lastRunStatus: string | null
   lastRunMode: SyncRunMode | null
@@ -242,10 +250,7 @@ export async function prepareSalesOrderIncrementalCheckpoints(
 
     await insertCheckpointChunks(supabase, checkpoints)
 
-    const recentPageNumbers = Array.from(
-      { length: Math.min(incrementalPages, totalPages) },
-      (_, index) => index + 1
-    )
+    const recentPageNumbers = selectIncrementalSalesOrderPages(totalPages, incrementalPages)
 
     const { error } = await supabase
       .from('fishbowl_so_page_checkpoints')
@@ -265,6 +270,7 @@ export async function prepareSalesOrderIncrementalCheckpoints(
       sourcePageSize: page.pageSize,
       sourceTotalHeadersEstimate,
       pagesRequeued: recentPageNumbers.length,
+      requeuedPageNumbers: recentPageNumbers,
       pageCheckpoints: checkpoints.length,
     }
     await finishRun(supabase, run.id, 'success', summary)
@@ -278,7 +284,8 @@ export async function prepareSalesOrderIncrementalCheckpoints(
 
 export async function processSalesOrderPageBatch(
   supabase: SupabaseClient,
-  client: FishbowlClient
+  client: FishbowlClient,
+  options: PageBatchOptions = {}
 ) {
   const pageSize = DEFAULT_PAGE_SIZE
   const pageBatch = DEFAULT_PAGE_BATCH
@@ -290,7 +297,7 @@ export async function processSalesOrderPageBatch(
   let detailsQueued = 0
 
   try {
-    const { data, error } = await supabase
+    let checkpointQuery = supabase
       .from('fishbowl_so_page_checkpoints')
       .select('page_number, page_size, attempts')
       .eq('page_size', pageSize)
@@ -298,6 +305,12 @@ export async function processSalesOrderPageBatch(
       .lt('attempts', maxAttempts)
       .order('page_number', { ascending: true })
       .limit(pageBatch)
+
+    if (options.pageNumbers?.length) {
+      checkpointQuery = checkpointQuery.in('page_number', options.pageNumbers)
+    }
+
+    const { data, error } = await checkpointQuery
 
     if (error) throw new Error(`Could not read Fishbowl SO checkpoints: ${error.message}`)
     const checkpoints = (data ?? []) as PageCheckpoint[]
@@ -502,6 +515,9 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     failedDetailsRes,
     latestRunRes,
     activeRunRes,
+    latestBusinessDateRes,
+    latestCreatedDateRes,
+    latestSourceSeenRes,
   ] = await Promise.all([
     supabase.from('fb_sales_orders').select('*', { count: 'estimated', head: true }),
     supabase.from('fb_sales_order_items').select('*', { count: 'estimated', head: true }),
@@ -528,6 +544,27 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
       .order('started_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('sales_order_metric_at')
+      .not('sales_order_metric_at', 'is', null)
+      .order('sales_order_metric_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('date_created')
+      .not('date_created', 'is', null)
+      .order('date_created', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('source_last_seen_at')
+      .not('source_last_seen_at', 'is', null)
+      .order('source_last_seen_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const latestRun = latestRunRes.data as {
@@ -542,6 +579,15 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
   const activeRun = activeRunRes.data as {
     mode?: SyncRunMode | null
     started_at?: string | null
+  } | null
+  const latestBusinessDate = latestBusinessDateRes.data as {
+    sales_order_metric_at?: string | null
+  } | null
+  const latestCreatedDate = latestCreatedDateRes.data as {
+    date_created?: string | null
+  } | null
+  const latestSourceSeen = latestSourceSeenRes.data as {
+    source_last_seen_at?: string | null
   } | null
   const sourceTotalPages = latestRun?.source_total_pages ?? checkpointsRes.count ?? 0
   const sourcePageSize = latestRun?.source_page_size ?? DEFAULT_PAGE_SIZE
@@ -574,6 +620,9 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     detailRunning,
     detailHydrated: hydratedRes.count ?? 0,
     detailFailed: failedDetailsRes.count ?? 0,
+    latestCachedSalesOrderDate: latestBusinessDate?.sales_order_metric_at ?? null,
+    latestCachedDateCreated: latestCreatedDate?.date_created ?? null,
+    latestSourceLastSeenAt: latestSourceSeen?.source_last_seen_at ?? null,
     lastRunAt: activeRun?.started_at ?? latestRun?.completed_at ?? latestRun?.started_at ?? null,
     lastRunStatus: activeRun ? 'running' : latestRun?.status ?? null,
     lastRunMode: activeRun?.mode ?? latestRun?.mode ?? null,

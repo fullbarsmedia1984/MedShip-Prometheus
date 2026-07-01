@@ -250,6 +250,12 @@ Thresholds:
 - Warning: line total mismatch above $1 unless tax/shipping explains it.
 - Warning: stale P7 sync over 30 minutes.
 
+P7 incremental paging note:
+
+- Incremental sync must scan both ends of Fishbowl Sales Order pagination because the newest SOs are not guaranteed to be on page 1.
+- With `FISHBOWL_SO_INCREMENTAL_PAGES=5`, P7 requeues pages `1..5` and the last five source pages.
+- Keep `FISHBOWL_SO_PAGE_BATCH` at least `FISHBOWL_SO_INCREMENTAL_PAGES * 2` so the selected head and tail pages drain in the same incremental run.
+
 ## Pricing Completeness
 
 Primary API:
