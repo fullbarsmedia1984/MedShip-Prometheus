@@ -2082,7 +2082,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       unlinkedSalesOrders: Math.max(0, totalBusinessSalesOrders - linkedSalesOrders),
       linkCoverage: totalBusinessSalesOrders > 0 ? Math.round((linkedSalesOrders / totalBusinessSalesOrders) * 1000) / 10 : 0,
       linkRows: linkRowsRes.count ?? 0,
-      newBusinessDefinition: 'New Business means an issued Fishbowl Sales Order where the same customer had no prior issued Sales Order in the previous 12 months. Recurring Business is the inverse.',
+      newBusinessDefinition: 'New Business means the first issued Fishbowl Sales Order after 365+ days without an issued order, plus every issued order from that same customer inside the following 365-day new-business cohort window. Orders after that cohort window are Recurring unless a new 365+ day inactivity gap starts a fresh cohort.',
       activeMetricPeriodLabel: activeMonth.label,
       activeMetricPeriodStart: activeMonth.start,
       activeMetricPeriodEnd: activeMonth.end,
