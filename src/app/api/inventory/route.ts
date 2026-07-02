@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { requireApiAuth } from '@/lib/auth';
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth';
 import type { InventoryLookupResponse } from '@/types';
 
 const DEFAULT_LIMIT = 50;
@@ -17,7 +17,7 @@ const MAX_LIMIT = 200;
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiAuth();
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS);
     if (!auth.authorized) return auth.response;
 
     const searchParams = request.nextUrl.searchParams;

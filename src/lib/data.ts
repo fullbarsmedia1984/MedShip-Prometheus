@@ -45,6 +45,9 @@ export interface PaginatedResult<T> {
 export interface OrderFilters {
   status?: string
   salesRepId?: string
+  // Restrict to these Fishbowl salesperson aliases (rep row-scoping). Applied
+  // on top of any UI filters; an empty array matches nothing.
+  salespersonIn?: string[]
   search?: string
   dateFrom?: string
   dateTo?: string
@@ -974,6 +977,10 @@ function applyOrderFilters(items: Order[], filters: OrderFilters): Order[] {
   }
   if (filters.salesRepId && filters.salesRepId !== 'all') {
     filtered = filtered.filter((o) => o.salesRepId === filters.salesRepId)
+  }
+  if (filters.salespersonIn) {
+    const allowed = new Set(filters.salespersonIn)
+    filtered = filtered.filter((o) => allowed.has(o.salesRepId))
   }
   if (filters.search) {
     const q = filters.search.toLowerCase()
@@ -2068,6 +2075,9 @@ export async function getSalesActivity(limit = 10): Promise<SeedSalesActivity[]>
 
 export interface QuoteFilters {
   status?: string
+  // Restrict to these Fishbowl salesperson aliases (rep row-scoping). Applied
+  // on top of any UI filters; an empty array matches nothing.
+  salespersonIn?: string[]
   search?: string
   scope?: 'active' | 'business' | 'all'
   page?: number
@@ -2156,6 +2166,10 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
 
   if (filters.status && filters.status !== 'all') {
     filtered = filtered.filter((quote) => quote.status === filters.status)
+  }
+  if (filters.salespersonIn) {
+    const allowed = new Set(filters.salespersonIn)
+    filtered = filtered.filter((quote) => allowed.has(quote.repName))
   }
   if (filters.search) {
     const q = filters.search.toLowerCase()

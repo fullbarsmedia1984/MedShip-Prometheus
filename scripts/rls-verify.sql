@@ -52,6 +52,22 @@ select 'admin' as simulated_role,
   can_view_contract_pricing()                           as class_c_pricing_fn;
 reset role;
 
+-- sales_rep row-scoping (Phase 4) ---------------------------------------------
+-- A rep linked via profiles.fishbowl_user_id / sf_user_id sees only orders
+-- whose salesperson alias resolves to them; an unlinked rep sees zero rows.
+-- Replace the sub with a real profile id to test the positive path:
+--   expected = select count(*) from fb_sales_orders
+--              where salesperson = any(<that user's aliases>)
+select set_config('request.jwt.claims',
+  '{"sub":"<profile-uuid>","role":"authenticated","app_metadata":{"role":"sales_rep"}}',
+  false);
+set role authenticated;
+select 'sales_rep_scoped' as simulated_role,
+  current_rep_aliases()                                 as aliases,
+  (select count(*) from fb_sales_orders)                as visible_orders,
+  (select count(*) from canonical_orders)               as visible_canonical;
+reset role;
+
 -- Structural checks (run as postgres) -----------------------------------------
 -- 1) Every policy in public must be SELECT-only (writes are service-role only):
 select cmd, count(*) as policies

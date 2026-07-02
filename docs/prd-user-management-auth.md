@@ -199,7 +199,13 @@ Principles: JWT `role` claim drives policies; service-role server code is unaffe
 - ✅ Email 2FA (app-level, PRD §6.1 approach b): `src/lib/twofactor.ts` (hashed 6-digit codes, 10-min expiry, ≤5 attempts, HMAC-signed 12h verified cookie), `POST/PUT /api/auth/2fa`, two-step login page, enforced in `getAuthContext`/guards via `pendingTwoFactor`. **Gated behind `TWO_FACTOR_ENABLED` (default off)** so the branch deploys safely before Resend env is live; flip on after configuring `EMAIL_FROM`/`RESEND_API_KEY`.
 - ⚠️ Note: 2FA re-uses the existing Supabase session (created at password success) + a verified cookie, rather than withholding the session until the code clears. This is the standard app-level pattern and is enforced server-side on every request; if a stricter "no session until 2FA" model is wanted, that's a Supabase-native MFA (TOTP) follow-up.
 
-**Phase 4 — Rep experience:** rep-scoped dashboard/nav, scorecards for all reps, own-orders detail, contract-price flag wiring.
+**Phase 4 — Rep experience** — *executed 2026-07-02*
+- ✅ Migration `029_rep_identity_and_row_scoping` (applied live): `fishbowl_salesperson_aliases.fishbowl_user_id` (canonical identity, decision 2; `sf_user_id` remains the transitional fallback), `current_rep_aliases()` helper, and rep row-scoping RLS on `fb_sales_orders`/`fb_sales_order_items` (inherited by the canonical views). Verified live: unlinked rep sees 0 rows; a linked profile simulated as a rep saw exactly its own 2,638 of 65k orders; `sales_manager` sees all orders but still no class P.
+- ✅ API scoping: `/api/dashboard/orders` + `/quotes` (list and detail) force `salespersonIn = getRepAliases(user)` for `sales_rep` — detail routes return 404 (not 403) for other reps' records, per the §7.2 no-drill-through decision. `src/lib/reps.ts` resolves profile → aliases.
+- ✅ Staff-gated the ops/CEO surfaces reps shouldn't reach: overview, inventory (page + both APIs), territory, pricing readiness — pages via layouts, APIs via `STAFF_API_AUTH_OPTIONS`. Sales roles landing on `/dashboard` are redirected to `/dashboard/sales` (overview page now a server gate wrapping the client component).
+- ✅ Nav: reps see Sales, Quotes, Orders only; scorecards for all reps remain visible on the sales dashboard (decision 3).
+- ✅ Contract-price flag: already enforced at RLS (Phase 2); no rep-facing UI surfaces contract pricing yet, so no additional wiring needed.
+- Note: Dan's profile now carries his SF user id (`sf_user_id` linkage backfilled during verification). Rep profiles get linked at invite time via the users admin page.
 
 **Phase 5 — Compensation (deferred):** integrate Fable's comp model; activate `sales_manager`; comp RLS (own-only / manager-all).
 
