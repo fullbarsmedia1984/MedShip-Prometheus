@@ -14,6 +14,7 @@ type FishbowlSessionOptions = {
   sourceSystem: string
   targetSystem: string
   lockTtlMs?: number
+  priority?: 'normal' | 'p7-critical'
 }
 
 type LockValue = {
@@ -31,6 +32,14 @@ type LockRow = {
 
 const LOCK_KEY = 'fishbowl_session_lock'
 const DEFAULT_LOCK_TTL_MS = 15 * 60_000
+const DEFAULT_P7_FRESHNESS_MAX_DAYS = Number(process.env.FISHBOWL_SO_FRESHNESS_MAX_DAYS ?? 30)
+
+export class FishbowlPriorityYieldError extends Error {
+  constructor(message = 'Fishbowl session yielded to P7 sales order sync priority') {
+    super(message)
+    this.name = 'FishbowlPriorityYieldError'
+  }
+}
 
 export class FishbowlSessionLockError extends Error {
   constructor(
@@ -70,10 +79,74 @@ async function readLock(supabase: SupabaseClient) {
   return (data as LockRow | null)?.value ?? null
 }
 
+function parseDate(value: unknown): Date | null {
+  if (!value) return null
+  const date = new Date(String(value))
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function isTruthyEnv(value: string | undefined) {
+  return value !== '0' && value !== 'false' && value !== 'FALSE'
+}
+
+async function isP7SalesOrderCacheStale(supabase: SupabaseClient) {
+  const maxAgeDays = Math.max(1, DEFAULT_P7_FRESHNESS_MAX_DAYS)
+  const { data, error } = await supabase
+    .from('fb_sales_orders')
+    .select('sales_order_metric_at')
+    .eq('canonical_state', 'order')
+    .not('sales_order_metric_at', 'is', null)
+    .order('sales_order_metric_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    // Fail open here. A transient Supabase read error should not block all
+    // Fishbowl work forever; P7 still has its own freshness guard.
+    console.warn('Could not read P7 freshness before Fishbowl session:', error)
+    return false
+  }
+
+  const latestDate = parseDate((data as { sales_order_metric_at?: string | null } | null)?.sales_order_metric_at)
+  if (!latestDate) return true
+
+  return Date.now() - latestDate.getTime() > maxAgeDays * 86_400_000
+}
+
+async function hasActiveP7Run(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('fishbowl_so_sync_runs')
+    .select('id')
+    .eq('status', 'running')
+    .in('mode', ['backfill', 'pages', 'details', 'incremental'])
+    .limit(1)
+
+  if (error) {
+    console.warn('Could not read P7 active run before Fishbowl session:', error)
+    return false
+  }
+
+  return (data ?? []).length > 0
+}
+
+async function shouldYieldToP7(supabase: SupabaseClient, options: FishbowlSessionOptions) {
+  if (options.automation === 'P7_FB_SO_SYNC') return false
+  if (!isTruthyEnv(process.env.P7_FISHBOWL_PRIORITY_ENABLED)) return false
+
+  const lock = await readLock(supabase)
+  if (lock?.automation === 'P7_FB_SO_SYNC') return true
+
+  return (await hasActiveP7Run(supabase)) || (await isP7SalesOrderCacheStale(supabase))
+}
+
 async function acquireFishbowlLock(
   supabase: SupabaseClient,
   options: FishbowlSessionOptions
 ) {
+  if (await shouldYieldToP7(supabase, options)) {
+    throw new FishbowlPriorityYieldError()
+  }
+
   const lockValue = createLockValue(options)
   const now = new Date().toISOString()
 
