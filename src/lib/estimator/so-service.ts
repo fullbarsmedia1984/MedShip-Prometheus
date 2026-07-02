@@ -6,12 +6,15 @@
 // =============================================================================
 
 import { createFishbowlClient } from '@/lib/fishbowl/client'
+import type { FishbowlClient } from '@/lib/fishbowl/client'
 import {
-  getSalesOrderByNumber,
+  findSalesOrderByNumberTailScan,
   getSalesOrderById,
+  salesOrderMatchesNumber,
   type FBRawSalesOrder,
   type FBRawSalesOrderItem,
 } from '@/lib/fishbowl/sales-orders'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { AdvisoryDims, SoLineItem } from './types'
 
 export class SalesOrderNotFoundError extends Error {
@@ -166,16 +169,56 @@ export interface FetchedSalesOrder {
 }
 
 /**
+ * Fishbowl's `?number=` search filter is ignored by the server (it returns
+ * the full unfiltered SO list), so SO numbers are resolved in two layers:
+ *   1. The P7 sync cache (fb_sales_orders) maps so_number -> fishbowl_id,
+ *      covering the entire order history; the order itself is then fetched
+ *      fresh from Fishbowl by ID, so cached rows can never go stale.
+ *   2. Orders created minutes ago that no sync has seen yet are found by
+ *      scanning the live list backwards from its last page (Fishbowl returns
+ *      orders oldest-first, so new orders sit at the tail).
+ * A result is only ever accepted on an exact SO-number match.
+ */
+async function resolveSalesOrder(
+  client: FishbowlClient,
+  soNumber: string
+): Promise<FBRawSalesOrder | null> {
+  let cachedId: string | null = null
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('fb_sales_orders')
+      .select('fishbowl_id')
+      .ilike('so_number', soNumber)
+      .not('fishbowl_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    cachedId = (data?.fishbowl_id as string | null) ?? null
+  } catch {
+    // Cache unavailable — fall through to the live tail scan.
+  }
+
+  if (cachedId) {
+    const byId = await getSalesOrderById(client, cachedId)
+    // Guard against cache drift: only trust the row if the number matches.
+    if (byId && salesOrderMatchesNumber(byId, soNumber)) return byId
+  }
+
+  return findSalesOrderByNumberTailScan(client, soNumber)
+}
+
+/**
  * Fetch an SO by number and return its physical line items. Hydrates the
  * detail record when the search result has no line items.
  */
 export async function fetchSalesOrderForEstimate(
   soNumber: string
 ): Promise<FetchedSalesOrder> {
+  const requested = soNumber.trim()
   const client = createFishbowlClient()
   try {
-    let raw = await getSalesOrderByNumber(client, soNumber)
-    if (!raw) throw new SalesOrderNotFoundError(soNumber)
+    let raw = await resolveSalesOrder(client, requested)
+    if (!raw) throw new SalesOrderNotFoundError(requested)
 
     let parsed = parseLineItems(raw)
     if (parsed.lineItems.length === 0 && raw.id !== undefined && raw.id !== null) {
@@ -188,7 +231,7 @@ export async function fetchSalesOrderForEstimate(
 
     const customerRecord = objectValue(valueAt(raw, ['customer']))
     return {
-      soNumber: toText(valueAt(raw, ['number', 'soNumber', 'salesOrderNumber'])) ?? soNumber,
+      soNumber: toText(valueAt(raw, ['number', 'soNumber', 'salesOrderNumber'])) ?? requested,
       status: toText(valueAt(raw, ['status', 'statusName'])),
       customerName:
         toText(valueAt(raw, ['customerName'])) ?? toText(valueAt(customerRecord, ['name'])),
