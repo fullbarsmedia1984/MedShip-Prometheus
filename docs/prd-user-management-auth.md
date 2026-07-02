@@ -185,7 +185,11 @@ Principles: JWT `role` claim drives policies; service-role server code is unaffe
 - ✅ Route gating per §7 matrix: connections PUT + data-source POST → superadmin; settings GETs → admin+; sync trigger/full-sync → admin+; ops APIs (events, failed, mappings, integrations, sync status, SF sync state) → staff+; roster PATCH → staff+.
 - ✅ Page gating via server layouts: `/dashboard/settings` → admin+; `/dashboard/{mappings,events,failed,integrations}` → staff+. Sidebar nav filters by role (Operations staff+, Field Mappings staff+, Settings admin+).
 
-**Phase 2 — RLS overhaul:** tiered policies per §8 + RLS test suite.
+**Phase 2 — RLS overhaul** — *executed 2026-07-02*
+- ✅ Migration `026_rls_role_tiers` (applied live): dropped all 50+ flat `USING (true)` policies and the open write policies (`field_mappings`, `reorder_rules`, `app_settings`); created role-tier helpers (`jwt_app_role()`, `is_admin_up()`, `is_staff_up()`, `can_view_contract_pricing()`) and tiered SELECT policies — class P (cost/supplier/ingestion, 18 tables) → admin+; class C (contract sell pricing) → staff+ or flag-gated reps; class O (ops/cache, 29 tables) → staff+. Zero client write policies remain anywhere.
+- ✅ Behavioral verification via JWT-claim simulation: staff sees ops but 0 cost rows; sales_rep sees 0 everywhere (Phase 4 adds ownership scoping); admin sees all; anon and `connection_configs` throw permission-denied. Reusable script: `scripts/rls-verify.sql`.
+- ✅ Migration-review guardrail added to CLAUDE.md (no flat policies on new tables).
+- ⏸ Migration `027_drop_legacy_role_arrays` committed but **not applied** — run it after this branch deploys (the currently-live build still authorizes the superadmin via the legacy `roles` array).
 
 **Phase 3 — Lifecycle & email:** Resend SMTP + `src/lib/email/`, invites, email 2FA, users admin page, audit_log.
 
