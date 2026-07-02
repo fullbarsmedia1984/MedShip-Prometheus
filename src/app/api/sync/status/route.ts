@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 
 /**
  * Sync status endpoint
@@ -12,7 +12,7 @@ import { requireApiAuth } from '@/lib/auth'
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const supabase = await createClient()

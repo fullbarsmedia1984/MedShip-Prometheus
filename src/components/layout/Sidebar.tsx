@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import type { AppRole } from '@/lib/auth'
 import { useSidebar } from './SidebarContext'
 import {
   LayoutDashboard,
@@ -22,6 +23,9 @@ import {
   X,
 } from 'lucide-react'
 
+const ADMIN_ROLES: AppRole[] = ['superadmin', 'admin']
+const STAFF_ROLES: AppRole[] = ['superadmin', 'admin', 'staff']
+
 const mainNav = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
@@ -39,8 +43,8 @@ const opsNav = [
 ]
 
 const configNav = [
-  { name: 'Field Mappings', href: '/dashboard/mappings', icon: Map },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  { name: 'Field Mappings', href: '/dashboard/mappings', icon: Map, roles: STAFF_ROLES },
+  { name: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ADMIN_ROLES },
 ]
 
 function NavSection({
@@ -105,9 +109,12 @@ function NavSection({
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: AppRole | null }) {
   const pathname = usePathname()
   const { isCollapsed, toggleSidebar, isMobileOpen, closeMobile } = useSidebar()
+
+  const opsItems = role && STAFF_ROLES.includes(role) ? opsNav : []
+  const configItems = configNav.filter((item) => role && item.roles.includes(role))
 
   const sidebarContent = (
     <div
@@ -142,18 +149,22 @@ export function Sidebar() {
           isCollapsed={isCollapsed}
           isFirst
         />
-        <NavSection
-          label="Operations"
-          items={opsNav}
-          pathname={pathname}
-          isCollapsed={isCollapsed}
-        />
-        <NavSection
-          label="Configuration"
-          items={configNav}
-          pathname={pathname}
-          isCollapsed={isCollapsed}
-        />
+        {opsItems.length > 0 && (
+          <NavSection
+            label="Operations"
+            items={opsItems}
+            pathname={pathname}
+            isCollapsed={isCollapsed}
+          />
+        )}
+        {configItems.length > 0 && (
+          <NavSection
+            label="Configuration"
+            items={configItems}
+            pathname={pathname}
+            isCollapsed={isCollapsed}
+          />
+        )}
       </nav>
 
       {/* Collapse toggle */}
@@ -224,20 +235,24 @@ export function Sidebar() {
                   onNavigate={closeMobile}
                   isFirst
                 />
-                <NavSection
-                  label="Operations"
-                  items={opsNav}
-                  pathname={pathname}
-                  isCollapsed={false}
-                  onNavigate={closeMobile}
-                />
-                <NavSection
-                  label="Configuration"
-                  items={configNav}
-                  pathname={pathname}
-                  isCollapsed={false}
-                  onNavigate={closeMobile}
-                />
+                {opsItems.length > 0 && (
+                  <NavSection
+                    label="Operations"
+                    items={opsItems}
+                    pathname={pathname}
+                    isCollapsed={false}
+                    onNavigate={closeMobile}
+                  />
+                )}
+                {configItems.length > 0 && (
+                  <NavSection
+                    label="Configuration"
+                    items={configItems}
+                    pathname={pathname}
+                    isCollapsed={false}
+                    onNavigate={closeMobile}
+                  />
+                )}
               </nav>
 
               {/* Mobile footer */}

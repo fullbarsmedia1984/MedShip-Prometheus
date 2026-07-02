@@ -178,7 +178,12 @@ Principles: JWT `role` claim drives policies; service-role server code is unaffe
 - ✅ Gated `PATCH /api/dashboard/sales/roster` to admin (staff+ once the four-tier model lands in Phase 1).
 - ✅ Salesforce webhook secured: `SALESFORCE_WEBHOOK_SECRET` set in Railway (Steven, verified live) and the route fails closed (503) when unconfigured.
 
-**Phase 1 — Identity foundation:** `profiles`, token hook, four-tier `requireApiAuth`, role-gated routes/nav, superadmin invariants, seed Steven/Dan. Retire the legacy role vocabulary: `AppRole = 'admin' | 'operator' | 'user'` and `ADMIN_API_AUTH_OPTIONS` in `src/lib/auth.ts` are replaced by the new enum; `operator` and `user` were never used and map to nothing.
+**Phase 1 — Identity foundation** — *executed 2026-07-02*
+- ✅ Migration `025_user_profiles_and_roles` (applied live): `app_role` enum, `profiles` table (RLS: own-row read + admin read-all, writes service-role only), `handle_new_user` trigger, DB-level superadmin invariants (sole superadmin cannot be demoted/deactivated/deleted, even via service role), backfill (Steven → superadmin, Dan → admin, mirrored to `app_metadata` with a legacy `roles` array kept until this branch deploys — drop in Phase 2).
+- ✅ **Implementation note (deviation from §5):** no custom access token hook needed — Supabase already embeds `app_metadata` in the JWT, so RLS policies read `auth.jwt() -> 'app_metadata' ->> 'role'`. `profiles` remains the management source of truth; role changes must write both (enforced by the Phase 3 user-management API).
+- ✅ `src/lib/auth.ts` rewritten: five-role `AppRole`, `SUPERADMIN/ADMIN/STAFF_API_AUTH_OPTIONS` tiers, `getAuthContext` reads `profiles` (falls back to `app_metadata`), inactive users rejected, dev bypass → superadmin. Legacy `operator`/`user` roles retired.
+- ✅ Route gating per §7 matrix: connections PUT + data-source POST → superadmin; settings GETs → admin+; sync trigger/full-sync → admin+; ops APIs (events, failed, mappings, integrations, sync status, SF sync state) → staff+; roster PATCH → staff+.
+- ✅ Page gating via server layouts: `/dashboard/settings` → admin+; `/dashboard/{mappings,events,failed,integrations}` → staff+. Sidebar nav filters by role (Operations staff+, Field Mappings staff+, Settings admin+).
 
 **Phase 2 — RLS overhaul:** tiered policies per §8 + RLS test suite.
 

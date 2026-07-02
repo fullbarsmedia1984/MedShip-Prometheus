@@ -3,19 +3,35 @@ import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
-export type AppRole = 'admin' | 'operator' | 'user'
+export type AppRole = 'superadmin' | 'admin' | 'staff' | 'sales_rep' | 'sales_manager'
+
+const APP_ROLES: readonly AppRole[] = [
+  'superadmin',
+  'admin',
+  'staff',
+  'sales_rep',
+  'sales_manager',
+]
 
 export type ApiAuthOptions = {
   roles?: AppRole[]
 }
 
+export const SUPERADMIN_API_AUTH_OPTIONS = {
+  roles: ['superadmin'],
+} satisfies ApiAuthOptions
+
 export const ADMIN_API_AUTH_OPTIONS = {
-  roles: ['admin'],
+  roles: ['superadmin', 'admin'],
+} satisfies ApiAuthOptions
+
+export const STAFF_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff'],
 } satisfies ApiAuthOptions
 
 type AuthContext = {
   user: User | null
-  roles: string[]
+  role: AppRole | null
   isDevBypass: boolean
 }
 
@@ -37,7 +53,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   if (isLocalAuthBypassEnabled()) {
     return {
       user: null,
-      roles: ['admin'],
+      role: 'superadmin',
       isDevBypass: true,
     }
   }
@@ -52,18 +68,37 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     return null
   }
 
+  // profiles is the source of truth for role and active status; RLS lets a
+  // user read their own row. app_metadata.role is the fallback for the
+  // window between user creation and profile backfill.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (profile && profile.is_active === false) {
+    return null
+  }
+
+  const role = parseRole(profile?.role) ?? parseRole(user.app_metadata.role)
+
   return {
     user,
-    roles: getUserRoles(user),
+    role,
     isDevBypass: false,
   }
 }
 
-export async function requireDashboardAuth() {
+export async function requireDashboardAuth(options?: ApiAuthOptions) {
   const auth = await getAuthContext()
 
   if (!auth) {
     redirect('/login')
+  }
+
+  if (options?.roles?.length && !hasAllowedRole(auth.role, options.roles)) {
+    redirect('/dashboard')
   }
 
   return auth
@@ -81,7 +116,7 @@ export async function requireApiAuth(
     }
   }
 
-  if (options?.roles?.length && !hasAllowedRole(auth.roles, options.roles)) {
+  if (options?.roles?.length && !hasAllowedRole(auth.role, options.roles)) {
     return {
       authorized: false,
       response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
@@ -94,31 +129,17 @@ export async function requireApiAuth(
   }
 }
 
-function hasAllowedRole(userRoles: string[], allowedRoles: AppRole[]) {
-  return userRoles.some((role) => allowedRoles.includes(role as AppRole))
+function hasAllowedRole(role: AppRole | null, allowedRoles: AppRole[]) {
+  return role !== null && allowedRoles.includes(role)
 }
 
-// Roles come from app_metadata only: user_metadata is user-editable via the
-// Supabase client API, so trusting it would let users self-assign roles.
-function getUserRoles(user: User) {
-  const roles = new Set<string>()
-  addRoles(roles, user.app_metadata.role)
-  addRoles(roles, user.app_metadata.roles)
-
-  return [...roles]
-}
-
-function addRoles(roles: Set<string>, value: unknown) {
-  if (typeof value === 'string' && value.trim()) {
-    roles.add(value.trim())
-    return
+// Roles come from profiles/app_metadata only: user_metadata is user-editable
+// via the Supabase client API, so trusting it would let users self-assign
+// roles.
+function parseRole(value: unknown): AppRole | null {
+  if (typeof value === 'string' && (APP_ROLES as readonly string[]).includes(value)) {
+    return value as AppRole
   }
 
-  if (Array.isArray(value)) {
-    for (const role of value) {
-      if (typeof role === 'string' && role.trim()) {
-        roles.add(role.trim())
-      }
-    }
-  }
+  return null
 }

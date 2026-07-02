@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, SUPERADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import type { SystemName } from '@/types'
 
 const VALID_SYSTEMS: SystemName[] = ['salesforce', 'fishbowl', 'quickbooks', 'easypost']
@@ -35,7 +35,7 @@ const ENV_FIELD_MAP: Record<string, Record<string, string>> = {
  */
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const supabase = createAdminClient()
@@ -69,7 +69,7 @@ export async function GET() {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
+    const auth = await requireApiAuth(SUPERADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const body = await request.json()
