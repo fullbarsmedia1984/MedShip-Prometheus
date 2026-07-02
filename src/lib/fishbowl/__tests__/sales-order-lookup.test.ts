@@ -5,6 +5,7 @@ import {
   findSalesOrderByNumberTailScan,
   getSalesOrderByNumber,
   salesOrderMatchesNumber,
+  soNumberCandidates,
 } from '../sales-orders'
 
 // Simulates the observed production behavior: Fishbowl ignores the ?number=
@@ -33,6 +34,22 @@ const ORDERS = Array.from({ length: 250 }, (_, i) => ({
 }))
 // Newest order sits at the tail, mirroring production ordering.
 ORDERS[ORDERS.length - 1] = { id: 250, number: 'S138810' }
+
+describe('soNumberCandidates', () => {
+  it('tries the literal input first, then the S/SO-prefix-stripped form', () => {
+    // Production case: rep types S138810 but Fishbowl stores 138810.
+    assert.deepEqual(soNumberCandidates('S138810'), ['S138810', '138810'])
+    assert.deepEqual(soNumberCandidates('so-138810'), ['so-138810', '138810'])
+    assert.deepEqual(soNumberCandidates('SO 138810'), ['SO 138810', '138810'])
+    assert.deepEqual(soNumberCandidates(' 138810 '), ['138810'])
+  })
+
+  it('does not strip letters from real alphanumeric SO numbers', () => {
+    assert.deepEqual(soNumberCandidates('071514KC'), ['071514KC'])
+    assert.deepEqual(soNumberCandidates('S138810X'), ['S138810X'])
+    assert.deepEqual(soNumberCandidates(''), [])
+  })
+})
 
 describe('salesOrderMatchesNumber', () => {
   it('matches exactly, case-insensitively, across field aliases', () => {

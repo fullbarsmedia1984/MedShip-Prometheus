@@ -208,6 +208,21 @@ function normalizeSoNumber(value: unknown): string {
   return String(value ?? '').trim().toUpperCase();
 }
 
+/**
+ * Candidate SO numbers to try for a user-typed value. Fishbowl stores plain
+ * numbers (e.g. "138810"), but reps habitually write "S138810" or "SO-138810";
+ * strip that prefix as a fallback candidate while always trying the literal
+ * input first (a handful of real numbers do contain letters).
+ */
+export function soNumberCandidates(input: string): string[] {
+  const literal = input.trim();
+  if (!literal) return [];
+  const candidates = [literal];
+  const prefixed = literal.match(/^SO?[-\s]?(\d+)$/i);
+  if (prefixed) candidates.push(prefixed[1]);
+  return candidates;
+}
+
 /** Exact SO-number match on the fields Fishbowl uses across versions. */
 export function salesOrderMatchesNumber(
   order: FBRawSalesOrder,
@@ -287,14 +302,18 @@ export async function findSalesOrderByNumberTailScan(
   const lastPage = Math.max(1, Math.ceil(totalOrders / pageSize));
   const stopPage = Math.max(1, lastPage - maxPages + 1);
 
+  // Fishbowl's unfiltered list endpoint is slow (~7s/page); fetch the tail
+  // pages concurrently rather than serially.
+  const pageNumbers: number[] = [];
   for (let pageNumber = lastPage; pageNumber >= stopPage; pageNumber--) {
-    const page = await getSalesOrdersPage(client, pageNumber, pageSize);
+    pageNumbers.push(pageNumber);
+  }
+  const pages = await Promise.all(
+    pageNumbers.map((pageNumber) => getSalesOrdersPage(client, pageNumber, pageSize))
+  );
+  for (const page of pages) {
     const match = page.results.find((row) => salesOrderMatchesNumber(row, soNumber));
     if (match) return match;
-    if (page.results.length === 0 && pageNumber === lastPage) {
-      // Count/page drift (orders added between calls): step back one extra page.
-      continue;
-    }
   }
   return null;
 }

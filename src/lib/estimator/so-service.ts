@@ -11,6 +11,7 @@ import {
   findSalesOrderByNumberTailScan,
   getSalesOrderById,
   salesOrderMatchesNumber,
+  soNumberCandidates,
   type FBRawSalesOrder,
   type FBRawSalesOrderItem,
 } from '@/lib/fishbowl/sales-orders'
@@ -18,8 +19,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { AdvisoryDims, SoLineItem } from './types'
 
 export class SalesOrderNotFoundError extends Error {
-  constructor(soNumber: string) {
-    super(`Sales Order ${soNumber} was not found in Fishbowl`)
+  constructor(soNumber: string, hint?: string | null) {
+    super(
+      `Sales Order ${soNumber} was not found in Fishbowl${hint ? `. ${hint}` : ''}`
+    )
     this.name = 'SalesOrderNotFoundError'
   }
 }
@@ -179,32 +182,65 @@ export interface FetchedSalesOrder {
  *      orders oldest-first, so new orders sit at the tail).
  * A result is only ever accepted on an exact SO-number match.
  */
-async function resolveSalesOrder(
-  client: FishbowlClient,
-  soNumber: string
-): Promise<FBRawSalesOrder | null> {
-  let cachedId: string | null = null
+async function lookupCachedFishbowlId(candidate: string): Promise<string | null> {
   try {
     const supabase = createAdminClient()
     const { data } = await supabase
       .from('fb_sales_orders')
       .select('fishbowl_id')
-      .ilike('so_number', soNumber)
+      .ilike('so_number', candidate)
       .not('fishbowl_id', 'is', null)
       .limit(1)
       .maybeSingle()
-    cachedId = (data?.fishbowl_id as string | null) ?? null
+    return (data?.fishbowl_id as string | null) ?? null
   } catch {
     // Cache unavailable — fall through to the live tail scan.
+    return null
   }
+}
 
-  if (cachedId) {
+/** "Did you mean …" — near matches from the cache for a failed lookup. */
+async function findNearMatchHint(soNumber: string): Promise<string | null> {
+  const digits = soNumber.replace(/\D/g, '')
+  if (digits.length < 4) return null
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('fb_sales_orders')
+      .select('so_number')
+      .ilike('so_number', `%${digits}%`)
+      .limit(3)
+    const numbers = (data ?? [])
+      .map((row) => row.so_number as string)
+      .filter(Boolean)
+    return numbers.length > 0 ? `Did you mean: ${numbers.join(', ')}?` : null
+  } catch {
+    return null
+  }
+}
+
+async function resolveSalesOrder(
+  client: FishbowlClient,
+  soNumber: string
+): Promise<FBRawSalesOrder | null> {
+  const candidates = soNumberCandidates(soNumber)
+
+  // Layer 1: cache lookup (so_number -> fishbowl_id), fresh fetch by ID.
+  for (const candidate of candidates) {
+    const cachedId = await lookupCachedFishbowlId(candidate)
+    if (!cachedId) continue
     const byId = await getSalesOrderById(client, cachedId)
     // Guard against cache drift: only trust the row if the number matches.
-    if (byId && salesOrderMatchesNumber(byId, soNumber)) return byId
+    if (byId && salesOrderMatchesNumber(byId, candidate)) return byId
   }
 
-  return findSalesOrderByNumberTailScan(client, soNumber)
+  // Layer 2: live tail scan for orders too new to be cached.
+  for (const candidate of candidates) {
+    const match = await findSalesOrderByNumberTailScan(client, candidate)
+    if (match) return match
+  }
+
+  return null
 }
 
 /**
@@ -218,7 +254,9 @@ export async function fetchSalesOrderForEstimate(
   const client = createFishbowlClient()
   try {
     let raw = await resolveSalesOrder(client, requested)
-    if (!raw) throw new SalesOrderNotFoundError(requested)
+    if (!raw) {
+      throw new SalesOrderNotFoundError(requested, await findNearMatchHint(requested))
+    }
 
     let parsed = parseLineItems(raw)
     if (parsed.lineItems.length === 0 && raw.id !== undefined && raw.id !== null) {
