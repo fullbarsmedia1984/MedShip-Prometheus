@@ -23,3 +23,37 @@ export function selectIncrementalSalesOrderPages(
 
   return [...selected].sort((a, b) => a - b)
 }
+
+export type RotatingSalesOrderPageSelection = {
+  pageNumbers: number[]
+  nextStartPage: number
+}
+
+export function selectRotatingSalesOrderPages(
+  totalPages: number,
+  pageCount: number,
+  startPage: number
+): RotatingSalesOrderPageSelection {
+  const safeTotalPages = Number.isFinite(totalPages) ? Math.floor(totalPages) : 0
+  if (safeTotalPages <= 0) return { pageNumbers: [], nextStartPage: 1 }
+
+  const safePageCount = Number.isFinite(pageCount)
+    ? Math.max(1, Math.floor(pageCount))
+    : 1
+  const safeStartPage = Number.isFinite(startPage)
+    ? Math.min(Math.max(1, Math.floor(startPage)), safeTotalPages)
+    : 1
+
+  const selected: number[] = []
+  let page = safeStartPage
+
+  for (let index = 0; index < Math.min(safePageCount, safeTotalPages); index++) {
+    selected.push(page)
+    page = page >= safeTotalPages ? 1 : page + 1
+  }
+
+  return {
+    pageNumbers: selected,
+    nextStartPage: page,
+  }
+}
