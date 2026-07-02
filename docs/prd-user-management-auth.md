@@ -191,7 +191,13 @@ Principles: JWT `role` claim drives policies; service-role server code is unaffe
 - ✅ Migration-review guardrail added to CLAUDE.md (no flat policies on new tables).
 - ⏸ Migration `027_drop_legacy_role_arrays` committed but **not applied** — run it after this branch deploys (the currently-live build still authorizes the superadmin via the legacy `roles` array).
 
-**Phase 3 — Lifecycle & email:** Resend SMTP + `src/lib/email/`, invites, email 2FA, users admin page, audit_log.
+**Phase 3 — Lifecycle & email** — *executed 2026-07-02*
+- ✅ Migration `028_audit_log_and_auth_challenges` (applied live): `audit_log` (admin-read RLS, service-role writes) and `auth_challenges` (no client policies).
+- ✅ Email abstraction `src/lib/email/` (`resend` pkg): typed `sendEmail` client + brand templates (invite / 2FA code / role-changed) + `sendInviteEmail`/`sendTwoFactorCodeEmail`/`sendRoleChangedEmail`. Sends from `EMAIL_FROM` (Steven's domain). Legacy `src/lib/utils/notifications.ts` refolded onto it and hardcoded recipient addresses removed (now `ALERT_EMAIL_RECIPIENTS`).
+- ✅ Audit helper `src/lib/audit.ts` (`logAudit`), wired into every user lifecycle action.
+- ✅ User lifecycle `src/lib/users.ts` + APIs: `GET/POST /api/users`, `PATCH /api/users/[id]` (admin+; only superadmin may grant/revoke `admin`; superadmin row immutable). Invite via `inviteUserByEmail`, role change (writes profiles + app_metadata + emails the user), deactivate (flips flag + global session revoke). Admin UI at `/dashboard/settings/users` with invite dialog and inline role/status controls, linked from Settings.
+- ✅ Email 2FA (app-level, PRD §6.1 approach b): `src/lib/twofactor.ts` (hashed 6-digit codes, 10-min expiry, ≤5 attempts, HMAC-signed 12h verified cookie), `POST/PUT /api/auth/2fa`, two-step login page, enforced in `getAuthContext`/guards via `pendingTwoFactor`. **Gated behind `TWO_FACTOR_ENABLED` (default off)** so the branch deploys safely before Resend env is live; flip on after configuring `EMAIL_FROM`/`RESEND_API_KEY`.
+- ⚠️ Note: 2FA re-uses the existing Supabase session (created at password success) + a verified cookie, rather than withholding the session until the code clears. This is the standard app-level pattern and is enforced server-side on every request; if a stricter "no session until 2FA" model is wanted, that's a Supabase-native MFA (TOTP) follow-up.
 
 **Phase 4 — Rep experience:** rep-scoped dashboard/nav, scorecards for all reps, own-orders detail, contract-price flag wiring.
 

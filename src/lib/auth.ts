@@ -1,7 +1,13 @@
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import {
+  TWO_FACTOR_COOKIE,
+  isTwoFactorEnforced,
+  isVerifiedCookieValid,
+} from '@/lib/twofactor'
 
 export type AppRole = 'superadmin' | 'admin' | 'staff' | 'sales_rep' | 'sales_manager'
 
@@ -33,6 +39,10 @@ type AuthContext = {
   user: User | null
   role: AppRole | null
   isDevBypass: boolean
+  // True when the user has a valid session but has not yet cleared the email
+  // 2FA challenge. Callers should route these users to the 2FA step, not treat
+  // them as fully authenticated.
+  pendingTwoFactor: boolean
 }
 
 type ApiAuthResult =
@@ -55,6 +65,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       user: null,
       role: 'superadmin',
       isDevBypass: true,
+      pendingTwoFactor: false,
     }
   }
 
@@ -83,10 +94,20 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
   const role = parseRole(profile?.role) ?? parseRole(user.app_metadata.role)
 
+  let pendingTwoFactor = false
+  if (isTwoFactorEnforced()) {
+    const cookieStore = await cookies()
+    pendingTwoFactor = !isVerifiedCookieValid(
+      user.id,
+      cookieStore.get(TWO_FACTOR_COOKIE)?.value
+    )
+  }
+
   return {
     user,
     role,
     isDevBypass: false,
+    pendingTwoFactor,
   }
 }
 
@@ -95,6 +116,10 @@ export async function requireDashboardAuth(options?: ApiAuthOptions) {
 
   if (!auth) {
     redirect('/login')
+  }
+
+  if (auth.pendingTwoFactor) {
+    redirect('/login?step=2fa')
   }
 
   if (options?.roles?.length && !hasAllowedRole(auth.role, options.roles)) {
@@ -113,6 +138,16 @@ export async function requireApiAuth(
     return {
       authorized: false,
       response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    }
+  }
+
+  if (auth.pendingTwoFactor) {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: 'Two-factor verification required' },
+        { status: 401 }
+      ),
     }
   }
 

@@ -1,0 +1,190 @@
+import 'server-only'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { logAudit, type AuditActor } from '@/lib/audit'
+import { sendInviteEmail, sendRoleChangedEmail } from '@/lib/email'
+import type { AppRole } from '@/lib/auth'
+
+export type ManagedUser = {
+  id: string
+  email: string
+  displayName: string | null
+  role: AppRole
+  isActive: boolean
+  fishbowlUserId: string | null
+  lastSignInAt: string | null
+  invitedAt: string | null
+  createdAt: string
+}
+
+// Roles an inviter may grant. Superadmin can grant admin and below; admin can
+// grant staff and below. superadmin is never assignable through this path
+// (the sole-superadmin invariant is also enforced by a DB trigger).
+export const ASSIGNABLE_ROLES: Record<'superadmin' | 'admin', AppRole[]> = {
+  superadmin: ['admin', 'staff', 'sales_rep', 'sales_manager'],
+  admin: ['staff', 'sales_rep', 'sales_manager'],
+}
+
+function appUrl(): string {
+  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? 'http://localhost:3000'
+}
+
+export async function listUsers(): Promise<ManagedUser[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, display_name, role, is_active, fishbowl_user_id, invited_at, created_at')
+    .order('created_at')
+
+  if (error) throw error
+
+  const { data: authList } = await supabase.auth.admin.listUsers()
+  const lastSignIn = new Map(
+    (authList?.users ?? []).map((u) => [u.id, u.last_sign_in_at ?? null])
+  )
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role as AppRole,
+    isActive: row.is_active,
+    fishbowlUserId: row.fishbowl_user_id,
+    lastSignInAt: lastSignIn.get(row.id) ?? null,
+    invitedAt: row.invited_at,
+    createdAt: row.created_at,
+  }))
+}
+
+export async function inviteUser(params: {
+  email: string
+  role: AppRole
+  fishbowlUserId?: string | null
+  actor: AuditActor
+  inviterName: string
+}): Promise<{ id: string }> {
+  const supabase = createAdminClient()
+
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(params.email, {
+    data: {},
+    redirectTo: `${appUrl()}/login`,
+  })
+  if (error || !data.user) {
+    throw new Error(error?.message ?? 'Failed to create user')
+  }
+
+  const userId = data.user.id
+
+  // Set the role in both places: app_metadata (JWT claim for RLS) and the
+  // profile row (management source of truth). The handle_new_user trigger
+  // already created the profile row from app_metadata; align it explicitly.
+  await supabase.auth.admin.updateUserById(userId, {
+    app_metadata: { role: params.role },
+  })
+  await supabase
+    .from('profiles')
+    .update({
+      role: params.role,
+      fishbowl_user_id: params.fishbowlUserId ?? null,
+      invited_by: params.actor.userId,
+      invited_at: new Date().toISOString(),
+      updated_by: params.actor.userId,
+    })
+    .eq('id', userId)
+
+  const invite = await sendInviteEmail({
+    to: params.email,
+    inviteUrl: `${appUrl()}/login`,
+    role: params.role,
+    inviterName: params.inviterName,
+  })
+
+  await logAudit({
+    actor: params.actor,
+    action: 'user.invited',
+    entityType: 'profile',
+    entityId: userId,
+    summary: `Invited ${params.email} as ${params.role}`,
+    diff: { role: params.role, emailSent: invite.sent },
+  })
+
+  return { id: userId }
+}
+
+export async function changeUserRole(params: {
+  userId: string
+  role: AppRole
+  actor: AuditActor
+}): Promise<void> {
+  const supabase = createAdminClient()
+
+  const { data: current } = await supabase
+    .from('profiles')
+    .select('email, role')
+    .eq('id', params.userId)
+    .maybeSingle()
+
+  // The DB trigger is the real guard against demoting the superadmin; fail
+  // fast here for a friendlier error.
+  if (current?.role === 'superadmin') {
+    throw new Error('The superadmin role cannot be changed')
+  }
+
+  await supabase.auth.admin.updateUserById(params.userId, {
+    app_metadata: { role: params.role },
+  })
+  const { error } = await supabase
+    .from('profiles')
+    .update({ role: params.role, updated_by: params.actor.userId })
+    .eq('id', params.userId)
+  if (error) throw error
+
+  if (current?.email) {
+    await sendRoleChangedEmail({ to: current.email, role: params.role })
+  }
+
+  await logAudit({
+    actor: params.actor,
+    action: 'user.role_changed',
+    entityType: 'profile',
+    entityId: params.userId,
+    summary: `Role changed to ${params.role}`,
+    diff: { from: current?.role ?? null, to: params.role },
+  })
+}
+
+export async function setUserActive(params: {
+  userId: string
+  isActive: boolean
+  actor: AuditActor
+}): Promise<void> {
+  const supabase = createAdminClient()
+
+  const { data: current } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', params.userId)
+    .maybeSingle()
+
+  if (current?.role === 'superadmin') {
+    throw new Error('The superadmin cannot be deactivated')
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_active: params.isActive, updated_by: params.actor.userId })
+    .eq('id', params.userId)
+  if (error) throw error
+
+  // Revoke live sessions immediately on deactivation.
+  if (!params.isActive) {
+    await supabase.auth.admin.signOut(params.userId, 'global')
+  }
+
+  await logAudit({
+    actor: params.actor,
+    action: params.isActive ? 'user.activated' : 'user.deactivated',
+    entityType: 'profile',
+    entityId: params.userId,
+    summary: params.isActive ? 'User reactivated' : 'User deactivated',
+  })
+}

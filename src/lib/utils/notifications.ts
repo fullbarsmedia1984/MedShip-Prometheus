@@ -1,7 +1,5 @@
-const DEFAULT_ALERT_RECIPIENTS = [
-  'dan@medicalshipment.com',
-  'steven@fullbarsmedia.com',
-]
+import 'server-only'
+import { sendEmail } from '@/lib/email'
 
 type AlertPayload = {
   subject: string
@@ -10,15 +8,22 @@ type AlertPayload = {
   recipients?: string[]
 }
 
-function getAlertRecipients() {
-  const configured = process.env.ALERT_EMAIL_RECIPIENTS
-    ?.split(',')
-    .map((email) => email.trim())
-    .filter(Boolean)
-
-  return configured?.length ? configured : DEFAULT_ALERT_RECIPIENTS
+// Alert recipients come from config, never hardcoded (PRD §10). Set
+// ALERT_EMAIL_RECIPIENTS to a comma-separated list.
+function getAlertRecipients(): string[] {
+  return (
+    process.env.ALERT_EMAIL_RECIPIENTS
+      ?.split(',')
+      .map((email) => email.trim())
+      .filter(Boolean) ?? []
+  )
 }
 
+/**
+ * Send an operational alert. Prefers ALERT_WEBHOOK_URL when set (e.g. Slack),
+ * otherwise sends via the shared Resend email client. Best-effort: returns a
+ * result rather than throwing so a failed alert never kills a batch.
+ */
 export async function sendAlertEmail({
   subject,
   text,
@@ -52,46 +57,20 @@ export async function sendAlertEmail({
     }
   }
 
-  const resendApiKey = process.env.RESEND_API_KEY
-  const from = process.env.ALERT_EMAIL_FROM
-  if (resendApiKey && from) {
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from,
-          to: recipients,
-          subject,
-          text,
-          html,
-        }),
-      })
-
-      if (!response.ok) {
-        return {
-          sent: false,
-          provider: 'resend',
-          error: `Resend returned HTTP ${response.status}: ${await response.text()}`,
-        }
-      }
-
-      return { sent: true, provider: 'resend' }
-    } catch (error) {
-      return {
-        sent: false,
-        provider: 'resend',
-        error: error instanceof Error ? error.message : String(error),
-      }
+  if (recipients.length === 0) {
+    return {
+      sent: false,
+      provider: 'none',
+      error: 'No alert recipients. Set ALERT_EMAIL_RECIPIENTS or ALERT_WEBHOOK_URL.',
     }
   }
 
-  return {
-    sent: false,
-    provider: 'none',
-    error: 'Set ALERT_WEBHOOK_URL or RESEND_API_KEY + ALERT_EMAIL_FROM to enable email delivery.',
-  }
+  const result = await sendEmail({
+    to: recipients,
+    subject,
+    text,
+    html: html ?? `<p>${text}</p>`,
+  })
+
+  return { sent: result.sent, provider: result.provider, error: result.error }
 }
