@@ -9,8 +9,6 @@ export type ApiAuthOptions = {
   roles?: AppRole[]
 }
 
-// TODO(authz): Apply this to admin-only mutation routes once Supabase user
-// metadata/app_metadata roles are the authoritative role source.
 export const ADMIN_API_AUTH_OPTIONS = {
   roles: ['admin'],
 } satisfies ApiAuthOptions
@@ -100,12 +98,12 @@ function hasAllowedRole(userRoles: string[], allowedRoles: AppRole[]) {
   return userRoles.some((role) => allowedRoles.includes(role as AppRole))
 }
 
+// Roles come from app_metadata only: user_metadata is user-editable via the
+// Supabase client API, so trusting it would let users self-assign roles.
 function getUserRoles(user: User) {
   const roles = new Set<string>()
   addRoles(roles, user.app_metadata.role)
   addRoles(roles, user.app_metadata.roles)
-  addRoles(roles, user.user_metadata.role)
-  addRoles(roles, user.user_metadata.roles)
 
   return [...roles]
 }

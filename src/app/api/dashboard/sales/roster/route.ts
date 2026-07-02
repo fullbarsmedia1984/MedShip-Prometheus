@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
-import { requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { SALES_DASHBOARD_CACHE_TAG } from '@/lib/data'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -10,7 +10,7 @@ type RosterRequest = {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const body = (await request.json()) as RosterRequest
