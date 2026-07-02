@@ -7,6 +7,7 @@ import {
 } from './sales-orders'
 import { upsertSalesOrdersToCache } from './sales-order-cache'
 import { resolveSalesOrderOpportunityLinks } from './sales-order-links'
+import { selectRotatingSalesOrderPages } from './sales-order-page-bands'
 
 type SyncRunMode = 'backfill' | 'pages' | 'details' | 'incremental'
 type SyncRunStatus = 'running' | 'success' | 'partial' | 'failed' | 'paused'
@@ -27,6 +28,10 @@ type DetailQueueRow = {
   attempts: number | null
 }
 
+type PageBatchOptions = {
+  pageNumbers?: number[]
+}
+
 export type SalesOrderCoverage = {
   sourceTotalPages: number
   sourcePageSize: number
@@ -43,6 +48,9 @@ export type SalesOrderCoverage = {
   detailRunning: number
   detailHydrated: number
   detailFailed: number
+  latestCachedSalesOrderDate: string | null
+  latestCachedDateCreated: string | null
+  latestSourceLastSeenAt: string | null
   lastRunAt: string | null
   lastRunStatus: string | null
   lastRunMode: SyncRunMode | null
@@ -55,6 +63,9 @@ const DEFAULT_PAGE_BATCH = Number(process.env.FISHBOWL_SO_PAGE_BATCH ?? 10)
 const DEFAULT_DETAIL_BATCH = Number(process.env.FISHBOWL_SO_DETAIL_BATCH ?? 250)
 const DEFAULT_MAX_ATTEMPTS = Number(process.env.FISHBOWL_SO_MAX_ATTEMPTS ?? 3)
 const DEFAULT_INCREMENTAL_PAGES = Number(process.env.FISHBOWL_SO_INCREMENTAL_PAGES ?? 5)
+const DEFAULT_ID_DISCOVERY_BATCH = Number(process.env.FISHBOWL_SO_ID_DISCOVERY_BATCH ?? 250)
+const PAGE_CURSOR_SETTING_KEY = 'p7_sales_order_incremental_page_cursor'
+const ID_CURSOR_SETTING_KEY = 'p7_sales_order_id_discovery_cursor'
 
 async function insertQueueChunks(
   supabase: SupabaseClient,
@@ -142,6 +153,67 @@ function fishbowlId(order: FBRawSalesOrder): string | null {
   return order.id === undefined || order.id === null || order.id === '' ? null : String(order.id)
 }
 
+function positiveInteger(value: unknown): number | null {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return null
+  return Math.floor(numberValue)
+}
+
+function settingNumber(value: unknown, key: string): number | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return positiveInteger((value as Record<string, unknown>)[key])
+}
+
+async function readAppSettingValue(supabase: SupabaseClient, key: string) {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle()
+
+  if (error) throw new Error(`Could not read app setting ${key}: ${error.message}`)
+  return data?.value ?? null
+}
+
+async function writeAppSettingValue(
+  supabase: SupabaseClient,
+  key: string,
+  value: Record<string, unknown>
+) {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({
+      key,
+      value,
+      updated_at: new Date().toISOString(),
+    })
+
+  if (error) throw new Error(`Could not write app setting ${key}: ${error.message}`)
+}
+
+async function readMaxCachedFishbowlId(supabase: SupabaseClient) {
+  let maxId = 0
+  const pageSize = 1000
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('fb_sales_orders')
+      .select('fishbowl_id')
+      .not('fishbowl_id', 'is', null)
+      .range(from, from + pageSize - 1)
+
+    if (error) throw new Error(`Could not read cached Fishbowl SO ids: ${error.message}`)
+    const rows = data ?? []
+    for (const row of rows as Array<{ fishbowl_id?: string | null }>) {
+      const id = positiveInteger(row.fishbowl_id)
+      if (id && id > maxId) maxId = id
+    }
+    if (rows.length < pageSize) break
+  }
+
+  return maxId
+}
+
 export async function startSalesOrderBackfill(
   supabase: SupabaseClient,
   client: FishbowlClient
@@ -226,7 +298,7 @@ export async function prepareSalesOrderIncrementalCheckpoints(
   client: FishbowlClient
 ) {
   const pageSize = DEFAULT_PAGE_SIZE
-  const incrementalPages = Math.max(1, DEFAULT_INCREMENTAL_PAGES)
+  const incrementalPages = Math.max(1, DEFAULT_INCREMENTAL_PAGES * 2)
   const run = await createRun(supabase, 'incremental', { pageSize, incrementalPages })
 
   try {
@@ -242,10 +314,19 @@ export async function prepareSalesOrderIncrementalCheckpoints(
 
     await insertCheckpointChunks(supabase, checkpoints)
 
-    const recentPageNumbers = Array.from(
-      { length: Math.min(incrementalPages, totalPages) },
-      (_, index) => index + 1
-    )
+    const cursorValue = await readAppSettingValue(supabase, PAGE_CURSOR_SETTING_KEY)
+    const startPage = settingNumber(cursorValue, 'nextStartPage') ?? 1
+    const selection = selectRotatingSalesOrderPages(totalPages, incrementalPages, startPage)
+    const recentPageNumbers = selection.pageNumbers
+
+    await writeAppSettingValue(supabase, PAGE_CURSOR_SETTING_KEY, {
+      nextStartPage: selection.nextStartPage,
+      lastStartPage: startPage,
+      lastPageNumbers: recentPageNumbers,
+      totalPages,
+      pageSize: page.pageSize,
+      strategy: 'rotating_page_window',
+    })
 
     const { error } = await supabase
       .from('fishbowl_so_page_checkpoints')
@@ -265,6 +346,10 @@ export async function prepareSalesOrderIncrementalCheckpoints(
       sourcePageSize: page.pageSize,
       sourceTotalHeadersEstimate,
       pagesRequeued: recentPageNumbers.length,
+      requeuedPageNumbers: recentPageNumbers,
+      strategy: 'rotating_page_window',
+      pageCursorStart: startPage,
+      nextPageCursor: selection.nextStartPage,
       pageCheckpoints: checkpoints.length,
     }
     await finishRun(supabase, run.id, 'success', summary)
@@ -278,7 +363,8 @@ export async function prepareSalesOrderIncrementalCheckpoints(
 
 export async function processSalesOrderPageBatch(
   supabase: SupabaseClient,
-  client: FishbowlClient
+  client: FishbowlClient,
+  options: PageBatchOptions = {}
 ) {
   const pageSize = DEFAULT_PAGE_SIZE
   const pageBatch = DEFAULT_PAGE_BATCH
@@ -290,7 +376,7 @@ export async function processSalesOrderPageBatch(
   let detailsQueued = 0
 
   try {
-    const { data, error } = await supabase
+    let checkpointQuery = supabase
       .from('fishbowl_so_page_checkpoints')
       .select('page_number, page_size, attempts')
       .eq('page_size', pageSize)
@@ -298,6 +384,12 @@ export async function processSalesOrderPageBatch(
       .lt('attempts', maxAttempts)
       .order('page_number', { ascending: true })
       .limit(pageBatch)
+
+    if (options.pageNumbers?.length) {
+      checkpointQuery = checkpointQuery.in('page_number', options.pageNumbers)
+    }
+
+    const { data, error } = await checkpointQuery
 
     if (error) throw new Error(`Could not read Fishbowl SO checkpoints: ${error.message}`)
     const checkpoints = (data ?? []) as PageCheckpoint[]
@@ -372,6 +464,103 @@ export async function processSalesOrderPageBatch(
       detailsQueued,
     }
     await finishRun(supabase, run.id, pagesFailed > 0 ? 'partial' : 'success', summary)
+    return summary
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await finishRun(supabase, run.id, 'failed', {}, message)
+    throw error
+  }
+}
+
+export async function discoverSalesOrdersByIdWindow(
+  supabase: SupabaseClient,
+  client: FishbowlClient
+) {
+  const requestedBatchSize = Math.max(0, Math.floor(DEFAULT_ID_DISCOVERY_BATCH))
+  if (requestedBatchSize <= 0) {
+    return {
+      strategy: 'fishbowl_id_window',
+      skipped: true,
+      reason: 'FISHBOWL_SO_ID_DISCOVERY_BATCH is 0',
+      scannedIds: 0,
+      discoveredOrders: 0,
+      itemsUpserted: 0,
+    }
+  }
+
+  const run = await createRun(supabase, 'details', {
+    strategy: 'fishbowl_id_window',
+    batchSize: requestedBatchSize,
+  })
+  const cachedMaxId = await readMaxCachedFishbowlId(supabase)
+  const cursorValue = await readAppSettingValue(supabase, ID_CURSOR_SETTING_KEY)
+  const cursorStartId = settingNumber(cursorValue, 'nextFishbowlId')
+  const startId = Math.max(cursorStartId ?? cachedMaxId + 1, cachedMaxId + 1)
+  const endId = startId + requestedBatchSize - 1
+  const foundDetails: FBRawSalesOrder[] = []
+  let missingIds = 0
+  let failedIds = 0
+  const failedSamples: Array<{ fishbowlId: number; error: string }> = []
+
+  try {
+    for (let fishbowlIdNumber = startId; fishbowlIdNumber <= endId; fishbowlIdNumber++) {
+      try {
+        const detail = await getSalesOrderById(client, fishbowlIdNumber)
+        if (detail) {
+          foundDetails.push(detail)
+        } else {
+          missingIds++
+        }
+      } catch (error) {
+        failedIds++
+        if (failedSamples.length < 10) {
+          failedSamples.push({
+            fishbowlId: fishbowlIdNumber,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+    }
+
+    const cacheResult = foundDetails.length > 0
+      ? await upsertSalesOrdersToCache(supabase, foundDetails, {
+          includeDetailStatus: true,
+          detailStatus: 'success',
+        })
+      : { orders: 0, items: 0 }
+
+    await writeAppSettingValue(supabase, ID_CURSOR_SETTING_KEY, {
+      nextFishbowlId: endId + 1,
+      lastStartId: startId,
+      lastEndId: endId,
+      cachedMaxId,
+      batchSize: requestedBatchSize,
+      foundOrders: foundDetails.length,
+      missingIds,
+      failedIds,
+      failedSamples,
+      strategy: 'fishbowl_id_window',
+    })
+
+    const summary = {
+      strategy: 'fishbowl_id_window',
+      cachedMaxId,
+      startId,
+      endId,
+      nextFishbowlId: endId + 1,
+      scannedIds: requestedBatchSize,
+      discoveredOrders: foundDetails.length,
+      missingIds,
+      failedIds,
+      failedSamples,
+      detailsAttempted: requestedBatchSize,
+      detailsSucceeded: foundDetails.length,
+      detailsFailed: failedIds,
+      headersUpserted: cacheResult.orders,
+      itemsUpserted: cacheResult.items,
+    }
+
+    await finishRun(supabase, run.id, failedIds > 0 ? 'partial' : 'success', summary)
     return summary
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -502,6 +691,9 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     failedDetailsRes,
     latestRunRes,
     activeRunRes,
+    latestBusinessDateRes,
+    latestCreatedDateRes,
+    latestSourceSeenRes,
   ] = await Promise.all([
     supabase.from('fb_sales_orders').select('*', { count: 'estimated', head: true }),
     supabase.from('fb_sales_order_items').select('*', { count: 'estimated', head: true }),
@@ -528,6 +720,27 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
       .order('started_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('sales_order_metric_at')
+      .not('sales_order_metric_at', 'is', null)
+      .order('sales_order_metric_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('date_created')
+      .not('date_created', 'is', null)
+      .order('date_created', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('source_last_seen_at')
+      .not('source_last_seen_at', 'is', null)
+      .order('source_last_seen_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const latestRun = latestRunRes.data as {
@@ -542,6 +755,15 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
   const activeRun = activeRunRes.data as {
     mode?: SyncRunMode | null
     started_at?: string | null
+  } | null
+  const latestBusinessDate = latestBusinessDateRes.data as {
+    sales_order_metric_at?: string | null
+  } | null
+  const latestCreatedDate = latestCreatedDateRes.data as {
+    date_created?: string | null
+  } | null
+  const latestSourceSeen = latestSourceSeenRes.data as {
+    source_last_seen_at?: string | null
   } | null
   const sourceTotalPages = latestRun?.source_total_pages ?? checkpointsRes.count ?? 0
   const sourcePageSize = latestRun?.source_page_size ?? DEFAULT_PAGE_SIZE
@@ -574,6 +796,9 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     detailRunning,
     detailHydrated: hydratedRes.count ?? 0,
     detailFailed: failedDetailsRes.count ?? 0,
+    latestCachedSalesOrderDate: latestBusinessDate?.sales_order_metric_at ?? null,
+    latestCachedDateCreated: latestCreatedDate?.date_created ?? null,
+    latestSourceLastSeenAt: latestSourceSeen?.source_last_seen_at ?? null,
     lastRunAt: activeRun?.started_at ?? latestRun?.completed_at ?? latestRun?.started_at ?? null,
     lastRunStatus: activeRun ? 'running' : latestRun?.status ?? null,
     lastRunMode: activeRun?.mode ?? latestRun?.mode ?? null,

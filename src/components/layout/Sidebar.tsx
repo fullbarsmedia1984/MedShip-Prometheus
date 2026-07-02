@@ -12,6 +12,7 @@ import {
   Boxes,
   DollarSign,
   FileText,
+  GraduationCap,
   MapPin,
   RefreshCw,
   List,
@@ -26,6 +27,7 @@ import {
 const mainNav = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
+  { name: 'TAM', href: '/dashboard/tam', icon: GraduationCap },
   { name: 'Quotes', href: '/dashboard/quotes', icon: FileText },
   { name: 'Pricing', href: '/dashboard/pricing', icon: DollarSign },
   { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes },

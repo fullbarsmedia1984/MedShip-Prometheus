@@ -35,7 +35,7 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-success/10">
               <Phone className="h-4 w-4 text-medship-success" />
             </span>
-            Profile Call Leaderboard
+            Call Activity Leaderboard
             {sorted.length === 0 && <ComingSoonBadge />}
           </CardTitle>
           <div className="flex items-center gap-4 text-sm">
@@ -61,8 +61,8 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
       <CardContent className="p-0">
         {sorted.length === 0 ? (
           <ComingSoonPanel
-            title="Profile call leaderboard"
-            description="Live Salesforce profile-call records are not available yet."
+            title="Call activity leaderboard"
+            description="Live Salesforce RingDNA call activity has not synced yet."
           />
         ) : (
         <Table>
@@ -70,7 +70,7 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16 text-center">Rank</TableHead>
               <TableHead>Sales Rep</TableHead>
-              <TableHead className="text-center">Profile Calls</TableHead>
+              <TableHead className="text-center">Calls</TableHead>
               <TableHead className="hidden w-[200px] md:table-cell">Volume</TableHead>
               <TableHead className="text-center">Connect Rate</TableHead>
               <TableHead className="text-center">Converted</TableHead>
