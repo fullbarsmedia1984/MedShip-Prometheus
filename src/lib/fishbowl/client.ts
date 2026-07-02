@@ -3,6 +3,8 @@
 // Handles authentication, token refresh, 401 retry, and request lifecycle.
 // =============================================================================
 
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import type { IFishbowlClient } from '@/types';
 import { FishbowlApiError, FishbowlAuthError } from './types';
 import type { FBLoginResponse } from './types';
@@ -285,6 +287,103 @@ export class FishbowlClient implements IFishbowlClient {
 
     const data: T = await response.json();
     return { data };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Data queries — GET /api/data-query with an SQL body
+  // Fishbowl requires a GET request carrying the SQL as the body
+  // (POST is 405), which fetch() forbids, so this uses node:http(s) directly.
+  // ---------------------------------------------------------------------------
+
+  async dataQuery<T>(sql: string): Promise<T> {
+    if (!this.token) {
+      await this.authenticate();
+    }
+
+    const result = await this.executeDataQuery<T>(sql);
+    if (result._unauthorized) {
+      this.token = null;
+      await this.authenticate();
+      const retry = await this.executeDataQuery<T>(sql);
+      if (retry._unauthorized) {
+        throw new FishbowlAuthError(
+          'Fishbowl returned 401 after re-authentication'
+        );
+      }
+      return retry.data as T;
+    }
+    return result.data as T;
+  }
+
+  private executeDataQuery<T>(
+    sql: string
+  ): Promise<{ data?: T; _unauthorized?: boolean }> {
+    const url = new URL(`${this.baseUrl}/api/data-query`);
+    const requestFn = url.protocol === 'https:' ? httpsRequest : httpRequest;
+
+    return new Promise((resolve, reject) => {
+      const req = requestFn(
+        url,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/sql',
+            'Content-Length': Buffer.byteLength(sql),
+            Authorization: `Bearer ${this.token}`,
+            ...this.getCfAccessHeaders(),
+          },
+          timeout: REQUEST_TIMEOUT_MS,
+        },
+        (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            body += chunk;
+          });
+          res.on('end', () => {
+            if (res.statusCode === 401) {
+              resolve({ _unauthorized: true });
+              return;
+            }
+            if (!res.statusCode || res.statusCode >= 400) {
+              reject(
+                new FishbowlApiError(
+                  `Fishbowl data-query error ${res.statusCode}: ${body.slice(0, 300)}`,
+                  res.statusCode ?? 0,
+                  '/api/data-query',
+                  body.slice(0, 1000)
+                )
+              );
+              return;
+            }
+            try {
+              resolve({ data: JSON.parse(body) as T });
+            } catch {
+              reject(
+                new FishbowlApiError(
+                  'Fishbowl data-query returned non-JSON',
+                  res.statusCode,
+                  '/api/data-query',
+                  body.slice(0, 300)
+                )
+              );
+            }
+          });
+        }
+      );
+      req.on('timeout', () => {
+        req.destroy(
+          new FishbowlApiError(
+            `Fishbowl data-query timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
+            0,
+            '/api/data-query'
+          )
+        );
+      });
+      req.on('error', (err) => reject(this.wrapNetworkError(err, url.toString())));
+      req.write(sql);
+      req.end();
+    });
   }
 
   // ---------------------------------------------------------------------------

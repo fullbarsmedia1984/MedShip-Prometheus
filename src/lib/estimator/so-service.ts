@@ -15,6 +15,7 @@ import {
   type FBRawSalesOrder,
   type FBRawSalesOrderItem,
 } from '@/lib/fishbowl/sales-orders'
+import { getProductDimsByIds } from '@/lib/fishbowl/product-dims'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { AdvisoryDims, SoLineItem } from './types'
 
@@ -155,12 +156,54 @@ function parseLineItems(raw: FBRawSalesOrder): {
         description,
         quantity,
         uom,
+        productId: toNumber(valueAt(productRecord, ['id']) ?? valueAt(item, ['productId'])),
         fishbowlDims: extractAdvisoryDims(item, productRecord),
       })
     }
   }
 
   return { lineItems: [...byPart.values()], excludedLineCount }
+}
+
+/**
+ * Fill missing advisory dims from the Fishbowl product table (data-query).
+ * The SO payload itself never carries dims on this API version; the product
+ * table does for ~20% of products. Values stay advisory ("Fishbowl —
+ * untrusted") and only fill fields the payload left null. Best-effort: a
+ * data-query failure never blocks the fetch.
+ */
+async function enrichLinesWithProductDims(
+  client: FishbowlClient,
+  lineItems: SoLineItem[]
+): Promise<void> {
+  const needy = lineItems.filter(
+    (line) =>
+      line.productId !== null &&
+      (line.fishbowlDims.lengthIn === null ||
+        line.fishbowlDims.widthIn === null ||
+        line.fishbowlDims.heightIn === null ||
+        line.fishbowlDims.weightLb === null)
+  )
+  if (needy.length === 0) return
+
+  try {
+    const dimsById = await getProductDimsByIds(
+      client,
+      needy.map((line) => line.productId as number)
+    )
+    for (const line of needy) {
+      const dims = dimsById.get(line.productId as number)
+      if (!dims) continue
+      line.fishbowlDims = {
+        lengthIn: line.fishbowlDims.lengthIn ?? dims.lengthIn,
+        widthIn: line.fishbowlDims.widthIn ?? dims.widthIn,
+        heightIn: line.fishbowlDims.heightIn ?? dims.heightIn,
+        weightLb: line.fishbowlDims.weightLb ?? dims.weightLb,
+      }
+    }
+  } catch {
+    // Advisory enrichment only — the estimate proceeds without it.
+  }
 }
 
 export interface FetchedSalesOrder {
@@ -266,6 +309,8 @@ export async function fetchSalesOrderForEstimate(
         parsed = parseLineItems(raw)
       }
     }
+
+    await enrichLinesWithProductDims(client, parsed.lineItems)
 
     const customerRecord = objectValue(valueAt(raw, ['customer']))
     return {
