@@ -18,6 +18,8 @@ import {
   fishbowlSalesOrdersDetailHydrate,
   sfFullSync,
   sfIncrementalSync,
+  incentiveRecompute,
+  incentiveRecomputeManual,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -59,5 +61,9 @@ export const { GET, POST, PUT } = serve({
     // SF → Supabase cache sync
     sfFullSync,
     sfIncrementalSync,
+
+    // P8: Q3 incentive classification recompute + new-account bell
+    incentiveRecompute,
+    incentiveRecomputeManual,
   ],
 })

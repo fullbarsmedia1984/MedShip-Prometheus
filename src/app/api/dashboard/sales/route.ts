@@ -10,8 +10,9 @@ import {
   getProfileCallMetrics,
   getWeeklyCallVolume,
   getCallOutcomeBreakdown,
-  getTopCompetitorKeywords,
+  getCallActivitySummary,
 } from '@/lib/data'
+import { getCohortDashboard } from '@/lib/cohorts'
 
 const getSalesDashboardPayload = unstable_cache(
   async () => {
@@ -23,7 +24,8 @@ const getSalesDashboardPayload = unstable_cache(
       weeklyVolume,
       outcomeBreakdown,
       profileMetrics,
-      competitorKeywords,
+      callActivitySummary,
+      cohorts,
     ] = await Promise.all([
       getSalesDashboardCore(),
       getPipelineByRep(),
@@ -32,7 +34,8 @@ const getSalesDashboardPayload = unstable_cache(
       getWeeklyCallVolume(),
       getCallOutcomeBreakdown(),
       getProfileCallMetrics(),
-      getTopCompetitorKeywords(10),
+      getCallActivitySummary(),
+      getCohortDashboard(),
     ])
 
     return {
@@ -46,7 +49,8 @@ const getSalesDashboardPayload = unstable_cache(
       weeklyVolume,
       outcomeBreakdown,
       profileMetrics,
-      competitorKeywords,
+      callActivitySummary,
+      cohorts,
     }
   },
   ['sales-dashboard-payload'],

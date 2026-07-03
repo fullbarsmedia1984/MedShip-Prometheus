@@ -11,6 +11,7 @@ type Automation =
   | 'P5_QUOTE_PDF'
   | 'P6_LOW_STOCK_CHECK'
   | 'P7_FB_SO_SYNC'
+  | 'P8_INCENTIVE_RECOMPUTE'
 
 /**
  * Manual sync trigger endpoint
@@ -82,6 +83,10 @@ export async function POST(request: NextRequest) {
           action: params.action ?? (params.fullSync === false ? 'incremental' : 'backfill.start'),
           triggeredBy: 'manual',
         },
+      },
+      P8_INCENTIVE_RECOMPUTE: {
+        name: 'incentive/recompute',
+        data: { triggeredBy: 'manual' },
       },
     }
 
