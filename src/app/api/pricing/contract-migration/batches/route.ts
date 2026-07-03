@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { listMigrationBatches } from '@/lib/pricing/contract-migration'
 
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const batches = await listMigrationBatches()

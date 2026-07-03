@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { buildMigrationPublishPreview } from '@/lib/pricing/contract-migration'
 
 type PublishPreviewContext = {
@@ -8,7 +8,7 @@ type PublishPreviewContext = {
 
 export async function GET(_request: NextRequest, context: PublishPreviewContext) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params

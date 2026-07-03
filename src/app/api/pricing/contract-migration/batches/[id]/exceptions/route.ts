@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { listMigrationExceptions } from '@/lib/pricing/contract-migration'
 
 type ExceptionsContext = {
@@ -8,7 +8,7 @@ type ExceptionsContext = {
 
 export async function GET(_request: NextRequest, context: ExceptionsContext) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params
