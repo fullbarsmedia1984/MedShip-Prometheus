@@ -39,7 +39,7 @@ const periodLabels: Record<PeriodMode, string> = {
 }
 
 function periodSubtitle(mode: PeriodMode): string {
-  if (mode === 'daily') return 'Last 6 weekdays'
+  if (mode === 'daily') return 'Last 6 days'
   if (mode === 'weekly') return 'Last 6 weeks'
   return 'Last 6 months'
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   flexRender,
   getCoreRowModel,
@@ -159,6 +160,8 @@ function buildQuery(filters: {
 }
 
 export function TamInstitutionBrowser() {
+  const searchParams = useSearchParams()
+  const deepLinkedInstitutionId = searchParams.get('institutionId')
   const [search, setSearch] = useState('')
   const [state, setState] = useState('')
   const [tier, setTier] = useState('')
@@ -173,6 +176,7 @@ export function TamInstitutionBrowser() {
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<InstitutionDetail | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [openedDeepLinkId, setOpenedDeepLinkId] = useState<string | null>(null)
 
   const query = useMemo(
     () =>
@@ -226,12 +230,23 @@ export function TamInstitutionBrowser() {
     pageCount: totalPages,
   })
 
-  async function openDetail(institutionId: string) {
+  const openDetail = useCallback(async (institutionId: string) => {
     setDetailOpen(true)
     setDetail(null)
-    const data = await fetchJson<DetailPayload>(`/api/tam/institution/${institutionId}`)
-    setDetail(data.institution)
-  }
+    try {
+      const data = await fetchJson<DetailPayload>(`/api/tam/institution/${institutionId}`)
+      setDetail(data.institution)
+    } catch (err) {
+      setDetailOpen(false)
+      setError(err instanceof Error ? err.message : 'Unable to load institution detail')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!deepLinkedInstitutionId || deepLinkedInstitutionId === openedDeepLinkId) return
+    setOpenedDeepLinkId(deepLinkedInstitutionId)
+    void openDetail(deepLinkedInstitutionId)
+  }, [deepLinkedInstitutionId, openDetail, openedDeepLinkId])
 
   function applyFilters() {
     setPage(1)

@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/dashboard/EmptyState'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import { RevenueByRepChart } from '@/components/charts/RevenueByRepChart'
 import { PipelineByRepChart } from '@/components/charts/PipelineByRepChart'
+import { NewRecurringBusinessChart } from '@/components/charts/NewRecurringBusinessChart'
+import { NewRecurringBusinessByRepChart } from '@/components/charts/NewRecurringBusinessByRepChart'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -40,7 +42,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
-import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary } from '@/lib/data'
+import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep } from '@/lib/data'
 import type { SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
 import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
@@ -69,6 +71,8 @@ type SalesDashboardResponse = {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
+  monthlyBusinessRevenue: MonthlyBusinessRevenue[]
+  monthlyBusinessRevenueByRep: MonthlyBusinessRevenueByRep[]
   pipelineByRep: SeedPipelineByRep[]
   salesHealth: SalesDataHealth
   quotes: SeedQuote[]
@@ -112,6 +116,8 @@ export default function SalesPage() {
   const [kpis, setKpis] = useState<SalesKpis | null>(null)
   const [reps, setReps] = useState<SalesRepPerformance[]>([])
   const [monthlyRevenue, setMonthlyRevenue] = useState<SeedMonthlyRepRevenue[]>([])
+  const [monthlyBusinessRevenue, setMonthlyBusinessRevenue] = useState<MonthlyBusinessRevenue[]>([])
+  const [monthlyBusinessRevenueByRep, setMonthlyBusinessRevenueByRep] = useState<MonthlyBusinessRevenueByRep[]>([])
   const [pipelineByRep, setPipelineByRep] = useState<SeedPipelineByRep[]>([])
   const [salesHealth, setSalesHealth] = useState<SalesDataHealth | null>(null)
   const [quotes, setQuotes] = useState<SeedQuote[]>([])
@@ -134,6 +140,8 @@ export default function SalesPage() {
       setKpis(data.kpis)
       setReps(data.reps)
       setMonthlyRevenue(data.monthlyRevenue)
+      setMonthlyBusinessRevenue(data.monthlyBusinessRevenue ?? [])
+      setMonthlyBusinessRevenueByRep(data.monthlyBusinessRevenueByRep ?? [])
       setPipelineByRep(data.pipelineByRep)
       setSalesHealth(data.salesHealth)
       setSelectedRosterAliases(data.salesHealth.rosterOptions.filter((option) => option.isSelected).map((option) => option.fishbowlSalesperson))
@@ -624,6 +632,8 @@ export default function SalesPage() {
         {/* Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <RevenueByRepChart data={monthlyRevenue} />
+          <NewRecurringBusinessChart data={monthlyBusinessRevenue} />
+          <NewRecurringBusinessByRepChart data={monthlyBusinessRevenueByRep} />
           <PipelineByRepChart data={pipelineByRep} />
         </div>
 

@@ -153,7 +153,12 @@ export function TamMapClient() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mapMode, setMapMode] = useState<'point' | 'heatmap' | 'hexbin'>('point')
-  const [stateMetric, setStateMetric] = useState<'total_tam' | 'n_programs'>('total_tam')
+  const [stateMetric, setStateMetric] = useState<'none' | 'total_tam' | 'n_programs'>('none')
+  const [markerSizeMetric, setMarkerSizeMetric] = useState<
+    'accreditation_rate' | 'est_annual_enrollment'
+  >('accreditation_rate')
+  const [hexHeightMode, setHexHeightMode] = useState<'short' | 'medium' | 'tall'>('short')
+  const [showEnrollmentHeatmap, setShowEnrollmentHeatmap] = useState(false)
 
   const query = useMemo(
     () => buildQuery({ scenario, state, tier, contactRole, contactHasEmail }),
@@ -190,7 +195,7 @@ export function TamMapClient() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-8">
+        <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-11">
           <select
             value={scenario}
             onChange={(event) => setScenario(event.target.value as TamScenario)}
@@ -249,13 +254,48 @@ export function TamMapClient() {
             <option value="hexbin">Hexbin</option>
           </select>
           <select
-            value={stateMetric}
-            onChange={(event) => setStateMetric(event.target.value as 'total_tam' | 'n_programs')}
+            value={markerSizeMetric}
+            onChange={(event) =>
+              setMarkerSizeMetric(
+                event.target.value as 'accreditation_rate' | 'est_annual_enrollment'
+              )
+            }
             className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
           >
+            <option value="accreditation_rate">Size: approval</option>
+            <option value="est_annual_enrollment">Size: enrollment</option>
+          </select>
+          <select
+            value={stateMetric}
+            onChange={(event) =>
+              setStateMetric(event.target.value as 'none' | 'total_tam' | 'n_programs')
+            }
+            className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
+          >
+            <option value="none">No state overlay</option>
             <option value="total_tam">State TAM $</option>
             <option value="n_programs">State programs</option>
           </select>
+          <select
+            value={hexHeightMode}
+            disabled={mapMode !== 'hexbin'}
+            onChange={(event) => setHexHeightMode(event.target.value as 'short' | 'medium' | 'tall')}
+            className="h-8 rounded-lg border border-input bg-background px-2 text-sm disabled:opacity-50"
+          >
+            <option value="short">Hex: short</option>
+            <option value="medium">Hex: medium</option>
+            <option value="tall">Hex: tall</option>
+          </select>
+          <label className="flex h-8 items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showEnrollmentHeatmap}
+              disabled={mapMode !== 'point'}
+              onChange={(event) => setShowEnrollmentHeatmap(event.target.checked)}
+              className="h-4 w-4 accent-medship-primary disabled:opacity-50"
+            />
+            Heat
+          </label>
           <Button onClick={loadData}>
             <Search className="h-4 w-4" />
             Apply
@@ -277,6 +317,9 @@ export function TamMapClient() {
           stateGeojson={choroplethGeojson}
           stateMetric={stateMetric}
           mapMode={mapMode}
+          markerSizeMetric={markerSizeMetric}
+          hexHeightMode={hexHeightMode}
+          showEnrollmentHeatmap={showEnrollmentHeatmap}
           mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''}
         />
       )}

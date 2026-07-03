@@ -1,3 +1,8 @@
+-- Reconciled from live DB (Phase 0, PRD §12): applied 2026-07-01 as version
+-- 20260701173407 "020_contract_pricing_migration_layer" via MCP apply_migration,
+-- but never committed to the repo. Recorded verbatim for repo/schema parity.
+-- Do NOT re-apply to the production project.
+
 -- ============================================================
 -- Contract Pricing Migration Layer
 -- Stages reviewed supplier/distributor contract-cost dry runs.

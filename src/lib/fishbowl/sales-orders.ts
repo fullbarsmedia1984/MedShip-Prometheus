@@ -204,9 +204,49 @@ export async function getSalesOrderById(
   }
 }
 
+function normalizeSoNumber(value: unknown): string {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+/**
+ * Candidate SO numbers to try for a user-typed value. Fishbowl stores plain
+ * numbers (e.g. "138810"), but reps habitually write "S138810" or "SO-138810";
+ * strip that prefix as a fallback candidate while always trying the literal
+ * input first (a handful of real numbers do contain letters).
+ */
+export function soNumberCandidates(input: string): string[] {
+  const literal = input.trim();
+  if (!literal) return [];
+  const candidates = [literal];
+  const prefixed = literal.match(/^SO?[-\s]?(\d+)$/i);
+  if (prefixed) candidates.push(prefixed[1]);
+  return candidates;
+}
+
+/** Exact SO-number match on the fields Fishbowl uses across versions. */
+export function salesOrderMatchesNumber(
+  order: FBRawSalesOrder,
+  soNumber: string
+): boolean {
+  const wanted = normalizeSoNumber(soNumber);
+  if (!wanted) return false;
+  return (
+    normalizeSoNumber(order.number) === wanted ||
+    normalizeSoNumber((order as Record<string, unknown>).num) === wanted ||
+    normalizeSoNumber((order as Record<string, unknown>).soNumber) === wanted
+  );
+}
+
 /**
  * Look up a Sales Order by its SO number (e.g., "SO-10045").
- * Returns the raw Fishbowl response or null if not found.
+ *
+ * IMPORTANT: this Fishbowl version silently ignores the `?number=` filter and
+ * returns the unfiltered SO list (verified 2026-07: any value, including
+ * garbage, returns the same 65k-order list, oldest first). The response is
+ * therefore only trusted when a row's number is an exact match — positional
+ * results are never used. Because the unfiltered list is oldest-first, this
+ * only finds very old orders; callers needing recent orders should combine it
+ * with findSalesOrderByNumberTailScan or an ID lookup.
  */
 export async function getSalesOrderByNumber(
   client: FishbowlClient,
@@ -229,15 +269,53 @@ export async function getSalesOrderByNumber(
         salesOrders?: FBRawSalesOrder[];
         data?: FBRawSalesOrder[];
       };
-      return page.results?.[0] ?? page.salesOrders?.[0] ?? page.data?.[0] ?? null;
+      const rows = page.results ?? page.salesOrders ?? page.data ?? [];
+      return rows.find((row) => salesOrderMatchesNumber(row, soNumber)) ?? null;
     }
-    return response;
+    return salesOrderMatchesNumber(response, soNumber) ? response : null;
   } catch (err) {
     if (err instanceof FishbowlApiError && err.statusCode === 404) {
       return null;
     }
     throw err;
   }
+}
+
+/**
+ * Find an SO by number by scanning the unfiltered list from the LAST page
+ * backwards. Fishbowl returns orders oldest-first, so recently created
+ * orders (e.g. a quote entered minutes ago that no sync has cached yet)
+ * live on the final pages. Scans at most `maxPages` × `pageSize` orders.
+ */
+export async function findSalesOrderByNumberTailScan(
+  client: FishbowlClient,
+  soNumber: string,
+  options: { maxPages?: number; pageSize?: number } = {}
+): Promise<FBRawSalesOrder | null> {
+  const pageSize = options.pageSize ?? PAGE_SIZE;
+  const maxPages = Math.max(1, options.maxPages ?? 5);
+
+  const probe = await getSalesOrdersPage(client, 1, 1);
+  const totalOrders = probe.totalCount ?? probe.totalPages; // pageSize 1 => totalPages == count
+  if (!Number.isFinite(totalOrders) || totalOrders <= 0) return null;
+
+  const lastPage = Math.max(1, Math.ceil(totalOrders / pageSize));
+  const stopPage = Math.max(1, lastPage - maxPages + 1);
+
+  // Fishbowl's unfiltered list endpoint is slow (~7s/page); fetch the tail
+  // pages concurrently rather than serially.
+  const pageNumbers: number[] = [];
+  for (let pageNumber = lastPage; pageNumber >= stopPage; pageNumber--) {
+    pageNumbers.push(pageNumber);
+  }
+  const pages = await Promise.all(
+    pageNumbers.map((pageNumber) => getSalesOrdersPage(client, pageNumber, pageSize))
+  );
+  for (const page of pages) {
+    const match = page.results.find((row) => salesOrderMatchesNumber(row, soNumber));
+    if (match) return match;
+  }
+  return null;
 }
 
 /**

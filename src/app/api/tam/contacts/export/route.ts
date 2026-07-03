@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { csvEscape, parseContactListParams } from '@/lib/tam/api'
 import { listTamContacts, type TamMailingContactRow } from '@/lib/tam/supabase'
 
@@ -41,7 +41,7 @@ function contactToCsvRow(contact: TamMailingContactRow) {
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const params = parseContactListParams(new URL(request.url).searchParams)

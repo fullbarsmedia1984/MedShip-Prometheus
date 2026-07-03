@@ -429,16 +429,12 @@ const EVENT_CALL_ACTIVITY_FIELDS = `
   Id, OwnerId, ActivityDate, CreatedDate, LastModifiedDate,
   ${CALL_ACTIVITY_PROFILE_FIELDS}
 `
-const ACTUAL_RINGDNA_ACTIVITY_WHERE = `(
+const EVENT_RINGDNA_WHERE = `(
   ringdna__Call_Duration_min__c != null OR
   ringdna__Call_Connected__c = true OR
-  ringdna__Voicemail__c = true OR
-  ringdna__Call_Rating__c != null OR
   ringdna__Call_Disposition__c != null OR
   ringdna__Call_Start_Time__c != null
 )`
-const TASK_RINGDNA_CALL_WHERE = `TaskSubtype = 'Call' AND ActivityDate <= TODAY AND ${ACTUAL_RINGDNA_ACTIVITY_WHERE}`
-const EVENT_RINGDNA_CALL_WHERE = `ActivityDate <= TODAY AND ${ACTUAL_RINGDNA_ACTIVITY_WHERE}`
 
 function mapCallActivityRow(r: Record<string, unknown>, activityType: 'Task' | 'Event') {
   return {
@@ -480,8 +476,8 @@ export async function syncCallActivities(sf: SalesforceClient, supabase: Supabas
     const conn = sf.getConnection()
 
     const [taskRecords, eventRecords] = await Promise.all([
-      queryAll(conn, `SELECT ${TASK_CALL_ACTIVITY_FIELDS} FROM Task WHERE ${TASK_RINGDNA_CALL_WHERE} ORDER BY ActivityDate DESC`),
-      queryAll(conn, `SELECT ${EVENT_CALL_ACTIVITY_FIELDS} FROM Event WHERE ${EVENT_RINGDNA_CALL_WHERE} ORDER BY ActivityDate DESC`),
+      queryAll(conn, `SELECT ${TASK_CALL_ACTIVITY_FIELDS} FROM Task WHERE TaskSubtype = 'Call' ORDER BY ActivityDate DESC`),
+      queryAll(conn, `SELECT ${EVENT_CALL_ACTIVITY_FIELDS} FROM Event WHERE ${EVENT_RINGDNA_WHERE} ORDER BY ActivityDate DESC`),
     ])
 
     const rows = [
@@ -609,8 +605,8 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
   if (callActivityWm) {
     const start = Date.now()
     const [taskRecords, eventRecords] = await Promise.all([
-      queryAll(conn, `SELECT ${TASK_CALL_ACTIVITY_FIELDS} FROM Task WHERE ${TASK_RINGDNA_CALL_WHERE} AND LastModifiedDate >= ${callActivityWm}`),
-      queryAll(conn, `SELECT ${EVENT_CALL_ACTIVITY_FIELDS} FROM Event WHERE ${EVENT_RINGDNA_CALL_WHERE} AND LastModifiedDate >= ${callActivityWm}`),
+      queryAll(conn, `SELECT ${TASK_CALL_ACTIVITY_FIELDS} FROM Task WHERE TaskSubtype = 'Call' AND LastModifiedDate >= ${callActivityWm}`),
+      queryAll(conn, `SELECT ${EVENT_CALL_ACTIVITY_FIELDS} FROM Event WHERE ${EVENT_RINGDNA_WHERE} AND LastModifiedDate >= ${callActivityWm}`),
     ])
     const rows = [
       ...taskRecords.map((r) => mapCallActivityRow(r, 'Task')),

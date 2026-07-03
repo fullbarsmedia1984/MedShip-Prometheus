@@ -24,6 +24,8 @@ import type {
   SeedRegionSummary,
   SeedProfileCall,
   SeedWeeklyCallVolume,
+  ProfileCallOutcome,
+  ProfileCallType,
 } from '@/lib/seed-data'
 import { AUTOMATION_INFO } from '@/types'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
@@ -45,6 +47,9 @@ export interface PaginatedResult<T> {
 export interface OrderFilters {
   status?: string
   salesRepId?: string
+  // Restrict to these Fishbowl salesperson aliases (rep row-scoping). Applied
+  // on top of any UI filters; an empty array matches nothing.
+  salespersonIn?: string[]
   search?: string
   dateFrom?: string
   dateTo?: string
@@ -94,6 +99,31 @@ function normalizeRingDnaDirection(direction: string | null): 'Inbound' | 'Outbo
   return direction === 'Inbound' ? 'Inbound' : 'Outbound'
 }
 
+const PROFILE_CALL_TYPES: ProfileCallType[] = [
+  'Initial Discovery',
+  'Follow-Up',
+  'Product Demo',
+  'Needs Assessment',
+  'Budget Discussion',
+  'Contract Review',
+]
+
+const PROFILE_CALL_OUTCOMES: ProfileCallOutcome[] = [
+  'Interested - Next Steps',
+  'Needs Follow-Up',
+  'Not Interested',
+  'Scheduled Demo',
+  'Quote Requested',
+]
+
+function normalizeProfileCallType(value: string | null | undefined): ProfileCallType {
+  return PROFILE_CALL_TYPES.includes(value as ProfileCallType) ? value as ProfileCallType : 'Follow-Up'
+}
+
+function normalizeProfileCallOutcome(value: string | null | undefined): ProfileCallOutcome {
+  return PROFILE_CALL_OUTCOMES.includes(value as ProfileCallOutcome) ? value as ProfileCallOutcome : 'Needs Follow-Up'
+}
+
 type InventorySnapshotRow = {
   id: string
   part_number: string
@@ -135,14 +165,6 @@ type SupabaseRangeQuery<T> = {
 
 const PAGE_FETCH_SIZE = 1000
 export const SALES_DASHBOARD_CACHE_TAG = 'sales-dashboard'
-const ACTUAL_RINGDNA_CALL_FILTER = [
-  'ringdna_start_time.not.is.null',
-  'ringdna_duration_min.gt.0',
-  'ringdna_connected.eq.true',
-  'ringdna_voicemail.eq.true',
-  'ringdna_rating.not.is.null',
-  'ringdna_disposition.not.is.null',
-].join(',')
 const LIVE_AUTOMATIONS = new Set<AutomationType>([
   'SF_FULL_SYNC',
   'SF_INCREMENTAL_SYNC',
@@ -352,10 +374,25 @@ export interface SalesDataHealth {
   rosterOptions: SalesRosterOption[]
 }
 
+export interface MonthlyBusinessRevenue {
+  month: string
+  newBusinessRevenue: number
+  recurringBusinessRevenue: number
+  newBusinessOrders: number
+  recurringBusinessOrders: number
+}
+
+export interface MonthlyBusinessRevenueByRep {
+  month: string
+  [key: string]: string | number
+}
+
 export interface SalesDashboardCore {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
+  monthlyBusinessRevenue: MonthlyBusinessRevenue[]
+  monthlyBusinessRevenueByRep: MonthlyBusinessRevenueByRep[]
   salesHealth: SalesDataHealth
 }
 
@@ -1031,6 +1068,10 @@ function applyOrderFilters(items: Order[], filters: OrderFilters): Order[] {
   if (filters.salesRepId && filters.salesRepId !== 'all') {
     filtered = filtered.filter((o) => o.salesRepId === filters.salesRepId)
   }
+  if (filters.salespersonIn) {
+    const allowed = new Set(filters.salespersonIn)
+    filtered = filtered.filter((o) => allowed.has(o.salesRepId))
+  }
   if (filters.search) {
     const q = filters.search.toLowerCase()
     filtered = filtered.filter(
@@ -1501,10 +1542,6 @@ function monthStartKey(value: string): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-function todayActivityDateKey(): string {
-  return dateKey(new Date())
-}
-
 function monthPeriodForDate(dateValue: string | null, fallbackNow = new Date()) {
   const date = dateValue ? new Date(dateValue) : fallbackNow
   const safeDate = Number.isNaN(date.getTime()) ? fallbackNow : date
@@ -1659,12 +1696,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
     ),
     supabase.from('sf_opportunities').select('owner_sf_id, amount').eq('is_closed', false),
-    supabase
-      .from('sf_call_activities')
-      .select('owner_sf_id, ringdna_connected, activity_date')
-      .gte('activity_date', lastMonthStart)
-      .lte('activity_date', todayActivityDateKey())
-      .or(ACTUAL_RINGDNA_CALL_FILTER),
+    supabase.from('sf_call_activities').select('owner_sf_id, ringdna_connected, activity_date').gte('activity_date', lastMonthStart),
     supabase.from('opportunity_sales_order_links').select('*', { count: 'estimated', head: true }),
   ])
 
@@ -1689,6 +1721,14 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   const aliasStats = new Map<string, SalesAliasGap>()
   const latestActivityByAlias = new Map<string, string>()
   const monthlyRows = months.map(({ label }) => ({ month: label } as SeedMonthlyRepRevenue))
+  const monthlyBusinessRows = months.map(({ label }) => ({
+    month: label,
+    newBusinessRevenue: 0,
+    recurringBusinessRevenue: 0,
+    newBusinessOrders: 0,
+    recurringBusinessOrders: 0,
+  }))
+  const monthlyBusinessByRepRows = months.map(({ label }) => ({ month: label } as MonthlyBusinessRevenueByRep))
   const pipelineByOwner = new Map<string, number>()
   const callStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
 
@@ -1893,6 +1933,17 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       const monthIndex = metricDate ? months.findIndex((month) => metricDate.startsWith(month.key)) : -1
       if (monthIndex >= 0 && metricDate && metricDate >= monthlyStart) {
         monthlyRows[monthIndex][rep.name] = toNumber(monthlyRows[monthIndex][rep.name] as number | string | null) + amount
+        if (businessClassification === 'new_business') {
+          monthlyBusinessRows[monthIndex].newBusinessRevenue += amount
+          monthlyBusinessRows[monthIndex].newBusinessOrders++
+          monthlyBusinessByRepRows[monthIndex][`${rep.name} - New`] =
+            toNumber(monthlyBusinessByRepRows[monthIndex][`${rep.name} - New`] as number | string | null) + amount
+        } else if (businessClassification === 'recurring_business') {
+          monthlyBusinessRows[monthIndex].recurringBusinessRevenue += amount
+          monthlyBusinessRows[monthIndex].recurringBusinessOrders++
+          monthlyBusinessByRepRows[monthIndex][`${rep.name} - Recurring`] =
+            toNumber(monthlyBusinessByRepRows[monthIndex][`${rep.name} - Recurring`] as number | string | null) + amount
+        }
       }
     } else if (row.canonical_state === 'quote') {
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
@@ -1969,6 +2020,15 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       row[rep.name] = roundCurrency(toNumber(row[rep.name] as number | string | null))
     }
   }
+  for (const row of monthlyBusinessRows) {
+    row.newBusinessRevenue = roundCurrency(row.newBusinessRevenue)
+    row.recurringBusinessRevenue = roundCurrency(row.recurringBusinessRevenue)
+  }
+  for (const row of monthlyBusinessByRepRows) {
+    for (const key of Object.keys(row)) {
+      if (key !== 'month') row[key] = roundCurrency(toNumber(row[key] as number | string | null))
+    }
+  }
 
   const allAliasGaps = Array.from(aliasStats.values())
     .map((gap) => ({ ...gap, revenueYTD: roundCurrency(gap.revenueYTD) }))
@@ -2010,6 +2070,8 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     kpis,
     reps,
     monthlyRevenue: monthlyRows,
+    monthlyBusinessRevenue: monthlyBusinessRows,
+    monthlyBusinessRevenueByRep: monthlyBusinessByRepRows,
     salesHealth: {
       revenueSource: 'fishbowl_sales_orders',
       pipelineSource: 'salesforce_opportunities',
@@ -2230,6 +2292,9 @@ export async function getSalesActivity(limit = 10): Promise<SeedSalesActivity[]>
 
 export interface QuoteFilters {
   status?: string
+  // Restrict to these Fishbowl salesperson aliases (rep row-scoping). Applied
+  // on top of any UI filters; an empty array matches nothing.
+  salespersonIn?: string[]
   search?: string
   scope?: 'active' | 'business' | 'all'
   page?: number
@@ -2318,6 +2383,10 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
 
   if (filters.status && filters.status !== 'all') {
     filtered = filtered.filter((quote) => quote.status === filters.status)
+  }
+  if (filters.salespersonIn) {
+    const allowed = new Set(filters.salespersonIn)
+    filtered = filtered.filter((quote) => allowed.has(quote.repName))
   }
   if (filters.search) {
     const q = filters.search.toLowerCase()
@@ -2577,8 +2646,6 @@ async function getLiveProfileCalls(filters: ProfileCallFilters): Promise<Paginat
   let query = supabase
     .from('sf_call_activities')
     .select('sf_id, activity_type, owner_sf_id, activity_date, task_subtype, call_type, call_disposition, profile_call_type, profile_call_outcome, products_discussed, program_size, budget_timeframe, follow_up_date, converted_to_opp, related_opportunity_sf_id, ringdna_direction, ringdna_duration_min, ringdna_connected, ringdna_rating, ringdna_voicemail, ringdna_keywords, ringdna_start_time, ringdna_disposition, calendly_no_show, calendly_rescheduled')
-    .lte('activity_date', todayActivityDateKey())
-    .or(ACTUAL_RINGDNA_CALL_FILTER)
     .order('activity_date', { ascending: false })
     .limit(filters.limit ?? filters.pageSize ?? 50)
 
@@ -2622,8 +2689,8 @@ async function getLiveProfileCalls(filters: ProfileCallFilters): Promise<Paginat
     contactName: '',
     activityDate: c.activity_date ?? '',
     activityType: c.activity_type as 'Task' | 'Event',
-    profileCallType: c.profile_call_type ?? c.ringdna_disposition ?? c.call_disposition ?? 'Sales Call',
-    profileCallOutcome: c.profile_call_outcome ?? c.ringdna_disposition ?? c.call_disposition ?? 'Unclassified',
+    profileCallType: normalizeProfileCallType(c.profile_call_type),
+    profileCallOutcome: normalizeProfileCallOutcome(c.profile_call_outcome ?? c.ringdna_disposition ?? c.call_disposition),
     productsDiscussed: c.products_discussed ? c.products_discussed.split(';').map((s: string) => s.trim()) : [],
     programSize: c.program_size ?? '',
     currentSupplier: null,
@@ -2697,8 +2764,6 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
         .from('sf_call_activities')
         .select('owner_sf_id, converted_to_opp, ringdna_connected, ringdna_duration_min, ringdna_rating, ringdna_voicemail')
         .gte('activity_date', monthStart)
-        .lte('activity_date', todayActivityDateKey())
-        .or(ACTUAL_RINGDNA_CALL_FILTER)
         .order('activity_date', { ascending: true })
         .order('sf_id', { ascending: true })
     )
@@ -2715,7 +2780,6 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
     .select('*', { count: 'exact', head: true })
     .gte('activity_date', lastMonthStart)
     .lt('activity_date', monthStart)
-    .or(ACTUAL_RINGDNA_CALL_FILTER)
 
   if (lastMonthError) {
     if (isMissingRelationError(lastMonthError)) {
@@ -2927,25 +2991,14 @@ function finalizePeriod(period: MutableCallActivityPeriod): CallActivityPeriodSu
   }
 }
 
-function isWeekend(date: Date): boolean {
-  const day = date.getDay()
-  return day === 0 || day === 6
-}
-
 function makeDailyPeriods(now: Date): MutableCallActivityPeriod[] {
-  const periods: MutableCallActivityPeriod[] = []
-  const date = new Date(now)
-  date.setHours(0, 0, 0, 0)
-
-  while (periods.length < 6) {
-    if (!isWeekend(date)) {
-      const key = dateKey(date)
-      periods.push(createPeriod(key, date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })))
-    }
-    date.setDate(date.getDate() - 1)
-  }
-
-  return periods.reverse()
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - (5 - index))
+    date.setHours(0, 0, 0, 0)
+    const key = dateKey(date)
+    return createPeriod(key, date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+  })
 }
 
 function makeWeeklyPeriods(now: Date): MutableCallActivityPeriod[] {
@@ -2986,8 +3039,6 @@ export async function getCallActivitySummary(): Promise<CallActivitySummary> {
         .from('sf_call_activities')
         .select('owner_sf_id, activity_date, ringdna_direction, ringdna_duration_min, ringdna_connected')
         .gte('activity_date', startDate)
-        .lte('activity_date', todayActivityDateKey())
-        .or(ACTUAL_RINGDNA_CALL_FILTER)
         .order('activity_date', { ascending: true })
         .order('sf_id', { ascending: true })
     )
@@ -3118,8 +3169,6 @@ export async function getWeeklyCallVolume(): Promise<SeedWeeklyCallVolume[]> {
         .from('sf_call_activities')
         .select('owner_sf_id, activity_date')
         .gte('activity_date', startDate)
-        .lte('activity_date', todayActivityDateKey())
-        .or(ACTUAL_RINGDNA_CALL_FILTER)
         .order('activity_date', { ascending: true })
         .order('sf_id', { ascending: true })
     ).then((data) => ({ data, error: null as Error | null })).catch((error) => ({ data: null, error })),
@@ -3187,8 +3236,6 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
         .select('profile_call_outcome')
         .not('profile_call_outcome', 'is', null)
         .gte('activity_date', monthStart)
-        .lte('activity_date', todayActivityDateKey())
-        .or(ACTUAL_RINGDNA_CALL_FILTER)
         .order('activity_date', { ascending: true })
         .order('sf_id', { ascending: true })
     )
@@ -3250,8 +3297,6 @@ async function getLiveTopKeywords(limit: number): Promise<KeywordResult[]> {
         .from('sf_call_activities')
         .select('sf_id, ringdna_keywords')
         .not('ringdna_keywords', 'is', null)
-        .lte('activity_date', todayActivityDateKey())
-        .or(ACTUAL_RINGDNA_CALL_FILTER)
         .order('activity_date', { ascending: false })
         .order('sf_id', { ascending: true })
     )

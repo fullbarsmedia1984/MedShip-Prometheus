@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { parseInstitutionFilters, parseTamScenario } from '@/lib/tam/api'
 import { getTamByStateDollars, listTamGeo } from '@/lib/tam/supabase'
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const searchParams = new URL(request.url).searchParams

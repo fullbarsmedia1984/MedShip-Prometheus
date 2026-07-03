@@ -4,6 +4,9 @@ import { describe, it } from 'node:test'
 const { selectIncrementalSalesOrderPages } = await import(
   new URL('../sales-order-page-bands.ts', import.meta.url).href
 )
+const { selectRotatingSalesOrderPages } = await import(
+  new URL('../sales-order-page-bands.ts', import.meta.url).href
+)
 
 describe('selectIncrementalSalesOrderPages', () => {
   it('selects first and last page bands for large Fishbowl result sets', () => {
@@ -29,6 +32,38 @@ describe('selectIncrementalSalesOrderPages', () => {
     assert.deepEqual(
       selectIncrementalSalesOrderPages(655, 5),
       [1, 2, 3, 4, 5, 651, 652, 653, 654, 655]
+    )
+  })
+})
+
+describe('selectRotatingSalesOrderPages', () => {
+  it('selects a contiguous rotating window from the cursor', () => {
+    assert.deepEqual(
+      selectRotatingSalesOrderPages(652, 10, 301),
+      {
+        pageNumbers: [301, 302, 303, 304, 305, 306, 307, 308, 309, 310],
+        nextStartPage: 311,
+      }
+    )
+  })
+
+  it('wraps at the end of Fishbowl pagination', () => {
+    assert.deepEqual(
+      selectRotatingSalesOrderPages(652, 10, 648),
+      {
+        pageNumbers: [648, 649, 650, 651, 652, 1, 2, 3, 4, 5],
+        nextStartPage: 6,
+      }
+    )
+  })
+
+  it('clamps invalid cursors and page counts', () => {
+    assert.deepEqual(
+      selectRotatingSalesOrderPages(3, 0, Number.NaN),
+      {
+        pageNumbers: [1],
+        nextStartPage: 2,
+      }
     )
   })
 })

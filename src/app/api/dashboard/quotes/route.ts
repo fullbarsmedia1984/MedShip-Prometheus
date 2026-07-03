@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/auth'
+import { getRepAliases } from '@/lib/reps'
 import { getQuotes } from '@/lib/data'
 import type { QuoteFilters } from '@/lib/data'
 import type { SeedQuote } from '@/lib/seed-data'
@@ -72,8 +73,14 @@ export async function GET(request: NextRequest) {
 
     const params = request.nextUrl.searchParams
     const scope = params.get('scope')
+    // Reps only ever see their own quotes, regardless of requested filters.
+    const repScope =
+      auth.role === 'sales_rep' && auth.user
+        ? await getRepAliases(auth.user.id)
+        : undefined
     const filters: QuoteFilters = {
       status: params.get('status') ?? 'all',
+      salespersonIn: repScope,
       search: params.get('search') ?? '',
       scope: scope === 'all' || scope === 'business' ? scope : 'active',
     }

@@ -1,3 +1,8 @@
+-- Reconciled from live DB (Phase 0, PRD §12): applied 2026-06-25 as version
+-- 20260625183808 "019_hercules_api_sync_state" via MCP apply_migration,
+-- but never committed to the repo. Recorded verbatim for repo/schema parity.
+-- Do NOT re-apply to the production project.
+
 -- ============================================================
 -- Hercules API sync state / checkpoints
 -- Persistent resumability for /api/v1/parts/list page backfills.

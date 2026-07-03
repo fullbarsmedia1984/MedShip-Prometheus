@@ -27,7 +27,10 @@ import { verifySharedSecretHeader } from '@/lib/webhooks/verification'
 export async function POST(request: NextRequest) {
   try {
     const webhookSecret = process.env.SALESFORCE_WEBHOOK_SECRET
-    if (webhookSecret && !verifySharedSecretHeader(request, webhookSecret)) {
+    if (!webhookSecret) {
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
+    }
+    if (!verifySharedSecretHeader(request, webhookSecret)) {
       return NextResponse.json({ error: 'Invalid webhook secret' }, { status: 401 })
     }
 
@@ -36,10 +39,6 @@ export async function POST(request: NextRequest) {
     logger.log('info', 'P1_OPP_TO_SO', 'Received Salesforce webhook', {
       replayId: body.replayId,
     })
-
-    // If SALESFORCE_WEBHOOK_SECRET is not configured, this route remains
-    // permissive to avoid breaking the production P1 callback before the
-    // final Salesforce signing contract is available.
 
     // Extract payload from Platform Event format
     const payload = body.payload || body

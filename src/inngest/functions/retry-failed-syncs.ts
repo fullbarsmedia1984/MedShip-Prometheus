@@ -6,7 +6,11 @@ import { createSalesforceClient } from '@/lib/salesforce/client'
 import { getOpportunityById } from '@/lib/salesforce/queries'
 import { processP1Opportunity } from './sf-opportunity-closed'
 import { CircuitBreakerOpenError, runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
-import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
+import {
+  FishbowlPriorityYieldError,
+  FishbowlSessionLockError,
+  withFishbowlSession,
+} from '@/lib/fishbowl/session'
 
 /**
  * Retry Failed Sync Events
@@ -147,6 +151,18 @@ export const retryFailedSyncs = inngest.createFunction(
             }
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+            if (error instanceof FishbowlPriorityYieldError) {
+              const nextRetry = calculateNextRetry(currentRetryCount, event.max_retries ?? 4)
+              await updateSyncEvent(event.id!, {
+                status: 'retrying',
+                errorMessage,
+                retryCount: currentRetryCount,
+                nextRetryAt: nextRetry?.toISOString() || null,
+                completedAt: new Date().toISOString(),
+              })
+              return
+            }
 
             if (error instanceof FishbowlSessionLockError || error instanceof CircuitBreakerOpenError) {
               const newRetryCount = currentRetryCount + 1

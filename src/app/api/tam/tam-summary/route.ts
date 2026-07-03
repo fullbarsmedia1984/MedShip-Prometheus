@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { getTamSummary } from '@/lib/tam/supabase'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const scenarios = await getTamSummary()

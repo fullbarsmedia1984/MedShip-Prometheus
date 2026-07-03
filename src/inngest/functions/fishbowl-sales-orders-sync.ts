@@ -13,6 +13,7 @@ import {
   prepareSalesOrderIncrementalCheckpoints,
   processSalesOrderPageBatch,
   retryFailedSalesOrderBackfill,
+  discoverSalesOrdersByIdWindow,
   startSalesOrderBackfill,
 } from '@/lib/fishbowl/sales-order-completeness'
 import { logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
@@ -39,10 +40,15 @@ function countProcessedRows(result: Record<string, unknown>) {
   const details = result.details && typeof result.details === 'object'
     ? result.details as Record<string, unknown>
     : null
+  const idDiscovery = result.idDiscovery && typeof result.idDiscovery === 'object'
+    ? result.idDiscovery as Record<string, unknown>
+    : null
 
   return numericResultValue(result.headersUpserted)
     + numericResultValue(result.detailsSucceeded)
     + numericResultValue(pages?.headersUpserted)
+    + numericResultValue(idDiscovery?.headersUpserted)
+    + numericResultValue(idDiscovery?.discoveredOrders)
     + numericResultValue(details?.detailsSucceeded)
 }
 
@@ -361,10 +367,11 @@ async function processIncrementalChunk(supabase: ReturnType<typeof createAdminCl
         ? prepared.requeuedPageNumbers.filter((page): page is number => typeof page === 'number')
         : undefined,
     })
+    const idDiscovery = await discoverSalesOrdersByIdWindow(supabase, client)
     const details = await hydrateSalesOrderDetailBatch(supabase, client)
     const freshness = await assertSalesOrderCacheFreshness(supabase)
 
-    return { started, prepared, pages, details, freshness }
+    return { started, prepared, pages, idDiscovery, details, freshness }
   })
 }
 
