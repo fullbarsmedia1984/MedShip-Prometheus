@@ -17,6 +17,7 @@ import {
 } from '@/lib/fishbowl/sales-order-completeness'
 import { logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
 import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
+import { sendAlertEmail } from '@/lib/utils/notifications'
 
 type P7Action =
   | 'backfill.start'
@@ -43,6 +44,155 @@ function countProcessedRows(result: Record<string, unknown>) {
     + numericResultValue(result.detailsSucceeded)
     + numericResultValue(pages?.headersUpserted)
     + numericResultValue(details?.detailsSucceeded)
+}
+
+const DEFAULT_SO_FRESHNESS_MAX_DAYS = Number(process.env.FISHBOWL_SO_FRESHNESS_MAX_DAYS ?? 30)
+const DEFAULT_SO_STALE_ALERT_COOLDOWN_MINUTES = Number(
+  process.env.FISHBOWL_SO_STALE_ALERT_COOLDOWN_MINUTES ?? 360
+)
+
+class SalesOrderFreshnessError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SalesOrderFreshnessError'
+  }
+}
+
+function parseIsoDate(value: unknown): Date | null {
+  if (!value) return null
+  const date = new Date(String(value))
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function ageInDays(date: Date, now = new Date()) {
+  return (now.getTime() - date.getTime()) / 86_400_000
+}
+
+async function maybeNotifyStaleSalesOrderCache(
+  supabase: ReturnType<typeof createAdminClient>,
+  details: {
+    latestSalesOrderDate: string | null
+    latestDateCreated: string | null
+    latestSourceLastSeenAt: string | null
+    ageDays: number | null
+    maxAgeDays: number
+    message: string
+  }
+) {
+  const settingKey = 'p7_sales_order_stale_cache_alert'
+  const now = new Date()
+  const cooldownMinutes = Math.max(15, DEFAULT_SO_STALE_ALERT_COOLDOWN_MINUTES)
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', settingKey)
+    .maybeSingle()
+
+  const value = data?.value as { lastNotifiedAt?: string } | string | null | undefined
+  const lastNotifiedAt = typeof value === 'string' ? value : value?.lastNotifiedAt
+  const lastNotifiedDate = parseIsoDate(lastNotifiedAt)
+  if (lastNotifiedDate && now.getTime() - lastNotifiedDate.getTime() < cooldownMinutes * 60_000) {
+    return { sent: false, skipped: true, reason: 'cooldown' }
+  }
+
+  const text = [
+    'P7 Fishbowl Sales Order cache freshness check failed.',
+    '',
+    details.message,
+    '',
+    `Latest issued SO business date: ${details.latestSalesOrderDate ?? 'none'}`,
+    `Latest Fishbowl date_created: ${details.latestDateCreated ?? 'none'}`,
+    `Latest source_last_seen_at: ${details.latestSourceLastSeenAt ?? 'none'}`,
+    `Age in days: ${details.ageDays === null ? 'unknown' : details.ageDays.toFixed(1)}`,
+    `Allowed age in days: ${details.maxAgeDays}`,
+    '',
+    'Prometheus marked the P7 run failed because a green sync status with stale business data is unsafe.',
+  ].join('\n')
+
+  const result = await sendAlertEmail({
+    subject: '[Prometheus] P7 Fishbowl Sales Order cache is stale',
+    text,
+  })
+
+  await supabase
+    .from('app_settings')
+    .upsert({
+      key: settingKey,
+      value: {
+        lastNotifiedAt: now.toISOString(),
+        latestSalesOrderDate: details.latestSalesOrderDate,
+        latestDateCreated: details.latestDateCreated,
+        latestSourceLastSeenAt: details.latestSourceLastSeenAt,
+        ageDays: details.ageDays,
+        maxAgeDays: details.maxAgeDays,
+        sent: result.sent,
+        provider: result.provider,
+        error: result.error,
+      },
+      updated_at: now.toISOString(),
+    })
+
+  return result
+}
+
+async function assertSalesOrderCacheFreshness(supabase: ReturnType<typeof createAdminClient>) {
+  const maxAgeDays = Math.max(1, DEFAULT_SO_FRESHNESS_MAX_DAYS)
+  const [latestBusinessDateRes, latestCreatedDateRes, latestSourceSeenRes] = await Promise.all([
+    supabase
+      .from('fb_sales_orders')
+      .select('sales_order_metric_at')
+      .eq('canonical_state', 'order')
+      .not('sales_order_metric_at', 'is', null)
+      .order('sales_order_metric_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('date_created')
+      .not('date_created', 'is', null)
+      .order('date_created', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('fb_sales_orders')
+      .select('source_last_seen_at')
+      .not('source_last_seen_at', 'is', null)
+      .order('source_last_seen_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  if (latestBusinessDateRes.error) {
+    throw new Error(`Could not read latest Fishbowl SO business date: ${latestBusinessDateRes.error.message}`)
+  }
+
+  const latestSalesOrderDate = latestBusinessDateRes.data?.sales_order_metric_at ?? null
+  const latestDate = parseIsoDate(latestSalesOrderDate)
+  const currentAgeDays = latestDate ? ageInDays(latestDate) : null
+
+  if (latestDate && currentAgeDays !== null && currentAgeDays <= maxAgeDays) {
+    return {
+      fresh: true,
+      latestSalesOrderDate,
+      ageDays: currentAgeDays,
+      maxAgeDays,
+    }
+  }
+
+  const message = latestDate
+    ? `Latest issued Fishbowl Sales Order business date is ${currentAgeDays?.toFixed(1)} days old, above the ${maxAgeDays}-day freshness threshold.`
+    : 'No issued Fishbowl Sales Order business date is cached.'
+
+  await maybeNotifyStaleSalesOrderCache(supabase, {
+    latestSalesOrderDate,
+    latestDateCreated: latestCreatedDateRes.data?.date_created ?? null,
+    latestSourceLastSeenAt: latestSourceSeenRes.data?.source_last_seen_at ?? null,
+    ageDays: currentAgeDays,
+    maxAgeDays,
+    message,
+  })
+
+  throw new SalesOrderFreshnessError(message)
 }
 
 async function withP7FishbowlSession<T>(operation: (client: FishbowlClient) => Promise<T>) {
@@ -206,10 +356,15 @@ async function processIncrementalChunk(supabase: ReturnType<typeof createAdminCl
 
   return withP7FishbowlSession(async (client) => {
     const prepared = await prepareSalesOrderIncrementalCheckpoints(supabase, client)
-    const pages = await processSalesOrderPageBatch(supabase, client)
+    const pages = await processSalesOrderPageBatch(supabase, client, {
+      pageNumbers: Array.isArray(prepared.requeuedPageNumbers)
+        ? prepared.requeuedPageNumbers.filter((page): page is number => typeof page === 'number')
+        : undefined,
+    })
     const details = await hydrateSalesOrderDetailBatch(supabase, client)
+    const freshness = await assertSalesOrderCacheFreshness(supabase)
 
-    return { started, prepared, pages, details }
+    return { started, prepared, pages, details, freshness }
   })
 }
 

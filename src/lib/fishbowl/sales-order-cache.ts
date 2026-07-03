@@ -9,6 +9,15 @@ type NormalizeOptions = {
   includeDetailStatus?: boolean
   detailStatus?: 'pending' | 'success' | 'failed'
   detailError?: string | null
+  /**
+   * Set when rawOrders are sparse LIST-endpoint rows (id, number, status,
+   * customerPo, dateIssued, customerName, dateScheduled). Sparse rows must
+   * only ever ADD data: normalizeSalesOrder maps every absent field to null,
+   * and a full-row upsert overwrites salesperson / customer_id / totals /
+   * dates / raw_data on already-hydrated records with those nulls. That
+   * corrupted 15k+ orders on 2026-07-01..03.
+   */
+  sparse?: boolean
 }
 
 type UpsertSalesOrdersOptions = NormalizeOptions
@@ -173,6 +182,18 @@ export function normalizeSalesOrder(
   }
 }
 
+function compactSparseHeader(header: NormalizedSalesOrder['header']): NormalizedSalesOrder['header'] {
+  const compact: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(header)) {
+    // A sparse row's raw_data / quality flags describe the 7-key list row,
+    // not the order — never let them replace the hydrated versions.
+    if (key === 'raw_data' || key === 'data_quality_flags') continue
+    if (value === null || value === undefined) continue
+    compact[key] = value
+  }
+  return compact as NormalizedSalesOrder['header']
+}
+
 export async function upsertSalesOrdersToCache(
   supabase: SupabaseClient,
   rawOrders: FBRawSalesOrder[],
@@ -186,14 +207,36 @@ export async function upsertSalesOrdersToCache(
     return { orders: 0, items: 0, skipped: rawOrders.length }
   }
 
-  const { error: orderError } = await supabase
-    .from('fb_sales_orders')
-    .upsert(
-      normalized.map((order) => order.header),
-      { onConflict: 'so_number' }
-    )
+  const headers = normalized.map((order) => {
+    if (options.sparse) return compactSparseHeader(order.header)
+    // The DETAIL endpoint never returns dateIssued (only the list endpoint
+    // does) — a null here means "not in this payload", not "un-issued".
+    // Omit the key so upserts leave the stored value untouched.
+    if (order.header.date_issued === null) {
+      const { date_issued: _omitted, ...rest } = order.header
+      return rest as NormalizedSalesOrder['header']
+    }
+    return order.header
+  })
 
-  if (orderError) throw new Error(`Supabase upsert error on fb_sales_orders: ${orderError.message}`)
+  // PostgREST null-fills missing keys when rows in one upsert payload have
+  // different shapes — batch rows by key signature so a compacted row can
+  // never re-null a fuller row's columns.
+  const headerGroups = new Map<string, Array<NormalizedSalesOrder['header']>>()
+  for (const header of headers) {
+    const signature = Object.keys(header).sort().join(',')
+    const group = headerGroups.get(signature)
+    if (group) group.push(header)
+    else headerGroups.set(signature, [header])
+  }
+
+  for (const group of headerGroups.values()) {
+    const { error: orderError } = await supabase
+      .from('fb_sales_orders')
+      .upsert(group, { onConflict: 'so_number' })
+
+    if (orderError) throw new Error(`Supabase upsert error on fb_sales_orders: ${orderError.message}`)
+  }
 
   const items = normalized.flatMap((order) => order.items)
   if (items.length > 0) {

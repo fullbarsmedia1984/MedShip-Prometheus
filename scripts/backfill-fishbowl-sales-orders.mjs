@@ -161,6 +161,17 @@ function normalizeSalesOrder(raw) {
   }
 }
 
+function compactSparseHeader(header) {
+  const compact = {}
+  for (const [key, value] of Object.entries(header)) {
+    // raw_data from a sparse row must never replace a full stored payload.
+    if (key === 'raw_data') continue
+    if (value === null || value === undefined) continue
+    compact[key] = value
+  }
+  return compact
+}
+
 async function fishbowlLogin(baseUrl) {
   const response = await fetch(`${baseUrl}/api/login`, {
     method: 'POST',
@@ -267,7 +278,19 @@ async function main() {
     const normalized = orders
       .map((order) => {
         const detail = detailById.get(String(order.id))
-        return normalizeSalesOrder(detail ? { ...order, ...detail } : order)
+        const result = normalizeSalesOrder(detail ? { ...order, ...detail } : order)
+        if (!result) return null
+        if (!detail) {
+          // The list endpoint returns a sparse row (id, number, status,
+          // customerPo, dateIssued, customerName, dateScheduled). Without
+          // the detail fetch, normalizeSalesOrder maps every missing field
+          // to null — and a full-row upsert would OVERWRITE existing values
+          // (salesperson, customer_id, totals, dates, raw_data) with nulls.
+          // That corrupted 1,866 orders on 2026-07-01/02. For sparse rows,
+          // only upsert the fields the payload actually carries.
+          result.header = compactSparseHeader(result.header)
+        }
+        return result
       })
       .filter(Boolean)
 
@@ -291,7 +314,20 @@ async function main() {
     const supabase = createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'), {
       auth: { autoRefreshToken: false, persistSession: false },
     })
-    const writtenHeaders = await upsertChunks(supabase, 'fb_sales_orders', headers, 'so_number')
+    // PostgREST bulk upserts null-fill missing keys when rows in one payload
+    // have different shapes — batching sparse and full headers together would
+    // reintroduce the null-overwrite corruption. Group rows by key signature
+    // so every batch is uniform.
+    const headerGroups = new Map()
+    for (const header of headers) {
+      const signature = Object.keys(header).sort().join(',')
+      if (!headerGroups.has(signature)) headerGroups.set(signature, [])
+      headerGroups.get(signature).push(header)
+    }
+    let writtenHeaders = 0
+    for (const group of headerGroups.values()) {
+      writtenHeaders += await upsertChunks(supabase, 'fb_sales_orders', group, 'so_number')
+    }
     const writtenItems = items.length > 0
       ? await upsertChunks(supabase, 'fb_sales_order_items', items, 'sales_order_number,line_number')
       : 0
