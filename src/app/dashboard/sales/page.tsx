@@ -51,6 +51,7 @@ import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeader
 import { CallActivitySummaryCard } from '@/components/dashboard/CallActivitySummaryCard'
 import { RingDnaRepActivityCharts } from '@/components/charts/RingDnaRepActivityCharts'
 import { RevenueCohortSection } from '@/components/dashboard/RevenueCohortSection'
+import { ReportingMethodologyDialog } from '@/components/dashboard/ReportingMethodologyDialog'
 import type { CohortDashboard } from '@/lib/cohorts'
 
 type SortKey =
@@ -361,6 +362,8 @@ export default function SalesPage() {
                   </p>
                 </div>
               </div>
+              <div className="flex flex-col items-start gap-2 md:items-end">
+                <ReportingMethodologyDialog />
               <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
                 <Badge variant="outline">Mapped aliases: {salesHealth.mappedAliasCount}</Badge>
                 <Badge variant="outline" className={salesHealth.unmappedAliasCount > 0 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700' : ''}>
@@ -368,6 +371,7 @@ export default function SalesPage() {
                 </Badge>
                 <Badge variant="outline">SO links: {salesHealth.linkCoverage}%</Badge>
                 <Badge variant="outline">Link rows: {salesHealth.linkRows}</Badge>
+              </div>
               </div>
             </CardContent>
           </Card>
