@@ -45,15 +45,16 @@ export function herculesApiPartsPage(
   }
 }
 
-export const apiPartWithNumericCost: HerculesApiPart = {
-  _id: 'api-part-numeric-cost',
+export const apiPartWithNumericContractPrice: HerculesApiPart = {
+  _id: 'api-part-numeric-contract-price',
   msId: 'MS-api-numeric',
   manufacturerPartNumber: 'API-MPN-001',
   manufacturerName: 'API MANUFACTURER',
-  description: 'API part with numeric cost',
+  description: 'API part with numeric contract price',
   category: 'API Fixtures',
-  subCategory: 'Costs',
+  subCategory: 'Contract Prices',
   isActive: true,
+  updatedAt: '2026-06-01T12:00:00.000Z',
   vendors: [
     {
       _id: 'api-vendor-medline',
@@ -66,7 +67,8 @@ export const apiPartWithNumericCost: HerculesApiPart = {
           unit: 'EA',
           vendorPartNumber: 'API-COST-001',
           uomTitle: 'Each',
-          cost: 12.5,
+          price: '$20.00',
+          contractPrice: '$12.50',
           per: '1/EA',
           isDefault: true,
           quantityAvailable: 22,
@@ -79,13 +81,16 @@ export const apiPartWithNumericCost: HerculesApiPart = {
   ],
 }
 
-export const apiPartWithMissingCost: HerculesApiPart = {
-  _id: 'api-part-missing-cost',
+export const apiPartWithNumericCost = apiPartWithNumericContractPrice
+
+export const apiPartWithNullContractPrice: HerculesApiPart = {
+  _id: 'api-part-null-contract-price',
   msId: 'MS-api-missing',
   manufacturerPartNumber: 'API-MPN-002',
   manufacturerName: 'API MANUFACTURER',
-  description: 'API part with missing cost',
+  description: 'API part with null contract price',
   isActive: true,
+  updatedAt: '2026-06-01T12:05:00.000Z',
   vendors: [
     {
       _id: 'api-vendor-missing',
@@ -96,7 +101,62 @@ export const apiPartWithMissingCost: HerculesApiPart = {
         {
           unit: 'EA',
           vendorPartNumber: 'API-MISSING-001',
-          cost: null,
+          price: '$30.00',
+          contractPrice: null,
+          per: '1/EA',
+        },
+      ],
+    },
+  ],
+}
+
+export const apiPartWithMissingCost = apiPartWithNullContractPrice
+
+export const apiPartWithBlankContractPrice: HerculesApiPart = {
+  _id: 'api-part-blank-contract-price',
+  msId: 'MS-api-blank',
+  manufacturerPartNumber: 'API-MPN-005',
+  manufacturerName: 'API MANUFACTURER',
+  description: 'API part with blank contract price',
+  isActive: true,
+  vendors: [
+    {
+      _id: 'api-vendor-blank',
+      vendorName: 'Medline',
+      supplierCode: 'MEDLINE',
+      isPrimary: true,
+      units: [
+        {
+          unit: 'EA',
+          vendorPartNumber: 'API-BLANK-001',
+          price: '$40.00',
+          contractPrice: '',
+          per: '1/EA',
+        },
+      ],
+    },
+  ],
+}
+
+export const apiPartWithRequestQuoteContractPrice: HerculesApiPart = {
+  _id: 'api-part-request-quote-contract-price',
+  msId: 'MS-api-request-quote',
+  manufacturerPartNumber: 'API-MPN-006',
+  manufacturerName: 'API MANUFACTURER',
+  description: 'API part with request-quote contract price',
+  isActive: true,
+  vendors: [
+    {
+      _id: 'api-vendor-request-quote',
+      vendorName: 'NDC',
+      supplierCode: 'NDC',
+      isPrimary: true,
+      units: [
+        {
+          unit: 'EA',
+          vendorPartNumber: 'API-RFQ-001',
+          price: '$50.00',
+          contractPrice: 'List only - request quote',
           per: '1/EA',
         },
       ],
@@ -117,14 +177,30 @@ export const apiPartWithMultipleVendors: HerculesApiPart = {
       vendorName: 'Medline',
       supplierCode: 'MEDLINE',
       isPrimary: true,
-      units: [{ unit: 'EA', vendorPartNumber: 'API-MULTI-A', cost: 10, per: '1/EA' }],
+      units: [
+        {
+          unit: 'EA',
+          vendorPartNumber: 'API-MULTI-A',
+          price: '$15.00',
+          contractPrice: '$10.00',
+          per: '1/EA',
+        },
+      ],
     },
     {
       _id: 'api-vendor-b',
       vendorName: 'NDC',
       supplierCode: 'NDC',
       isPrimary: false,
-      units: [{ unit: 'EA', vendorPartNumber: 'API-MULTI-B', cost: 11, per: '1/EA' }],
+      units: [
+        {
+          unit: 'EA',
+          vendorPartNumber: 'API-MULTI-B',
+          price: '$16.00',
+          contractPrice: '$11.00',
+          per: '1/EA',
+        },
+      ],
     },
   ],
 }
@@ -146,14 +222,16 @@ export const apiPartWithMultipleUnitsAndPerBox: HerculesApiPart = {
         {
           unit: 'EA',
           vendorPartNumber: 'API-UNIT-EA',
-          cost: 0.45,
+          price: '$1.00',
+          contractPrice: '$0.45',
           per: '1/EA',
           packagingType: 'each',
         },
         {
           unit: 'BX',
           vendorPartNumber: 'API-UNIT-BX',
-          cost: 38.75,
+          price: '$45.00',
+          contractPrice: '$38.75',
           per: '100/BX',
           packagingType: 'box',
           isDefault: true,

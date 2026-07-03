@@ -39,16 +39,16 @@ export function WeeklyCallVolumeChart({ data, reps }: WeeklyCallVolumeChartProps
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
             </svg>
           </span>
-          Profile Call Volume
+          RingDNA Call Volume
           {data.length === 0 && <ComingSoonBadge />}
         </CardTitle>
-        <p className="text-xs text-muted-foreground">Weekly profile calls per rep — last 8 weeks</p>
+        <p className="text-xs text-muted-foreground">Weekly RingDNA calls per rep - last 8 weeks</p>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
           <ComingSoonPanel
-            title="Profile call volume"
-            description="Live Salesforce profile-call activity is not available yet."
+            title="RingDNA call volume"
+            description="Live Salesforce RingDNA call activity has not synced yet."
             className="h-[280px]"
           />
         ) : (

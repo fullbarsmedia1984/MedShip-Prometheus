@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>Rep who receives points for this event.</description>
+    <label>User</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>MedShip Game Events</relationshipLabel>
+    <relationshipName>Medship_Game_Events</relationshipName>
+    <required>true</required>
+    <type>Lookup</type>
+</CustomField>
+

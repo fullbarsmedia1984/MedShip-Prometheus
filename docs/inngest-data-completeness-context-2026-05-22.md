@@ -47,6 +47,126 @@ Result:
 {"message":"Successfully registered","modified":true}
 ```
 
+### July 2, 2026 P7 Priority Fix
+
+P7 stalled again after historical backfill because the cache was stale and lower-priority Fishbowl jobs could still take the next available Fishbowl session. This was not a need for separate Fishbowl credentials. P1, P2, and P7 all use the same approved Prometheus Fishbowl integration identity, but each Inngest job obtains its own short-lived Fishbowl bearer session. Fishbowl has an 11-user login/session limit, so concurrent or repeated Zeus jobs can still exhaust or contend for sessions even with one shared integration user.
+
+The fix was pushed to `master` on July 2, 2026:
+
+- `8d121b2` - `Fix P7 sales order discovery`
+  - Added page-band/rotating discovery plus Fishbowl ID-window discovery so P7 can find current Sales Orders even when Fishbowl pagination is not newest-first.
+- `8a6be72` - `Prioritize P7 Fishbowl sessions`
+  - Added `FishbowlPriorityYieldError` in `src/lib/fishbowl/session.ts`.
+  - P1 and P2 now yield when P7 is active or the Sales Order cache is stale.
+  - P2 scheduled runs now respect `sync_schedules.is_active`; pausing P2 in Supabase/UI actually prevents scheduled Fishbowl login.
+  - Retry handling for yielded P1 work reschedules without burning normal retry count.
+
+Production repair sequence used on July 2:
+
+1. Deploy `8a6be72` to Railway.
+2. Temporarily pause P2 and enable P7:
+
+```sql
+update public.sync_schedules
+set is_active = case
+    when automation = 'P2_INVENTORY_SYNC' then false
+    when automation = 'P7_FB_SO_SYNC' then true
+    else is_active
+  end
+where automation in ('P2_INVENTORY_SYNC', 'P7_FB_SO_SYNC');
+```
+
+3. Wait for the P7 scheduled window at minute `5`, `20`, `35`, or `50`.
+4. Verify P7 success and cache freshness.
+5. Re-enable P2:
+
+```sql
+update public.sync_schedules
+set is_active = true
+where automation = 'P2_INVENTORY_SYNC';
+```
+
+Verified production result after the July 2 repair:
+
+- P7 last run: `success`
+- P7 processed count: `1500`
+- June 2026 issued Sales Orders cached: `70`
+- June 2026 issued Sales Orders with line items: `70 / 70`
+- June 2026 line items cached: `775`
+- July 2026 issued Sales Orders cached: `2`
+- Latest issued SO metric date: `2026-07-01T20:21:58.997Z`
+- Latest Fishbowl `date_created`: `2026-06-25T05:00:00Z`
+- Latest `source_last_seen_at`: `2026-07-02T18:51:28.623Z`
+- P2 was re-enabled after P7 freshness was restored.
+
+Use this verification query when checking whether P7 is truly current:
+
+```sql
+select json_build_object(
+  'cache', (
+    select row_to_json(c)
+    from (
+      select
+        count(*) filter (
+          where canonical_state = 'order'
+            and sales_order_metric_at >= date '2026-06-01'
+            and sales_order_metric_at < date '2026-07-01'
+        ) as june_issued_orders,
+        count(*) filter (
+          where canonical_state = 'order'
+            and sales_order_metric_at >= date '2026-07-01'
+            and sales_order_metric_at < date '2026-08-01'
+        ) as july_issued_orders,
+        max(sales_order_metric_at) filter (where canonical_state = 'order') as latest_issued_metric_at,
+        max(date_created) as latest_date_created,
+        max(source_last_seen_at) as latest_source_last_seen_at,
+        count(*) as cached_headers
+      from public.fb_sales_orders
+    ) c
+  ),
+  'june_detail_health', (
+    select row_to_json(d)
+    from (
+      select
+        count(distinct so.so_number) filter (
+          where so.canonical_state = 'order'
+            and so.sales_order_metric_at >= date '2026-06-01'
+            and so.sales_order_metric_at < date '2026-07-01'
+        ) as june_order_headers,
+        count(distinct i.sales_order_number) filter (
+          where so.canonical_state = 'order'
+            and so.sales_order_metric_at >= date '2026-06-01'
+            and so.sales_order_metric_at < date '2026-07-01'
+        ) as june_orders_with_lines,
+        count(i.id) filter (
+          where so.canonical_state = 'order'
+            and so.sales_order_metric_at >= date '2026-06-01'
+            and so.sales_order_metric_at < date '2026-07-01'
+        ) as june_lines
+      from public.fb_sales_orders so
+      left join public.fb_sales_order_items i
+        on i.sales_order_number = so.so_number
+    ) d
+  ),
+  'schedules', (
+    select json_agg(row_to_json(s))
+    from (
+      select automation, is_active, last_run_at, last_run_status, records_processed
+      from public.sync_schedules
+      where automation in ('P1_OPP_TO_SO','P2_INVENTORY_SYNC','P7_FB_SO_SYNC')
+      order by automation
+    ) s
+  )
+) as verification;
+```
+
+Operational rule going forward:
+
+- P7 is the priority Fishbowl job when Sales Order freshness is stale.
+- Do not create separate Fishbowl users for P2 and P7 as the primary fix. Separate users may help auditability later, but the real control is session orchestration.
+- If P7 is stale, pause P2 if needed, let P7 run, then re-enable P2 once latest issued SO dates are fresh.
+- If P7 reports success but latest business dates remain stale, inspect P7 discovery summaries before trusting `last_synced_at`.
+
 ## Key Inngest Automations
 
 ### P1: Salesforce Opportunity To Fishbowl SO
@@ -456,4 +576,3 @@ Constraints:
 - Favor truthful UI states over optimistic labels.
 - Use Supabase queries and sync_events as durable evidence.
 ```
-

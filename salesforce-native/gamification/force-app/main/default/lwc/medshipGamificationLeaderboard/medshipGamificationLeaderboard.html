@@ -1,0 +1,24 @@
+<template>
+    <lightning-card title="MedShip Leaderboard" icon-name="standard:performance">
+        <template if:true={hasRows}>
+            <div class="leaderboard">
+                <template for:each={rankedRows} for:item="row">
+                    <div class="leaderboard-row" key={row.userId}>
+                        <div class="rank">{row.rank}</div>
+                        <div class="rep">
+                            <div class="name">{row.userName}</div>
+                            <div class="meta">{row.wonOpportunityCount} wins - {row.opportunityChangeCount} scored changes</div>
+                        </div>
+                        <div class="points">{row.points}</div>
+                    </div>
+                </template>
+            </div>
+        </template>
+        <template if:true={rows.error}>
+            <div class="empty">Leaderboard is unavailable.</div>
+        </template>
+        <template if:true={isEmpty}>
+            <div class="empty">No scores yet this month.</div>
+        </template>
+    </lightning-card>
+</template>

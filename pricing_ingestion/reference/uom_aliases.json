@@ -1,0 +1,68 @@
+[
+  {
+    "alias": "EA.",
+    "normalized_uom": "EA",
+    "classification": "direct_lexical_synonym",
+    "notes": "Punctuation variant of EA."
+  },
+  {
+    "alias": "EACHES",
+    "normalized_uom": "EA",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of EACH."
+  },
+  {
+    "alias": "BOXES",
+    "normalized_uom": "BX",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of BOX."
+  },
+  {
+    "alias": "CASES",
+    "normalized_uom": "CS",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of CASE."
+  },
+  {
+    "alias": "PACKS",
+    "normalized_uom": "PK",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of PACK."
+  },
+  {
+    "alias": "PKG",
+    "normalized_uom": "PK",
+    "classification": "direct_lexical_synonym",
+    "notes": "Common package abbreviation."
+  },
+  {
+    "alias": "CARTONS",
+    "normalized_uom": "CT",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of CARTON."
+  },
+  {
+    "alias": "BAGS",
+    "normalized_uom": "BG",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of BAG."
+  },
+  {
+    "alias": "ROLLS",
+    "normalized_uom": "RL",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of ROLL."
+  },
+  {
+    "alias": "PAIRS",
+    "normalized_uom": "PR",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of PAIR."
+  },
+  {
+    "alias": "DOZENS",
+    "normalized_uom": "DZ",
+    "classification": "direct_lexical_synonym",
+    "notes": "Plural lexical equivalent of DOZEN."
+  }
+]

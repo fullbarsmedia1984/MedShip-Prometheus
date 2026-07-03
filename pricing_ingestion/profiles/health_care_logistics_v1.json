@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0.0",
+  "profile_name": "health_care_logistics_v1",
+  "profile_version": "1.0.0",
+  "status": "review_required",
+  "distributor_name": "Health Care Logistics",
+  "distributor_id": null,
+  "description": "Pilot profile for Health Care Logistics workbook family F035.",
+  "applicable_family_ids": ["F035"],
+  "workbook_match_rules": {
+    "filename_patterns": ["Health Care Logistics.*\\.xlsx$"],
+    "sheet_name_patterns": ["JAN 2026 Standard"],
+    "required_headers": ["Item #", "Item Description", "UOM", "Price"],
+    "optional_headers": ["Sales Unit", "Price Effective Date", "Price Expiration Date"],
+    "forbidden_headers": [],
+    "minimum_match_score": 8
+  },
+  "sheet_rules": {
+    "exact_sheet_name": "JAN 2026 Standard",
+    "case_insensitive_sheet_name": null,
+    "regex_sheet_name": null,
+    "include_patterns": [],
+    "exclude_patterns": [],
+    "include_hidden_sheets": false,
+    "process_multiple_matching_sheets": false
+  },
+  "header_rules": {
+    "exact_header_row": 3,
+    "candidate_row_range": { "start": 1, "end": 8 },
+    "required_header_terms": ["Item #", "Item Description", "UOM", "Price"],
+    "optional_header_terms": ["Sales Unit", "Price Effective Date", "Price Expiration Date"],
+    "multi_row_header": false,
+    "merged_header_handling": "error",
+    "normalized_header_matching": true,
+    "minimum_header_match_score": 4
+  },
+  "data_region_rules": {
+    "explicit_first_data_row": 4,
+    "first_row_after_detected_header": false,
+    "explicit_last_row": null,
+    "stop_after_consecutive_blank_required_field_rows": 20,
+    "maximum_row_limit": null,
+    "skip_hidden_rows": true,
+    "include_hidden_rows_with_warning": false,
+    "skip_subtotal_and_total_rows": true,
+    "repeated_header_detection": true
+  },
+  "column_mappings": [
+    {
+      "canonical_field": "distributor_sku",
+      "source_header": "Item #",
+      "source_header_aliases": ["Item Number"],
+      "source_column_letter": "A",
+      "source_column_index": 1,
+      "required": true,
+      "transforms": ["normalize_identifier"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "Item # is the distributor item identifier."
+    },
+    {
+      "canonical_field": "item_description_raw",
+      "source_header": "Item Description",
+      "source_header_aliases": ["Description"],
+      "source_column_letter": "B",
+      "source_column_index": 2,
+      "required": true,
+      "transforms": ["normalize_description"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": ""
+    },
+    {
+      "canonical_field": "raw_uom",
+      "source_header": "UOM",
+      "source_header_aliases": [],
+      "source_column_letter": "C",
+      "source_column_index": 3,
+      "required": false,
+      "transforms": ["normalize_uom"],
+      "fallback_source_headers": ["Sales Unit"],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "Sales Unit is retained as review context through fallback if UOM is unavailable."
+    },
+    {
+      "canonical_field": "price",
+      "source_header": "Price",
+      "source_header_aliases": [],
+      "source_column_letter": "E",
+      "source_column_index": 5,
+      "required": true,
+      "transforms": ["parse_currency"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": ""
+    },
+    {
+      "canonical_field": "effective_date",
+      "source_header": "Price Effective Date",
+      "source_header_aliases": [],
+      "source_column_letter": "F",
+      "source_column_index": 6,
+      "required": false,
+      "transforms": ["parse_date"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": ""
+    },
+    {
+      "canonical_field": "expiration_date",
+      "source_header": "Price Expiration Date",
+      "source_header_aliases": [],
+      "source_column_letter": "G",
+      "source_column_index": 7,
+      "required": false,
+      "transforms": ["parse_date"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": ""
+    }
+  ],
+  "transforms": ["normalize_identifier", "normalize_description", "normalize_uom", "parse_currency", "parse_date"],
+  "default_values": {
+    "currency": { "source": "constant", "value": "USD", "manifest_field": null, "required": false },
+    "contract_name": { "source": "manifest", "value": null, "manifest_field": "contract_name", "required": false },
+    "contract_number": { "source": "manifest", "value": null, "manifest_field": "contract_number", "required": false },
+    "account_number": { "source": "manifest", "value": null, "manifest_field": "account_number", "required": false },
+    "location": { "source": "manifest", "value": null, "manifest_field": "location", "required": false }
+  },
+  "validation_rules": {
+    "price_required": true,
+    "description_required": true,
+    "item_identifier_required": true,
+    "uom_warning_only": true
+  },
+  "exception_rules": {
+    "unknown_uom": "warning",
+    "missing_uom": "warning",
+    "missing_effective_date": "warning",
+    "missing_expiration_date": "warning"
+  },
+  "notes": "Review whether Sales Unit should be stored separately from UOM in a later schema revision.",
+  "created_at": "2026-06-17",
+  "reviewed_by": null,
+  "review_status": "not_reviewed"
+}

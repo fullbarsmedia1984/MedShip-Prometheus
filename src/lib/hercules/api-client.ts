@@ -85,8 +85,24 @@ export class HerculesRateLimitExceededError extends HerculesForbiddenError {
   override name = 'HerculesRateLimitExceededError'
 }
 
+export class HerculesMissingEgressPermissionError extends HerculesForbiddenError {
+  override name = 'HerculesMissingEgressPermissionError'
+}
+
+export class HerculesInvalidTokenError extends HerculesUnauthorizedError {
+  override name = 'HerculesInvalidTokenError'
+}
+
+export class HerculesExpiredTokenError extends HerculesUnauthorizedError {
+  override name = 'HerculesExpiredTokenError'
+}
+
 export class HerculesEnvelopeValidationError extends Error {
   override name = 'HerculesEnvelopeValidationError'
+}
+
+export class HerculesMissingCredentialsError extends Error {
+  override name = 'HerculesMissingCredentialsError'
 }
 
 export type HerculesApiClientOptions = {
@@ -164,11 +180,25 @@ function errorForEnvelope(envelope: HerculesEnvelope<unknown>, rateLimit: Hercul
   if (envelope.statusCode === 400) {
     return new HerculesBadRequestError(message, envelope.statusCode, path, rateLimit)
   }
+  if (envelope.statusCode === 401 && /expired/i.test(message)) {
+    return new HerculesExpiredTokenError(message, envelope.statusCode, path, rateLimit)
+  }
+  if (envelope.statusCode === 401 && /invalid/i.test(message)) {
+    return new HerculesInvalidTokenError(message, envelope.statusCode, path, rateLimit)
+  }
   if (envelope.statusCode === 401) {
     return new HerculesUnauthorizedError(message, envelope.statusCode, path, rateLimit)
   }
   if (envelope.statusCode === 403 && /rate limit exceeded/i.test(message)) {
     return new HerculesRateLimitExceededError(message, envelope.statusCode, path, rateLimit)
+  }
+  if (envelope.statusCode === 403 && /not authorized for data egress/i.test(message)) {
+    return new HerculesMissingEgressPermissionError(
+      message,
+      envelope.statusCode,
+      path,
+      rateLimit
+    )
   }
   if (envelope.statusCode === 403) {
     return new HerculesForbiddenError(message, envelope.statusCode, path, rateLimit)
@@ -190,6 +220,13 @@ export class HerculesApiClient {
   }
 
   constructor(options: HerculesApiClientOptions) {
+    if (!options.appId?.trim()) {
+      throw new HerculesMissingCredentialsError('HERCULES_API_APP_ID is required')
+    }
+    if (!options.accessToken?.trim()) {
+      throw new HerculesMissingCredentialsError('HERCULES_API_ACCESS_TOKEN is required')
+    }
+
     this.baseUrl = normalizeBaseUrl(options.baseUrl ?? DEFAULT_HERCULES_API_BASE_URL)
     this.appId = options.appId
     this.accessToken = options.accessToken

@@ -7,7 +7,7 @@ import { SparklineChart } from '@/components/dashboard/SparklineChart'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Play, Eye, Clock, Zap, RefreshCw, Link as LinkIcon, PackageSearch, Database } from 'lucide-react'
+import { AlertTriangle, Play, Eye, Clock, Zap, RefreshCw, Link as LinkIcon, PackageSearch, Database } from 'lucide-react'
 import Link from 'next/link'
 import { fetchJson } from '@/lib/client-api'
 import type { IntegrationStatusData } from '@/lib/seed-data'
@@ -37,6 +37,26 @@ function formatRelativeTime(isoString?: string): string {
   if (diffHr < 24) return `${diffHr}h ago`
   const diffDays = Math.floor(diffHr / 24)
   return `${diffDays}d ago`
+}
+
+function formatDateTime(isoString?: string | null): string {
+  if (!isoString) return 'Never'
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return 'Never'
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function isOlderThanDays(isoString: string | null | undefined, days: number): boolean {
+  if (!isoString) return false
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return false
+  return Date.now() - date.getTime() > days * 24 * 60 * 60 * 1000
 }
 
 function automationIdLabel(automation: string): string {
@@ -91,6 +111,9 @@ type SalesOrderCoverage = {
   detailRunning: number
   detailHydrated: number
   detailFailed: number
+  latestCachedSalesOrderDate: string | null
+  latestCachedDateCreated: string | null
+  latestSourceLastSeenAt: string | null
   lastRunAt: string | null
   lastRunStatus: string | null
   lastRunMode: string | null
@@ -359,6 +382,10 @@ export default function IntegrationsPage() {
     (lastRequestedP7Action && Date.now() < p7MonitorUntil)
   )
   const p7StatusText = buildP7StatusText(salesOrderCoverage, lastRequestedP7Action, p7MonitorUntil)
+  const p7BusinessCacheIsStale = Boolean(
+    salesOrderCoverage?.lastRunStatus === 'success' &&
+    isOlderThanDays(salesOrderCoverage.latestCachedSalesOrderDate, 30)
+  )
 
   if (loading) {
     return (
@@ -602,6 +629,31 @@ export default function IntegrationsPage() {
                     <p>Last checked {formatRelativeTime(lastCoverageRefreshAt ?? undefined)}</p>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+                  <div className="rounded-lg border p-3">
+                    <span className="text-muted-foreground">Latest cached SO date</span>
+                    <p className="font-medium">{formatDateTime(salesOrderCoverage.latestCachedSalesOrderDate)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <span className="text-muted-foreground">Latest cached date created</span>
+                    <p className="font-medium">{formatDateTime(salesOrderCoverage.latestCachedDateCreated)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <span className="text-muted-foreground">Latest source seen</span>
+                    <p className="font-medium">{formatDateTime(salesOrderCoverage.latestSourceLastSeenAt)}</p>
+                  </div>
+                </div>
+
+                {p7BusinessCacheIsStale && (
+                  <div className="flex items-start gap-2 rounded-lg border border-medship-warning/40 bg-medship-warning/10 p-3 text-sm text-medship-warning">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                      P7 has completed recently, but the latest cached Sales Order business date is more than 30 days old.
+                      Incremental sync should inspect the newest Fishbowl page band before treating this cache as fresh.
+                    </p>
+                  </div>
+                )}
 
                 <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div

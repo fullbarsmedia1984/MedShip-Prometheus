@@ -9,6 +9,7 @@ import {
   syncOpportunities,
   syncOpportunityLineItems,
   syncProfileCalls,
+  syncCallActivities,
 } from '@/lib/salesforce/sync'
 import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
 
@@ -60,8 +61,12 @@ export const sfFullSync = inngest.createFunction(
       return syncProfileCalls(sfClient, supabase)
     })
 
+    const callActivitiesCount = await step.run('sync-call-activities', async () => {
+      return syncCallActivities(sfClient, supabase)
+    })
+
     await step.run('disconnect-sf', () => sfClient.disconnect())
-    const totalRecords = usersCount + accountsCount + productsCount + oppsCount + lineItemsCount + callsCount
+    const totalRecords = usersCount + accountsCount + productsCount + oppsCount + lineItemsCount + callsCount + callActivitiesCount
 
     await step.run('update-schedule', () =>
       updateSyncSchedule('SF_FULL_SYNC', {
@@ -79,6 +84,7 @@ export const sfFullSync = inngest.createFunction(
       opportunities: oppsCount,
       lineItems: lineItemsCount,
       profileCalls: callsCount,
+      callActivities: callActivitiesCount,
       totalRecords,
     }
   }
