@@ -207,6 +207,8 @@ Principles: JWT `role` claim drives policies; service-role server code is unaffe
 - ✅ Contract-price flag: already enforced at RLS (Phase 2); no rep-facing UI surfaces contract pricing yet, so no additional wiring needed.
 - Note: Dan's profile now carries his SF user id (`sf_user_id` linkage backfilled during verification). Rep profiles get linked at invite time via the users admin page.
 
+**Post-merge security review (2026-07-03):** the incentive engine + revenue cohort work merged from master was audited against this PRD. It adopted the role model for writes (admin-gated) but shipped read gaps, all fixed same-day: `order_revenue_cohort` flat read policy re-tiered to `is_staff_up()` (migration `030`, applied live — it postdated the Phase 2 sweep, which had already stripped the other flat comp-table policies); incentive read APIs (`/api/dashboard/incentives`, `/scorecard`, and GETs on aliases/merge-map/settings) gated staff+; contract-migration read APIs (batches/rows/exceptions/publish-preview) gated admin+ to match their writes (class P); `/dashboard/incentives` layout staff+, `/admin` admin+. Two more applied-but-uncommitted migrations reconciled (`027a`, `028a`). Outstanding for the team: duplicate migration numbers 023–028 (two files each), comp-data artifacts committed to git (`duplicate-customer-groups.xlsx`, RingDNA discovery outputs, `__pycache__`), and the rep-facing scorecard will need own-comp scoping (decision 4) when it ships to reps.
+
 **Phase 5 — Compensation (deferred):** integrate Fable's comp model; activate `sales_manager`; comp RLS (own-only / manager-all).
 
 ## 13. Testing Requirements

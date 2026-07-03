@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { unstable_cache } from 'next/cache'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { getIncentiveSettings } from '@/lib/incentive/settings'
 import { chicagoMonthStart } from '@/lib/incentive/dates'
 import { computeCommission, computeCounterfactual, isPayoutBlocked } from '@/lib/incentive/calculator'
@@ -70,7 +70,7 @@ const getScorecardPayload = unstable_cache(
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const repKey = request.nextUrl.searchParams.get('rep')?.trim() ?? ''

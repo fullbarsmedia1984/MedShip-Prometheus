@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { unstable_cache } from 'next/cache'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { getIncentiveSettings } from '@/lib/incentive/settings'
 import { chicagoMonthStart } from '@/lib/incentive/dates'
 import { isPayoutBlocked } from '@/lib/incentive/calculator'
@@ -58,7 +58,7 @@ const getIncentiveDashboardPayload = unstable_cache(
 
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     return NextResponse.json(await getIncentiveDashboardPayload())

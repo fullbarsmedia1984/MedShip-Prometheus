@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { inngest } from '@/inngest'
-import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import {
   getIncentiveSettings,
   updateIncentiveSettings,
@@ -32,7 +32,7 @@ const RECOMPUTE_KEYS: Array<keyof IncentiveSettings> = [
 
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     return NextResponse.json({ settings: await getIncentiveSettings() })
