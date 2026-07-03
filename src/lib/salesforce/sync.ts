@@ -3,14 +3,24 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Connection } from 'jsforce'
 
 const BATCH_SIZE = 500
+type SalesforceRecord = Record<string, unknown>
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function relationship(record: SalesforceRecord, key: string): SalesforceRecord | null {
+  const value = record[key]
+  return value && typeof value === 'object' ? value as SalesforceRecord : null
+}
 
 /**
  * Query all records using jsforce autoFetch to paginate past the 2,000 default limit.
  */
-async function queryAll(conn: Connection, soql: string): Promise<Record<string, any>[]> {
+async function queryAll(conn: Connection, soql: string): Promise<SalesforceRecord[]> {
   return new Promise((resolve, reject) => {
-    const records: Record<string, any>[] = []
-    conn.query<Record<string, any>>(soql)
+    const records: SalesforceRecord[] = []
+    conn.query<SalesforceRecord>(soql)
       .on('record', (record) => records.push(record))
       .on('end', () => resolve(records))
       .on('error', (err) => reject(err))
@@ -67,17 +77,20 @@ export async function syncUsers(sf: SalesforceClient, supabase: SupabaseClient):
       WHERE IsActive = true AND UserType = 'Standard'
     `)
 
-    const rows = records.map((r) => ({
-      sf_id: r.Id,
-      name: r.Name,
-      email: r.Email,
-      username: r.Username,
-      is_active: r.IsActive,
-      user_type: r.UserType,
-      profile_name: r.Profile?.Name,
-      raw_data: r,
-      last_synced_at: new Date().toISOString(),
-    }))
+    const rows = records.map((r) => {
+      const profile = relationship(r, 'Profile')
+      return {
+        sf_id: r.Id,
+        name: r.Name,
+        email: r.Email,
+        username: r.Username,
+        is_active: r.IsActive,
+        user_type: r.UserType,
+        profile_name: profile?.Name,
+        raw_data: r,
+        last_synced_at: new Date().toISOString(),
+      }
+    })
 
     await upsertBatched(supabase, 'sf_users', rows)
 
@@ -88,11 +101,11 @@ export async function syncUsers(sf: SalesforceClient, supabase: SupabaseClient):
     })
 
     return rows.length
-  } catch (error: any) {
+  } catch (error: unknown) {
     await updateSyncState(supabase, 'sf_users', {
       recordCount: 0,
       durationMs: Date.now() - start,
-      error: error.message,
+      error: errorMessage(error),
     })
     throw error
   }
@@ -145,11 +158,11 @@ export async function syncAccounts(sf: SalesforceClient, supabase: SupabaseClien
     })
 
     return rows.length
-  } catch (error: any) {
+  } catch (error: unknown) {
     await updateSyncState(supabase, 'sf_accounts', {
       recordCount: 0,
       durationMs: Date.now() - start,
-      error: error.message,
+      error: errorMessage(error),
     })
     throw error
   }
@@ -188,11 +201,11 @@ export async function syncProducts(sf: SalesforceClient, supabase: SupabaseClien
     })
 
     return rows.length
-  } catch (error: any) {
+  } catch (error: unknown) {
     await updateSyncState(supabase, 'sf_products', {
       recordCount: 0,
       durationMs: Date.now() - start,
-      error: error.message,
+      error: errorMessage(error),
     })
     throw error
   }
@@ -245,11 +258,11 @@ export async function syncOpportunities(sf: SalesforceClient, supabase: Supabase
     })
 
     return rows.length
-  } catch (error: any) {
+  } catch (error: unknown) {
     await updateSyncState(supabase, 'sf_opportunities', {
       recordCount: 0,
       durationMs: Date.now() - start,
-      error: error.message,
+      error: errorMessage(error),
     })
     throw error
   }
@@ -265,18 +278,21 @@ export async function syncOpportunityLineItems(sf: SalesforceClient, supabase: S
       FROM OpportunityLineItem
     `)
 
-    const rows = records.map((r) => ({
-      sf_id: r.Id,
-      opportunity_sf_id: r.OpportunityId,
-      product_sf_id: r.Product2Id,
-      product_code: r.Product2?.ProductCode,
-      product_name: r.Product2?.Name,
-      quantity: r.Quantity,
-      unit_price: r.UnitPrice,
-      total_price: r.TotalPrice,
-      raw_data: r,
-      last_synced_at: new Date().toISOString(),
-    }))
+    const rows = records.map((r) => {
+      const product = relationship(r, 'Product2')
+      return {
+        sf_id: r.Id,
+        opportunity_sf_id: r.OpportunityId,
+        product_sf_id: r.Product2Id,
+        product_code: product?.ProductCode,
+        product_name: product?.Name,
+        quantity: r.Quantity,
+        unit_price: r.UnitPrice,
+        total_price: r.TotalPrice,
+        raw_data: r,
+        last_synced_at: new Date().toISOString(),
+      }
+    })
 
     await upsertBatched(supabase, 'sf_opportunity_line_items', rows)
 
@@ -287,28 +303,27 @@ export async function syncOpportunityLineItems(sf: SalesforceClient, supabase: S
     })
 
     return rows.length
-  } catch (error: any) {
+  } catch (error: unknown) {
     await updateSyncState(supabase, 'sf_opportunity_line_items', {
       recordCount: 0,
       durationMs: Date.now() - start,
-      error: error.message,
+      error: errorMessage(error),
     })
     throw error
   }
 }
 
-// Shared profile call fields (minus Status which only exists on Task, not Event)
+// Legacy Profile Call compatibility fields.
+// Keep this path dashboard-safe: no notes, recordings, contact names, account IDs, or free-text customer-sensitive fields.
 const PROFILE_CALL_FIELDS_BASE = `
-  Id, Subject, OwnerId, AccountId, WhoId, Who.Name,
+  Id, OwnerId,
   ActivityDate, CreatedDate, LastModifiedDate,
   Profile_Call_Type__c, Profile_Call_Outcome__c, Products_Discussed__c,
-  Program_Size__c, Current_Supplier__c, Budget_Available__c,
-  Budget_Timeframe__c, Follow_Up_Date__c, Converted_to_Opp__c,
+  Program_Size__c, Budget_Timeframe__c, Follow_Up_Date__c, Converted_to_Opp__c,
   Related_Opportunity__c,
-  Call_Notes_Summary__c, Competitor_Intel__c,
   ringdna__Call_Direction__c, ringdna__Call_Duration_min__c,
   ringdna__Call_Connected__c, ringdna__Call_Rating__c,
-  ringdna__Call_Recording_URL__c, ringdna__Voicemail__c,
+  ringdna__Voicemail__c,
   ringdna__Keywords__c, ringdna__Call_Start_Time__c,
   ringdna__Call_Disposition__c,
   Calendly__IsNoShow__c, Calendly__IsRescheduled__c
@@ -317,34 +332,34 @@ const PROFILE_CALL_FIELDS_BASE = `
 const TASK_PROFILE_CALL_FIELDS = `Status, ${PROFILE_CALL_FIELDS_BASE}`
 const EVENT_PROFILE_CALL_FIELDS = PROFILE_CALL_FIELDS_BASE
 
-function mapProfileCallRow(r: Record<string, any>, activityType: string) {
+function mapProfileCallRow(r: SalesforceRecord, activityType: string) {
   return {
     sf_id: r.Id,
     activity_type: activityType,
-    subject: r.Subject,
+    subject: 'Profile Call',
     owner_sf_id: r.OwnerId,
-    account_sf_id: r.AccountId,
-    who_sf_id: r.WhoId,
-    who_name: r.Who?.Name,
+    account_sf_id: null,
+    who_sf_id: null,
+    who_name: null,
     activity_date: r.ActivityDate,
     status: r.Status,
     profile_call_type: r.Profile_Call_Type__c,
     profile_call_outcome: r.Profile_Call_Outcome__c,
     products_discussed: r.Products_Discussed__c,
     program_size: r.Program_Size__c,
-    current_supplier: r.Current_Supplier__c,
-    budget_available: r.Budget_Available__c,
+    current_supplier: null,
+    budget_available: null,
     budget_timeframe: r.Budget_Timeframe__c,
     follow_up_date: r.Follow_Up_Date__c,
     converted_to_opp: r.Converted_to_Opp__c ?? false,
     related_opportunity_sf_id: r.Related_Opportunity__c,
-    call_notes_summary: r.Call_Notes_Summary__c,
-    competitor_intel: r.Competitor_Intel__c,
+    call_notes_summary: null,
+    competitor_intel: null,
     ringdna_direction: r.ringdna__Call_Direction__c,
     ringdna_duration_min: r.ringdna__Call_Duration_min__c,
     ringdna_connected: r.ringdna__Call_Connected__c ?? false,
     ringdna_rating: r.ringdna__Call_Rating__c,
-    ringdna_recording_url: r.ringdna__Call_Recording_URL__c,
+    ringdna_recording_url: null,
     ringdna_voicemail: r.ringdna__Voicemail__c ?? false,
     ringdna_keywords: r.ringdna__Keywords__c,
     ringdna_start_time: r.ringdna__Call_Start_Time__c,
@@ -383,11 +398,108 @@ export async function syncProfileCalls(sf: SalesforceClient, supabase: SupabaseC
     })
 
     return allRows.length
-  } catch (error: any) {
+  } catch (error: unknown) {
     await updateSyncState(supabase, 'sf_profile_calls', {
       recordCount: 0,
       durationMs: Date.now() - start,
-      error: error.message,
+      error: errorMessage(error),
+    })
+    throw error
+  }
+}
+
+// Dashboard-safe RingDNA call activity fields.
+// Intentionally excludes notes, recordings, account names, contact names, and free-text customer-sensitive fields.
+const CALL_ACTIVITY_PROFILE_FIELDS = `
+  Profile_Call_Type__c, Profile_Call_Outcome__c, Products_Discussed__c,
+  Program_Size__c, Budget_Timeframe__c, Follow_Up_Date__c,
+  Converted_to_Opp__c, Related_Opportunity__c,
+  ringdna__Call_Direction__c, ringdna__Call_Duration_min__c,
+  ringdna__Call_Connected__c, ringdna__Call_Rating__c,
+  ringdna__Voicemail__c, ringdna__Keywords__c,
+  ringdna__Call_Start_Time__c, ringdna__Call_Disposition__c,
+  Calendly__IsNoShow__c, Calendly__IsRescheduled__c
+`
+const TASK_CALL_ACTIVITY_FIELDS = `
+  Id, OwnerId, ActivityDate, CreatedDate, LastModifiedDate,
+  TaskSubtype, CallType, CallDisposition,
+  ${CALL_ACTIVITY_PROFILE_FIELDS}
+`
+const EVENT_CALL_ACTIVITY_FIELDS = `
+  Id, OwnerId, ActivityDate, CreatedDate, LastModifiedDate,
+  ${CALL_ACTIVITY_PROFILE_FIELDS}
+`
+const EVENT_RINGDNA_WHERE = `(
+  ringdna__Call_Duration_min__c != null OR
+  ringdna__Call_Connected__c = true OR
+  ringdna__Call_Disposition__c != null OR
+  ringdna__Call_Start_Time__c != null
+)`
+
+function mapCallActivityRow(r: Record<string, unknown>, activityType: 'Task' | 'Event') {
+  return {
+    sf_id: r.Id,
+    activity_type: activityType,
+    owner_sf_id: r.OwnerId,
+    activity_date: r.ActivityDate,
+    created_date: r.CreatedDate,
+    last_modified_date: r.LastModifiedDate,
+    task_subtype: r.TaskSubtype,
+    call_type: r.CallType,
+    call_disposition: r.CallDisposition,
+    profile_call_type: r.Profile_Call_Type__c,
+    profile_call_outcome: r.Profile_Call_Outcome__c,
+    products_discussed: r.Products_Discussed__c,
+    program_size: r.Program_Size__c,
+    budget_timeframe: r.Budget_Timeframe__c,
+    follow_up_date: r.Follow_Up_Date__c,
+    converted_to_opp: r.Converted_to_Opp__c ?? false,
+    related_opportunity_sf_id: r.Related_Opportunity__c,
+    ringdna_direction: r.ringdna__Call_Direction__c,
+    ringdna_duration_min: r.ringdna__Call_Duration_min__c,
+    ringdna_connected: r.ringdna__Call_Connected__c ?? false,
+    ringdna_rating: r.ringdna__Call_Rating__c,
+    ringdna_voicemail: r.ringdna__Voicemail__c ?? false,
+    ringdna_keywords: r.ringdna__Keywords__c,
+    ringdna_start_time: r.ringdna__Call_Start_Time__c,
+    ringdna_disposition: r.ringdna__Call_Disposition__c,
+    calendly_no_show: r.Calendly__IsNoShow__c ?? false,
+    calendly_rescheduled: r.Calendly__IsRescheduled__c ?? false,
+    raw_data: r,
+    last_synced_at: new Date().toISOString(),
+  }
+}
+
+export async function syncCallActivities(sf: SalesforceClient, supabase: SupabaseClient): Promise<number> {
+  const start = Date.now()
+  try {
+    const conn = sf.getConnection()
+
+    const [taskRecords, eventRecords] = await Promise.all([
+      queryAll(conn, `SELECT ${TASK_CALL_ACTIVITY_FIELDS} FROM Task WHERE TaskSubtype = 'Call' ORDER BY ActivityDate DESC`),
+      queryAll(conn, `SELECT ${EVENT_CALL_ACTIVITY_FIELDS} FROM Event WHERE ${EVENT_RINGDNA_WHERE} ORDER BY ActivityDate DESC`),
+    ])
+
+    const rows = [
+      ...taskRecords.map((r) => mapCallActivityRow(r, 'Task')),
+      ...eventRecords.map((r) => mapCallActivityRow(r, 'Event')),
+    ]
+
+    await upsertBatched(supabase, 'sf_call_activities', rows)
+
+    await updateSyncState(supabase, 'sf_call_activities', {
+      recordCount: rows.length,
+      durationMs: Date.now() - start,
+      isFullSync: true,
+    })
+
+    return rows.length
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    await updateSyncState(supabase, 'sf_call_activities', {
+      recordCount: 0,
+      durationMs: Date.now() - start,
+      error: message,
     })
     throw error
   }
@@ -486,6 +598,25 @@ export async function syncIncremental(sf: SalesforceClient, supabase: SupabaseCl
       await updateSyncState(supabase, 'sf_profile_calls', { recordCount: rows.length, durationMs: Date.now() - start })
       total += rows.length
     }
+  }
+
+  // RingDNA call activity incremental
+  const callActivityWm = watermarks.get('sf_call_activities')
+  if (callActivityWm) {
+    const start = Date.now()
+    const [taskRecords, eventRecords] = await Promise.all([
+      queryAll(conn, `SELECT ${TASK_CALL_ACTIVITY_FIELDS} FROM Task WHERE TaskSubtype = 'Call' AND LastModifiedDate >= ${callActivityWm}`),
+      queryAll(conn, `SELECT ${EVENT_CALL_ACTIVITY_FIELDS} FROM Event WHERE ${EVENT_RINGDNA_WHERE} AND LastModifiedDate >= ${callActivityWm}`),
+    ])
+    const rows = [
+      ...taskRecords.map((r) => mapCallActivityRow(r, 'Task')),
+      ...eventRecords.map((r) => mapCallActivityRow(r, 'Event')),
+    ]
+    if (rows.length > 0) {
+      await upsertBatched(supabase, 'sf_call_activities', rows)
+      total += rows.length
+    }
+    await updateSyncState(supabase, 'sf_call_activities', { recordCount: rows.length, durationMs: Date.now() - start })
   }
 
   return total

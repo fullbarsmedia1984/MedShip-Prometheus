@@ -24,6 +24,8 @@ import type {
   SeedRegionSummary,
   SeedProfileCall,
   SeedWeeklyCallVolume,
+  ProfileCallOutcome,
+  ProfileCallType,
 } from '@/lib/seed-data'
 import { AUTOMATION_INFO } from '@/types'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
@@ -93,6 +95,35 @@ function paginate<T>(items: T[], page = 1, pageSize = 20): PaginatedResult<T> {
   }
 }
 
+function normalizeRingDnaDirection(direction: string | null): 'Inbound' | 'Outbound' {
+  return direction === 'Inbound' ? 'Inbound' : 'Outbound'
+}
+
+const PROFILE_CALL_TYPES: ProfileCallType[] = [
+  'Initial Discovery',
+  'Follow-Up',
+  'Product Demo',
+  'Needs Assessment',
+  'Budget Discussion',
+  'Contract Review',
+]
+
+const PROFILE_CALL_OUTCOMES: ProfileCallOutcome[] = [
+  'Interested - Next Steps',
+  'Needs Follow-Up',
+  'Not Interested',
+  'Scheduled Demo',
+  'Quote Requested',
+]
+
+function normalizeProfileCallType(value: string | null | undefined): ProfileCallType {
+  return PROFILE_CALL_TYPES.includes(value as ProfileCallType) ? value as ProfileCallType : 'Follow-Up'
+}
+
+function normalizeProfileCallOutcome(value: string | null | undefined): ProfileCallOutcome {
+  return PROFILE_CALL_OUTCOMES.includes(value as ProfileCallOutcome) ? value as ProfileCallOutcome : 'Needs Follow-Up'
+}
+
 type InventorySnapshotRow = {
   id: string
   part_number: string
@@ -126,9 +157,9 @@ type SyncScheduleRow = {
 }
 
 type SupabaseRangeQuery<T> = {
-  range(from: number, to: number): Promise<{
+  range(from: number, to: number): PromiseLike<{
     data: T[] | null
-    error: Error | null
+    error: unknown
   }>
 }
 
@@ -191,6 +222,36 @@ type SfOpportunityLineItemRow = {
   total_price: number | string | null
 }
 
+type SfCallActivityRow = {
+  sf_id: string
+  activity_type: string
+  owner_sf_id: string | null
+  activity_date: string | null
+  created_date: string | null
+  last_modified_date: string | null
+  task_subtype: string | null
+  call_type: string | null
+  call_disposition: string | null
+  profile_call_type: string | null
+  profile_call_outcome: string | null
+  products_discussed: string | null
+  program_size: string | null
+  budget_timeframe: string | null
+  follow_up_date: string | null
+  converted_to_opp: boolean | null
+  related_opportunity_sf_id: string | null
+  ringdna_direction: string | null
+  ringdna_duration_min: number | string | null
+  ringdna_connected: boolean | null
+  ringdna_rating: number | string | null
+  ringdna_voicemail: boolean | null
+  ringdna_keywords: string | null
+  ringdna_start_time: string | null
+  ringdna_disposition: string | null
+  calendly_no_show: boolean | null
+  calendly_rescheduled: boolean | null
+}
+
 type CanonicalSalesOrderRow = {
   id: string
   so_number: string
@@ -206,6 +267,9 @@ type CanonicalSalesOrderRow = {
   subtotal_amount: number | string | null
   sf_opportunity_id: string | null
   canonical_state: 'quote' | 'order' | 'void' | 'unknown'
+  business_classification: 'new_business' | 'recurring_business' | null
+  prior_issued_so_number: string | null
+  prior_issued_order_at: string | null
   last_synced_at: string | null
   data_quality_flags: string[] | null
 }
@@ -240,13 +304,23 @@ const QUALITY_ZERO_VALUE = 'zero_value'
 const QUALITY_HISTORICAL = 'historical'
 const QUALITY_UNKNOWN_STATE = 'unknown_state'
 const TEST_RECORD_PATTERN = /(^|\b)(test|testing|do not use|sample|warehouse)/i
-const SALES_ORDER_HEADER_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
-const SALES_ORDER_METRIC_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, last_synced_at, data_quality_flags'
+const SALES_ORDER_HEADER_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, business_classification, prior_issued_so_number, prior_issued_order_at, last_synced_at, data_quality_flags'
+const SALES_ORDER_METRIC_SELECT = 'id, so_number, status, customer_name, customer_id, salesperson, date_created, date_scheduled, date_issued, date_completed, total_amount, subtotal_amount, sf_opportunity_id, canonical_state, business_classification, prior_issued_so_number, prior_issued_order_at, last_synced_at, data_quality_flags'
 
 export interface SalesRepPerformance extends SeedSalesRep {
   fishbowlAliases: string[]
   mappingStatus: 'mapped' | 'unmapped' | 'house' | 'system'
   sourceLabel: 'Fishbowl SO'
+  newBusinessRevenueMTD: number
+  newBusinessRevenueQTD: number
+  newBusinessRevenueYTD: number
+  recurringBusinessRevenueMTD: number
+  recurringBusinessRevenueQTD: number
+  recurringBusinessRevenueYTD: number
+  newBusinessOrdersMTD: number
+  recurringBusinessOrdersMTD: number
+  newBusinessOrdersYTD: number
+  recurringBusinessOrdersYTD: number
   quoteValueMTD: number
   quoteValueQTD: number
   quoteValueYTD: number
@@ -292,6 +366,7 @@ export interface SalesDataHealth {
   unlinkedSalesOrders: number
   linkCoverage: number
   linkRows: number
+  newBusinessDefinition: string
   activeMetricPeriodLabel: string
   activeMetricPeriodStart: string
   activeMetricPeriodEnd: string
@@ -299,10 +374,25 @@ export interface SalesDataHealth {
   rosterOptions: SalesRosterOption[]
 }
 
+export interface MonthlyBusinessRevenue {
+  month: string
+  newBusinessRevenue: number
+  recurringBusinessRevenue: number
+  newBusinessOrders: number
+  recurringBusinessOrders: number
+}
+
+export interface MonthlyBusinessRevenueByRep {
+  month: string
+  [key: string]: string | number
+}
+
 export interface SalesDashboardCore {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
+  monthlyBusinessRevenue: MonthlyBusinessRevenue[]
+  monthlyBusinessRevenueByRep: MonthlyBusinessRevenueByRep[]
   salesHealth: SalesDataHealth
 }
 
@@ -1433,6 +1523,25 @@ function isWithinPeriod(dateValue: string | null, startDate: string, endDate: st
   return Boolean(dateValue && dateValue >= startDate && dateValue < endDate)
 }
 
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function parseDateKey(value: string): Date {
+  return new Date(`${value}T00:00:00`)
+}
+
+function weekStartKey(value: string): string {
+  const date = parseDateKey(value)
+  date.setDate(date.getDate() - date.getDay())
+  return dateKey(date)
+}
+
+function monthStartKey(value: string): string {
+  const date = parseDateKey(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 function monthPeriodForDate(dateValue: string | null, fallbackNow = new Date()) {
   const date = dateValue ? new Date(dateValue) : fallbackNow
   const safeDate = Number.isNaN(date.getTime()) ? fallbackNow : date
@@ -1447,6 +1556,14 @@ function monthPeriodForDate(dateValue: string | null, fallbackNow = new Date()) 
 
 function salesOrderAmount(row: CanonicalSalesOrderRow): number {
   return roundCurrency(toNumber(row.total_amount) || toNumber(row.subtotal_amount))
+}
+
+function salesOrderBusinessClassification(row: CanonicalSalesOrderRow): 'new_business' | 'recurring_business' | null {
+  if (row.canonical_state !== 'order') return null
+  if (row.business_classification === 'new_business' || row.business_classification === 'recurring_business') {
+    return row.business_classification
+  }
+  return null
 }
 
 function metricFlags(row: CanonicalSalesOrderRow, amount: number): Set<string> {
@@ -1534,6 +1651,16 @@ function createEmptySalesRep(input: {
     fishbowlAliases: [],
     mappingStatus: input.mappingStatus,
     sourceLabel: 'Fishbowl SO',
+    newBusinessRevenueMTD: 0,
+    newBusinessRevenueQTD: 0,
+    newBusinessRevenueYTD: 0,
+    recurringBusinessRevenueMTD: 0,
+    recurringBusinessRevenueQTD: 0,
+    recurringBusinessRevenueYTD: 0,
+    newBusinessOrdersMTD: 0,
+    recurringBusinessOrdersMTD: 0,
+    newBusinessOrdersYTD: 0,
+    recurringBusinessOrdersYTD: 0,
     quoteValueMTD: 0,
     quoteValueQTD: 0,
     quoteValueYTD: 0,
@@ -1557,7 +1684,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   })
   const metricQueryStart = [yearStart, monthlyStart].sort()[0]
 
-  const [usersRes, mappings, orderRows, pipelineRes, profileCallsRes, linkRowsRes] = await Promise.all([
+  const [usersRes, mappings, orderRows, pipelineRes, callActivitiesRes, linkRowsRes] = await Promise.all([
     supabase.from('sf_users').select('sf_id, name, email').eq('is_active', true),
     getFishbowlSalespersonMappings(),
     fetchAllRows<CanonicalSalesOrderRow>(() =>
@@ -1569,13 +1696,13 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
     ),
     supabase.from('sf_opportunities').select('owner_sf_id, amount').eq('is_closed', false),
-    supabase.from('sf_profile_calls').select('owner_sf_id, ringdna_connected, activity_date').gte('activity_date', lastMonthStart),
+    supabase.from('sf_call_activities').select('owner_sf_id, ringdna_connected, activity_date').gte('activity_date', lastMonthStart),
     supabase.from('opportunity_sales_order_links').select('*', { count: 'estimated', head: true }),
   ])
 
   if (usersRes.error) throw usersRes.error
   if (pipelineRes.error) throw pipelineRes.error
-  if (profileCallsRes.error && !isMissingRelationError(profileCallsRes.error)) throw profileCallsRes.error
+  if (callActivitiesRes.error && !isMissingRelationError(callActivitiesRes.error)) throw callActivitiesRes.error
   if (linkRowsRes.error && !isMissingRelationError(linkRowsRes.error)) throw linkRowsRes.error
 
   const usersById = new Map(((usersRes.data ?? []) as SfUserRow[]).map((user) => [user.sf_id, user]))
@@ -1594,30 +1721,47 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   const aliasStats = new Map<string, SalesAliasGap>()
   const latestActivityByAlias = new Map<string, string>()
   const monthlyRows = months.map(({ label }) => ({ month: label } as SeedMonthlyRepRevenue))
+  const monthlyBusinessRows = months.map(({ label }) => ({
+    month: label,
+    newBusinessRevenue: 0,
+    recurringBusinessRevenue: 0,
+    newBusinessOrders: 0,
+    recurringBusinessOrders: 0,
+  }))
+  const monthlyBusinessByRepRows = months.map(({ label }) => ({ month: label } as MonthlyBusinessRevenueByRep))
   const pipelineByOwner = new Map<string, number>()
-  const profileStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
+  const callStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
 
   for (const opp of (pipelineRes.data ?? []) as Array<Pick<SfOpportunityRow, 'owner_sf_id' | 'amount'>>) {
     if (!opp.owner_sf_id) continue
     pipelineByOwner.set(opp.owner_sf_id, (pipelineByOwner.get(opp.owner_sf_id) ?? 0) + toNumber(opp.amount))
   }
 
-  for (const call of (profileCallsRes.data ?? []) as Array<{ owner_sf_id: string | null; ringdna_connected: boolean | null; activity_date: string | null }>) {
+  for (const call of (callActivitiesRes.data ?? []) as Array<{ owner_sf_id: string | null; ringdna_connected: boolean | null; activity_date: string | null }>) {
     if (!call.owner_sf_id || !call.activity_date) continue
-    const stats = profileStatsByOwner.get(call.owner_sf_id) ?? { mtd: 0, lastMonth: 0, connected: 0 }
+    const stats = callStatsByOwner.get(call.owner_sf_id) ?? { mtd: 0, lastMonth: 0, connected: 0 }
     if (call.activity_date >= monthStart) {
       stats.mtd++
       if (call.ringdna_connected) stats.connected++
     } else if (call.activity_date >= lastMonthStart) {
       stats.lastMonth++
     }
-    profileStatsByOwner.set(call.owner_sf_id, stats)
+    callStatsByOwner.set(call.owner_sf_id, stats)
   }
 
   const kpis: SalesKpis = {
     revenueMTD: 0,
     revenueQTD: 0,
     revenueYTD: 0,
+    newBusinessRevenueMTD: 0,
+    newBusinessRevenueQTD: 0,
+    newBusinessRevenueYTD: 0,
+    recurringBusinessRevenueMTD: 0,
+    recurringBusinessRevenueQTD: 0,
+    recurringBusinessRevenueYTD: 0,
+    newBusinessOrdersMTD: 0,
+    recurringBusinessOrdersMTD: 0,
+    newBusinessMixMTD: 0,
     quotesSentMTD: 0,
     dealsClosedMTD: 0,
     avgDaysToClose: 0,
@@ -1721,14 +1865,30 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     recordAliasGap(row, mapping, amount, metricDate)
 
     if (row.canonical_state === 'order') {
+      const businessClassification = salesOrderBusinessClassification(row)
       totalBusinessSalesOrders++
       if (row.sf_opportunity_id) linkedSalesOrders++
       if (isSelectedRosterRow && isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         kpis.revenueMTD += amount
         kpis.dealsClosedMTD++
+        if (businessClassification === 'new_business') {
+          kpis.newBusinessRevenueMTD += amount
+          kpis.newBusinessOrdersMTD++
+        } else if (businessClassification === 'recurring_business') {
+          kpis.recurringBusinessRevenueMTD += amount
+          kpis.recurringBusinessOrdersMTD++
+        }
       }
-      if (isSelectedRosterRow && isOnOrAfter(metricDate, qtrStart)) kpis.revenueQTD += amount
-      if (isSelectedRosterRow && isOnOrAfter(metricDate, yearStart)) kpis.revenueYTD += amount
+      if (isSelectedRosterRow && isOnOrAfter(metricDate, qtrStart)) {
+        kpis.revenueQTD += amount
+        if (businessClassification === 'new_business') kpis.newBusinessRevenueQTD += amount
+        else if (businessClassification === 'recurring_business') kpis.recurringBusinessRevenueQTD += amount
+      }
+      if (isSelectedRosterRow && isOnOrAfter(metricDate, yearStart)) {
+        kpis.revenueYTD += amount
+        if (businessClassification === 'new_business') kpis.newBusinessRevenueYTD += amount
+        else if (businessClassification === 'recurring_business') kpis.recurringBusinessRevenueYTD += amount
+      }
     } else if (row.canonical_state === 'quote') {
       if (isSelectedRosterRow && isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) kpis.quotesSentMTD++
     }
@@ -1741,19 +1901,49 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     }
 
     if (row.canonical_state === 'order') {
+      const businessClassification = salesOrderBusinessClassification(row)
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.revenueMTD += amount
         rep.dealsClosed++
+        if (businessClassification === 'new_business') {
+          rep.newBusinessRevenueMTD += amount
+          rep.newBusinessOrdersMTD++
+        } else if (businessClassification === 'recurring_business') {
+          rep.recurringBusinessRevenueMTD += amount
+          rep.recurringBusinessOrdersMTD++
+        }
       }
-      if (isOnOrAfter(metricDate, qtrStart)) rep.revenueQTD += amount
+      if (isOnOrAfter(metricDate, qtrStart)) {
+        rep.revenueQTD += amount
+        if (businessClassification === 'new_business') rep.newBusinessRevenueQTD += amount
+        else if (businessClassification === 'recurring_business') rep.recurringBusinessRevenueQTD += amount
+      }
       if (isOnOrAfter(metricDate, yearStart)) {
         rep.revenueYTD += amount
         rep.ordersYTD++
+        if (businessClassification === 'new_business') {
+          rep.newBusinessRevenueYTD += amount
+          rep.newBusinessOrdersYTD++
+        } else if (businessClassification === 'recurring_business') {
+          rep.recurringBusinessRevenueYTD += amount
+          rep.recurringBusinessOrdersYTD++
+        }
       }
 
       const monthIndex = metricDate ? months.findIndex((month) => metricDate.startsWith(month.key)) : -1
       if (monthIndex >= 0 && metricDate && metricDate >= monthlyStart) {
         monthlyRows[monthIndex][rep.name] = toNumber(monthlyRows[monthIndex][rep.name] as number | string | null) + amount
+        if (businessClassification === 'new_business') {
+          monthlyBusinessRows[monthIndex].newBusinessRevenue += amount
+          monthlyBusinessRows[monthIndex].newBusinessOrders++
+          monthlyBusinessByRepRows[monthIndex][`${rep.name} - New`] =
+            toNumber(monthlyBusinessByRepRows[monthIndex][`${rep.name} - New`] as number | string | null) + amount
+        } else if (businessClassification === 'recurring_business') {
+          monthlyBusinessRows[monthIndex].recurringBusinessRevenue += amount
+          monthlyBusinessRows[monthIndex].recurringBusinessOrders++
+          monthlyBusinessByRepRows[monthIndex][`${rep.name} - Recurring`] =
+            toNumber(monthlyBusinessByRepRows[monthIndex][`${rep.name} - Recurring`] as number | string | null) + amount
+        }
       }
     } else if (row.canonical_state === 'quote') {
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
@@ -1792,7 +1982,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     }
   }
 
-  for (const [ownerId, stats] of profileStatsByOwner.entries()) {
+  for (const [ownerId, stats] of callStatsByOwner.entries()) {
     const rep = repsById.get(ownerId)
     if (!rep) continue
     rep.profileCalls = stats.mtd
@@ -1806,6 +1996,12 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     rep.revenueMTD = roundCurrency(rep.revenueMTD)
     rep.revenueQTD = roundCurrency(rep.revenueQTD)
     rep.revenueYTD = roundCurrency(rep.revenueYTD)
+    rep.newBusinessRevenueMTD = roundCurrency(rep.newBusinessRevenueMTD)
+    rep.newBusinessRevenueQTD = roundCurrency(rep.newBusinessRevenueQTD)
+    rep.newBusinessRevenueYTD = roundCurrency(rep.newBusinessRevenueYTD)
+    rep.recurringBusinessRevenueMTD = roundCurrency(rep.recurringBusinessRevenueMTD)
+    rep.recurringBusinessRevenueQTD = roundCurrency(rep.recurringBusinessRevenueQTD)
+    rep.recurringBusinessRevenueYTD = roundCurrency(rep.recurringBusinessRevenueYTD)
     rep.quoteValueMTD = roundCurrency(rep.quoteValueMTD)
     rep.quoteValueQTD = roundCurrency(rep.quoteValueQTD)
     rep.quoteValueYTD = roundCurrency(rep.quoteValueYTD)
@@ -1822,6 +2018,15 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   for (const row of monthlyRows) {
     for (const rep of reps.slice(0, 8)) {
       row[rep.name] = roundCurrency(toNumber(row[rep.name] as number | string | null))
+    }
+  }
+  for (const row of monthlyBusinessRows) {
+    row.newBusinessRevenue = roundCurrency(row.newBusinessRevenue)
+    row.recurringBusinessRevenue = roundCurrency(row.recurringBusinessRevenue)
+  }
+  for (const row of monthlyBusinessByRepRows) {
+    for (const key of Object.keys(row)) {
+      if (key !== 'month') row[key] = roundCurrency(toNumber(row[key] as number | string | null))
     }
   }
 
@@ -1850,12 +2055,23 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   kpis.revenueMTD = roundCurrency(kpis.revenueMTD)
   kpis.revenueQTD = roundCurrency(kpis.revenueQTD)
   kpis.revenueYTD = roundCurrency(kpis.revenueYTD)
+  kpis.newBusinessRevenueMTD = roundCurrency(kpis.newBusinessRevenueMTD)
+  kpis.newBusinessRevenueQTD = roundCurrency(kpis.newBusinessRevenueQTD)
+  kpis.newBusinessRevenueYTD = roundCurrency(kpis.newBusinessRevenueYTD)
+  kpis.recurringBusinessRevenueMTD = roundCurrency(kpis.recurringBusinessRevenueMTD)
+  kpis.recurringBusinessRevenueQTD = roundCurrency(kpis.recurringBusinessRevenueQTD)
+  kpis.recurringBusinessRevenueYTD = roundCurrency(kpis.recurringBusinessRevenueYTD)
+  kpis.newBusinessMixMTD = kpis.dealsClosedMTD > 0
+    ? Math.round((kpis.newBusinessOrdersMTD / kpis.dealsClosedMTD) * 1000) / 10
+    : 0
   kpis.pipelineValue = roundCurrency(kpis.pipelineValue)
 
   return {
     kpis,
     reps,
     monthlyRevenue: monthlyRows,
+    monthlyBusinessRevenue: monthlyBusinessRows,
+    monthlyBusinessRevenueByRep: monthlyBusinessByRepRows,
     salesHealth: {
       revenueSource: 'fishbowl_sales_orders',
       pipelineSource: 'salesforce_opportunities',
@@ -1873,6 +2089,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       unlinkedSalesOrders: Math.max(0, totalBusinessSalesOrders - linkedSalesOrders),
       linkCoverage: totalBusinessSalesOrders > 0 ? Math.round((linkedSalesOrders / totalBusinessSalesOrders) * 1000) / 10 : 0,
       linkRows: linkRowsRes.count ?? 0,
+      newBusinessDefinition: 'New Business means the first issued Fishbowl Sales Order after 365+ days without an issued order, plus every issued order from that same customer inside the following 365-day new-business cohort window. Orders after that cohort window are Recurring unless a new 365+ day inactivity gap starts a fresh cohort.',
       activeMetricPeriodLabel: activeMonth.label,
       activeMetricPeriodStart: activeMonth.start,
       activeMetricPeriodEnd: activeMonth.end,
@@ -2343,6 +2560,15 @@ export interface SalesKpis {
   revenueMTD: number
   revenueQTD: number
   revenueYTD: number
+  newBusinessRevenueMTD: number
+  newBusinessRevenueQTD: number
+  newBusinessRevenueYTD: number
+  recurringBusinessRevenueMTD: number
+  recurringBusinessRevenueQTD: number
+  recurringBusinessRevenueYTD: number
+  newBusinessOrdersMTD: number
+  recurringBusinessOrdersMTD: number
+  newBusinessMixMTD: number
   quotesSentMTD: number
   dealsClosedMTD: number
   avgDaysToClose: number
@@ -2416,62 +2642,73 @@ export async function getProfileCalls(filters: ProfileCallFilters = {}): Promise
 
 async function getLiveProfileCalls(filters: ProfileCallFilters): Promise<PaginatedResult<SeedProfileCall>> {
   const supabase = createAdminClient()
-  const { data: calls } = await supabase
-    .from('sf_profile_calls')
-    .select('*')
-    .order('activity_date', { ascending: false })
-    .limit(filters.pageSize ?? 50)
 
-  if (!calls || calls.length === 0) {
-    warnEmptyLiveTable('sf_profile_calls', 'profile call list')
-    return { data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+  let query = supabase
+    .from('sf_call_activities')
+    .select('sf_id, activity_type, owner_sf_id, activity_date, task_subtype, call_type, call_disposition, profile_call_type, profile_call_outcome, products_discussed, program_size, budget_timeframe, follow_up_date, converted_to_opp, related_opportunity_sf_id, ringdna_direction, ringdna_duration_min, ringdna_connected, ringdna_rating, ringdna_voicemail, ringdna_keywords, ringdna_start_time, ringdna_disposition, calendly_no_show, calendly_rescheduled')
+    .order('activity_date', { ascending: false })
+    .limit(filters.limit ?? filters.pageSize ?? 50)
+
+  if (filters.repId) query = query.eq('owner_sf_id', filters.repId)
+  if (filters.startDate) query = query.gte('activity_date', filters.startDate)
+  if (filters.endDate) query = query.lte('activity_date', filters.endDate)
+  if (filters.outcome) query = query.eq('profile_call_outcome', filters.outcome)
+  if (filters.convertedOnly) query = query.eq('converted_to_opp', true)
+  if (filters.activityType && filters.activityType !== 'all') query = query.eq('activity_type', filters.activityType)
+  if (filters.keyword) query = query.ilike('ringdna_keywords', `%${filters.keyword.replace(/[%*,]/g, '')}%`)
+
+  const { data: calls, error } = await query
+  if (error) {
+    if (isMissingRelationError(error)) {
+      warnEmptyLiveTable('sf_call_activities', 'call activity list')
+      return { data: [], total: 0, page: 1, pageSize: filters.pageSize ?? 20, totalPages: 0 }
+    }
+    throw error
   }
 
-  // Resolve owner and account names
-  const ownerIds = [...new Set(calls.map((c) => c.owner_sf_id).filter(Boolean))]
-  const accountIds = [...new Set(calls.map((c) => c.account_sf_id).filter(Boolean))]
+  if (!calls || calls.length === 0) {
+    warnEmptyLiveTable('sf_call_activities', 'call activity list')
+    return { data: [], total: 0, page: 1, pageSize: filters.pageSize ?? 20, totalPages: 0 }
+  }
 
-  const [usersRes, accountsRes] = await Promise.all([
-    ownerIds.length > 0 ? supabase.from('sf_users').select('sf_id, name').in('sf_id', ownerIds) : { data: [] },
-    accountIds.length > 0 ? supabase.from('sf_accounts').select('sf_id, name').in('sf_id', accountIds) : { data: [] },
-  ])
+  const ownerIds = [...new Set(calls.map((c) => c.owner_sf_id).filter(Boolean))]
+  const usersRes = ownerIds.length > 0
+    ? await supabase.from('sf_users').select('sf_id, name').in('sf_id', ownerIds)
+    : { data: [] }
 
   const userNames = new Map(
     ((usersRes.data ?? []) as LookupNameRow[]).map((u) => [u.sf_id, u.name])
   )
-  const accountNames = new Map(
-    ((accountsRes.data ?? []) as LookupNameRow[]).map((a) => [a.sf_id, a.name])
-  )
 
-  const mapped: SeedProfileCall[] = calls.map((c) => ({
+  const mapped: SeedProfileCall[] = (calls as SfCallActivityRow[]).map((c) => ({
     id: c.sf_id,
-    subject: c.subject ?? '',
+    subject: 'RingDNA Call',
     repId: c.owner_sf_id ?? '',
-    repName: userNames.get(c.owner_sf_id) ?? c.owner_sf_id ?? '',
-    accountName: accountNames.get(c.account_sf_id) ?? '',
-    contactName: c.who_name ?? '',
-    activityDate: c.activity_date,
+    repName: (c.owner_sf_id ? userNames.get(c.owner_sf_id) : undefined) ?? c.owner_sf_id ?? '',
+    accountName: '',
+    contactName: '',
+    activityDate: c.activity_date ?? '',
     activityType: c.activity_type as 'Task' | 'Event',
-    profileCallType: c.profile_call_type ?? 'Follow-Up',
-    profileCallOutcome: c.profile_call_outcome ?? 'Needs Follow-Up',
+    profileCallType: normalizeProfileCallType(c.profile_call_type),
+    profileCallOutcome: normalizeProfileCallOutcome(c.profile_call_outcome ?? c.ringdna_disposition ?? c.call_disposition),
     productsDiscussed: c.products_discussed ? c.products_discussed.split(';').map((s: string) => s.trim()) : [],
     programSize: c.program_size ?? '',
-    currentSupplier: c.current_supplier,
-    budgetAvailable: c.budget_available ? Number(c.budget_available) : null,
+    currentSupplier: null,
+    budgetAvailable: null,
     budgetTimeframe: c.budget_timeframe,
     followUpDate: c.follow_up_date,
     convertedToOpp: c.converted_to_opp ?? false,
-    relatedOpportunityName: null, // Would need to join sf_opportunities
-    callNotesSummary: c.call_notes_summary ?? '',
-    competitorIntel: c.competitor_intel,
-    ringdnaDirection: c.ringdna_direction ?? 'Outbound',
+    relatedOpportunityName: null,
+    callNotesSummary: '',
+    competitorIntel: null,
+    ringdnaDirection: normalizeRingDnaDirection(c.ringdna_direction),
     ringdnaDurationMin: c.ringdna_duration_min ? Number(c.ringdna_duration_min) : 0,
     ringdnaConnected: c.ringdna_connected ?? false,
-    ringdnaRating: c.ringdna_rating,
-    ringdnaRecordingUrl: c.ringdna_recording_url,
+    ringdnaRating: c.ringdna_rating != null ? Number(c.ringdna_rating) : null,
+    ringdnaRecordingUrl: null,
     ringdnaVoicemail: c.ringdna_voicemail ?? false,
     ringdnaKeywords: c.ringdna_keywords,
-    ringdnaStartTime: c.ringdna_start_time ?? c.activity_date,
+    ringdnaStartTime: c.ringdna_start_time ?? c.activity_date ?? '',
     calendlyNoShow: c.calendly_no_show ?? false,
     calendlyRescheduled: c.calendly_rescheduled ?? false,
   }))
@@ -2485,6 +2722,8 @@ export interface ProfileCallMetricsResult {
   conversionRate: number
   connectRate: number
   avgDuration: number
+  voicemailCount: number
+  voicemailRate: number
   byRep: Array<{
     repName: string
     calls: number
@@ -2494,6 +2733,8 @@ export interface ProfileCallMetricsResult {
     connectRate: number
     avgDuration: number
     avgRating: number | null
+    voicemailCount: number
+    voicemailRate: number
   }>
 }
 
@@ -2508,20 +2749,49 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]
 
-  const { data: mtdCalls } = await supabase
-    .from('sf_profile_calls')
-    .select('owner_sf_id, converted_to_opp, ringdna_connected, ringdna_duration_min, ringdna_rating')
-    .gte('activity_date', monthStart)
+  let mtdCalls: Array<{
+    owner_sf_id: string | null
+    converted_to_opp: boolean | null
+    ringdna_connected: boolean | null
+    ringdna_duration_min: number | string | null
+    ringdna_rating: number | string | null
+    ringdna_voicemail: boolean | null
+  }> = []
 
-  const { count: lastMonthCount } = await supabase
-    .from('sf_profile_calls')
+  try {
+    mtdCalls = await fetchAllRows(() =>
+      supabase
+        .from('sf_call_activities')
+        .select('owner_sf_id, converted_to_opp, ringdna_connected, ringdna_duration_min, ringdna_rating, ringdna_voicemail')
+        .gte('activity_date', monthStart)
+        .order('activity_date', { ascending: true })
+        .order('sf_id', { ascending: true })
+    )
+  } catch (error) {
+    if (isMissingRelationError(error)) {
+      warnEmptyLiveTable('sf_call_activities', 'call activity metrics')
+      return { totalMTD: 0, totalLastMonth: 0, conversionRate: 0, connectRate: 0, avgDuration: 0, voicemailCount: 0, voicemailRate: 0, byRep: [] }
+    }
+    throw error
+  }
+
+  const { count: lastMonthCount, error: lastMonthError } = await supabase
+    .from('sf_call_activities')
     .select('*', { count: 'exact', head: true })
     .gte('activity_date', lastMonthStart)
     .lt('activity_date', monthStart)
 
-  if (!mtdCalls || mtdCalls.length === 0) {
-    warnEmptyLiveTable('sf_profile_calls', 'profile call metrics')
-    return { totalMTD: 0, totalLastMonth: lastMonthCount ?? 0, conversionRate: 0, connectRate: 0, avgDuration: 0, byRep: [] }
+  if (lastMonthError) {
+    if (isMissingRelationError(lastMonthError)) {
+      warnEmptyLiveTable('sf_call_activities', 'call activity metrics')
+      return { totalMTD: 0, totalLastMonth: 0, conversionRate: 0, connectRate: 0, avgDuration: 0, voicemailCount: 0, voicemailRate: 0, byRep: [] }
+    }
+    throw lastMonthError
+  }
+
+  if (mtdCalls.length === 0) {
+    warnEmptyLiveTable('sf_call_activities', 'call activity metrics')
+    return { totalMTD: 0, totalLastMonth: lastMonthCount ?? 0, conversionRate: 0, connectRate: 0, avgDuration: 0, voicemailCount: 0, voicemailRate: 0, byRep: [] }
   }
 
   // Resolve owner names
@@ -2532,22 +2802,24 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
   const totalMTD = mtdCalls.length
   const converted = mtdCalls.filter((c) => c.converted_to_opp).length
   const connected = mtdCalls.filter((c) => c.ringdna_connected).length
+  const voicemails = mtdCalls.filter((c) => c.ringdna_voicemail).length
   const durations = mtdCalls.map((c) => Number(c.ringdna_duration_min) || 0).filter((d) => d > 0)
 
   // Group by rep
   const byRepMap = new Map<string, {
-    calls: number; converted: number; connected: number;
+    calls: number; converted: number; connected: number; voicemails: number;
     totalDuration: number; totalRating: number; ratingCount: number
   }>()
   for (const call of mtdCalls) {
     const repId = call.owner_sf_id ?? 'unknown'
-    const existing = byRepMap.get(repId) ?? { calls: 0, converted: 0, connected: 0, totalDuration: 0, totalRating: 0, ratingCount: 0 }
+    const existing = byRepMap.get(repId) ?? { calls: 0, converted: 0, connected: 0, voicemails: 0, totalDuration: 0, totalRating: 0, ratingCount: 0 }
     existing.calls++
     if (call.converted_to_opp) existing.converted++
     if (call.ringdna_connected) existing.connected++
+    if (call.ringdna_voicemail) existing.voicemails++
     existing.totalDuration += Number(call.ringdna_duration_min) || 0
     if (call.ringdna_rating != null) {
-      existing.totalRating += call.ringdna_rating
+      existing.totalRating += Number(call.ringdna_rating) || 0
       existing.ratingCount++
     }
     byRepMap.set(repId, existing)
@@ -2559,6 +2831,8 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
     conversionRate: totalMTD > 0 ? Math.round((converted / totalMTD) * 1000) / 10 : 0,
     connectRate: totalMTD > 0 ? Math.round((connected / totalMTD) * 1000) / 10 : 0,
     avgDuration: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0,
+    voicemailCount: voicemails,
+    voicemailRate: totalMTD > 0 ? Math.round((voicemails / totalMTD) * 1000) / 10 : 0,
     byRep: Array.from(byRepMap.entries()).map(([repId, data]) => ({
       repName: nameMap.get(repId) ?? repId,
       calls: data.calls,
@@ -2568,7 +2842,312 @@ async function getLiveProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
       connectRate: data.calls > 0 ? Math.round((data.connected / data.calls) * 1000) / 10 : 0,
       avgDuration: data.calls > 0 ? Math.round(data.totalDuration / data.calls) : 0,
       avgRating: data.ratingCount > 0 ? Math.round((data.totalRating / data.ratingCount) * 10) / 10 : null,
+      voicemailCount: data.voicemails,
+      voicemailRate: data.calls > 0 ? Math.round((data.voicemails / data.calls) * 1000) / 10 : 0,
     })),
+  }
+}
+
+export interface CallActivityRepPeriod {
+  ownerSfId: string
+  repName: string
+  totalCalls: number
+  conversationCalls: number
+  outboundCalls: number
+  inboundCalls: number
+  connectedCalls: number
+  totalDurationMin: number
+  avgDurationMin: number
+}
+
+export interface CallActivityPeriodSummary {
+  periodStart: string
+  label: string
+  totalCalls: number
+  conversationCalls: number
+  outboundCalls: number
+  inboundCalls: number
+  connectedCalls: number
+  totalDurationMin: number
+  avgDurationMin: number
+  byRep: CallActivityRepPeriod[]
+}
+
+export interface CallActivitySummary {
+  generatedAt: string
+  latestActivityDate: string | null
+  daily: CallActivityPeriodSummary[]
+  weekly: CallActivityPeriodSummary[]
+  monthly: CallActivityPeriodSummary[]
+  byRep: Array<{
+    ownerSfId: string
+    repName: string
+    today: CallActivityRepPeriod
+    weekToDate: CallActivityRepPeriod
+    monthToDate: CallActivityRepPeriod
+  }>
+}
+
+type CallActivityMetricRow = {
+  owner_sf_id: string | null
+  activity_date: string | null
+  ringdna_direction: string | null
+  ringdna_duration_min: number | string | null
+  ringdna_connected: boolean | null
+}
+
+type MutableCallActivityPeriod = {
+  periodStart: string
+  label: string
+  totalCalls: number
+  conversationCalls: number
+  outboundCalls: number
+  inboundCalls: number
+  connectedCalls: number
+  totalDurationMin: number
+  byRep: Map<string, CallActivityRepPeriod>
+}
+
+function emptyRepPeriod(ownerSfId: string, repName: string): CallActivityRepPeriod {
+  return {
+    ownerSfId,
+    repName,
+    totalCalls: 0,
+    conversationCalls: 0,
+    outboundCalls: 0,
+    inboundCalls: 0,
+    connectedCalls: 0,
+    totalDurationMin: 0,
+    avgDurationMin: 0,
+  }
+}
+
+function createPeriod(periodStart: string, label: string): MutableCallActivityPeriod {
+  return {
+    periodStart,
+    label,
+    totalCalls: 0,
+    conversationCalls: 0,
+    outboundCalls: 0,
+    inboundCalls: 0,
+    connectedCalls: 0,
+    totalDurationMin: 0,
+    byRep: new Map(),
+  }
+}
+
+function addCallToPeriod(period: MutableCallActivityPeriod, call: CallActivityMetricRow, repName: string) {
+  const direction = call.ringdna_direction ?? ''
+  const duration = toNumber(call.ringdna_duration_min)
+  const ownerSfId = call.owner_sf_id ?? 'unassigned'
+  const rep = period.byRep.get(ownerSfId) ?? emptyRepPeriod(ownerSfId, repName)
+
+  period.totalCalls += 1
+  rep.totalCalls += 1
+
+  if (duration >= 2) {
+    period.conversationCalls += 1
+    rep.conversationCalls += 1
+  }
+
+  if (direction === 'Outbound') {
+    period.outboundCalls += 1
+    rep.outboundCalls += 1
+  } else if (direction === 'Inbound') {
+    period.inboundCalls += 1
+    rep.inboundCalls += 1
+  }
+
+  if (call.ringdna_connected) {
+    period.connectedCalls += 1
+    rep.connectedCalls += 1
+  }
+
+  period.totalDurationMin += duration
+  rep.totalDurationMin += duration
+  period.byRep.set(ownerSfId, rep)
+}
+
+function finalizePeriod(period: MutableCallActivityPeriod): CallActivityPeriodSummary {
+  const byRep = Array.from(period.byRep.values())
+    .map((rep) => ({
+      ...rep,
+      totalDurationMin: Math.round(rep.totalDurationMin * 10) / 10,
+      avgDurationMin: rep.totalCalls > 0 ? Math.round((rep.totalDurationMin / rep.totalCalls) * 10) / 10 : 0,
+    }))
+    .sort((a, b) => b.outboundCalls - a.outboundCalls || b.totalDurationMin - a.totalDurationMin)
+
+  return {
+    periodStart: period.periodStart,
+    label: period.label,
+    totalCalls: period.totalCalls,
+    conversationCalls: period.conversationCalls,
+    outboundCalls: period.outboundCalls,
+    inboundCalls: period.inboundCalls,
+    connectedCalls: period.connectedCalls,
+    totalDurationMin: Math.round(period.totalDurationMin * 10) / 10,
+    avgDurationMin: period.totalCalls > 0 ? Math.round((period.totalDurationMin / period.totalCalls) * 10) / 10 : 0,
+    byRep,
+  }
+}
+
+function makeDailyPeriods(now: Date): MutableCallActivityPeriod[] {
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - (5 - index))
+    date.setHours(0, 0, 0, 0)
+    const key = dateKey(date)
+    return createPeriod(key, date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+  })
+}
+
+function makeWeeklyPeriods(now: Date): MutableCallActivityPeriod[] {
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - now.getDay() - (5 - index) * 7)
+    date.setHours(0, 0, 0, 0)
+    const key = dateKey(date)
+    return createPeriod(key, `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`)
+  })
+}
+
+function makeMonthlyPeriods(now: Date): MutableCallActivityPeriod[] {
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
+    const key = dateKey(date)
+    return createPeriod(key, date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }))
+  })
+}
+
+export async function getCallActivitySummary(): Promise<CallActivitySummary> {
+  void await getDataSourceMode()
+  const supabase = createAdminClient()
+  const now = new Date()
+  const dailyPeriods = makeDailyPeriods(now)
+  const weeklyPeriods = makeWeeklyPeriods(now)
+  const monthlyPeriods = makeMonthlyPeriods(now)
+  const dailyByKey = new Map(dailyPeriods.map((period) => [period.periodStart, period]))
+  const weeklyByKey = new Map(weeklyPeriods.map((period) => [period.periodStart, period]))
+  const monthlyByKey = new Map(monthlyPeriods.map((period) => [period.periodStart, period]))
+  const startDate = [dailyPeriods[0].periodStart, weeklyPeriods[0].periodStart, monthlyPeriods[0].periodStart].sort()[0]
+
+  let calls: CallActivityMetricRow[] = []
+
+  try {
+    calls = await fetchAllRows<CallActivityMetricRow>(() =>
+      supabase
+        .from('sf_call_activities')
+        .select('owner_sf_id, activity_date, ringdna_direction, ringdna_duration_min, ringdna_connected')
+        .gte('activity_date', startDate)
+        .order('activity_date', { ascending: true })
+        .order('sf_id', { ascending: true })
+    )
+  } catch (error) {
+    if (isMissingRelationError(error)) {
+      warnEmptyLiveTable('sf_call_activities', 'call activity summary')
+      return { generatedAt: new Date().toISOString(), latestActivityDate: null, daily: [], weekly: [], monthly: [], byRep: [] }
+    }
+    throw error
+  }
+
+  if (calls.length === 0) {
+    warnEmptyLiveTable('sf_call_activities', 'call activity summary')
+    return {
+      generatedAt: new Date().toISOString(),
+      latestActivityDate: null,
+      daily: dailyPeriods.map(finalizePeriod),
+      weekly: weeklyPeriods.map(finalizePeriod),
+      monthly: monthlyPeriods.map(finalizePeriod),
+      byRep: [],
+    }
+  }
+
+  const rows = calls
+  const ownerIds = [...new Set(rows.map((call) => call.owner_sf_id).filter(Boolean))]
+  const usersRes = ownerIds.length > 0
+    ? await supabase.from('sf_users').select('sf_id, name').in('sf_id', ownerIds)
+    : { data: [] }
+  const userNames = new Map(((usersRes.data ?? []) as LookupNameRow[]).map((user) => [user.sf_id, user.name ?? user.sf_id]))
+  const repTotals = new Map<string, {
+    repName: string
+    today: CallActivityRepPeriod
+    weekToDate: CallActivityRepPeriod
+    monthToDate: CallActivityRepPeriod
+  }>()
+
+  const todayKey = dateKey(now)
+  const currentWeekKey = weekStartKey(todayKey)
+  const currentMonthKey = monthStartKey(todayKey)
+  let latestActivityDate: string | null = null
+
+  for (const call of rows) {
+    if (!call.activity_date) continue
+    const ownerSfId = call.owner_sf_id ?? 'unassigned'
+    const repName = call.owner_sf_id ? userNames.get(call.owner_sf_id) ?? call.owner_sf_id : 'Unassigned'
+    const dailyPeriod = dailyByKey.get(call.activity_date)
+    const weeklyPeriod = weeklyByKey.get(weekStartKey(call.activity_date))
+    const monthlyPeriod = monthlyByKey.get(monthStartKey(call.activity_date))
+
+    if (dailyPeriod) addCallToPeriod(dailyPeriod, call, repName)
+    if (weeklyPeriod) addCallToPeriod(weeklyPeriod, call, repName)
+    if (monthlyPeriod) addCallToPeriod(monthlyPeriod, call, repName)
+
+    if (!latestActivityDate || call.activity_date > latestActivityDate) latestActivityDate = call.activity_date
+
+    const totals = repTotals.get(ownerSfId) ?? {
+      repName,
+      today: emptyRepPeriod(ownerSfId, repName),
+      weekToDate: emptyRepPeriod(ownerSfId, repName),
+      monthToDate: emptyRepPeriod(ownerSfId, repName),
+    }
+    if (call.activity_date === todayKey) {
+      const wrapper = createPeriod(todayKey, 'Today')
+      wrapper.byRep.set(ownerSfId, totals.today)
+      addCallToPeriod(wrapper, call, repName)
+      totals.today = wrapper.byRep.get(ownerSfId) ?? totals.today
+    }
+    if (weekStartKey(call.activity_date) === currentWeekKey) {
+      const wrapper = createPeriod(currentWeekKey, 'Week to date')
+      wrapper.byRep.set(ownerSfId, totals.weekToDate)
+      addCallToPeriod(wrapper, call, repName)
+      totals.weekToDate = wrapper.byRep.get(ownerSfId) ?? totals.weekToDate
+    }
+    if (monthStartKey(call.activity_date) === currentMonthKey) {
+      const wrapper = createPeriod(currentMonthKey, 'Month to date')
+      wrapper.byRep.set(ownerSfId, totals.monthToDate)
+      addCallToPeriod(wrapper, call, repName)
+      totals.monthToDate = wrapper.byRep.get(ownerSfId) ?? totals.monthToDate
+    }
+    repTotals.set(ownerSfId, totals)
+  }
+
+  const byRep = Array.from(repTotals.entries()).map(([ownerSfId, totals]) => ({
+    ownerSfId,
+    repName: totals.repName,
+    today: {
+      ...totals.today,
+      totalDurationMin: Math.round(totals.today.totalDurationMin * 10) / 10,
+      avgDurationMin: totals.today.totalCalls > 0 ? Math.round((totals.today.totalDurationMin / totals.today.totalCalls) * 10) / 10 : 0,
+    },
+    weekToDate: {
+      ...totals.weekToDate,
+      totalDurationMin: Math.round(totals.weekToDate.totalDurationMin * 10) / 10,
+      avgDurationMin: totals.weekToDate.totalCalls > 0 ? Math.round((totals.weekToDate.totalDurationMin / totals.weekToDate.totalCalls) * 10) / 10 : 0,
+    },
+    monthToDate: {
+      ...totals.monthToDate,
+      totalDurationMin: Math.round(totals.monthToDate.totalDurationMin * 10) / 10,
+      avgDurationMin: totals.monthToDate.totalCalls > 0 ? Math.round((totals.monthToDate.totalDurationMin / totals.monthToDate.totalCalls) * 10) / 10 : 0,
+    },
+  })).sort((a, b) => b.monthToDate.outboundCalls - a.monthToDate.outboundCalls || b.monthToDate.totalDurationMin - a.monthToDate.totalDurationMin)
+
+  return {
+    generatedAt: new Date().toISOString(),
+    latestActivityDate,
+    daily: dailyPeriods.map(finalizePeriod),
+    weekly: weeklyPeriods.map(finalizePeriod),
+    monthly: monthlyPeriods.map(finalizePeriod),
+    byRep,
   }
 }
 
@@ -2584,21 +3163,31 @@ export async function getWeeklyCallVolume(): Promise<SeedWeeklyCallVolume[]> {
   })
   const startDate = weekStarts[0]
 
-  const [callsRes, usersRes] = await Promise.all([
-    supabase
-      .from('sf_profile_calls')
-      .select('owner_sf_id, activity_date')
-      .gte('activity_date', startDate),
+  const [callsResult, usersRes] = await Promise.all([
+    fetchAllRows<Array<{ owner_sf_id: string | null; activity_date: string | null }>[number]>(() =>
+      supabase
+        .from('sf_call_activities')
+        .select('owner_sf_id, activity_date')
+        .gte('activity_date', startDate)
+        .order('activity_date', { ascending: true })
+        .order('sf_id', { ascending: true })
+    ).then((data) => ({ data, error: null as Error | null })).catch((error) => ({ data: null, error })),
     supabase
       .from('sf_users')
       .select('sf_id, name')
       .eq('is_active', true),
   ])
 
-  if (callsRes.error) throw callsRes.error
+  if (callsResult.error) {
+    if (isMissingRelationError(callsResult.error)) {
+      warnEmptyLiveTable('sf_call_activities', 'weekly call volume')
+      return []
+    }
+    throw callsResult.error
+  }
   if (usersRes.error) throw usersRes.error
-  if (!callsRes.data || callsRes.data.length === 0) {
-    warnEmptyLiveTable('sf_profile_calls', 'weekly call volume')
+  if (!callsResult.data || callsResult.data.length === 0) {
+    warnEmptyLiveTable('sf_call_activities', 'weekly call volume')
     return []
   }
 
@@ -2613,7 +3202,7 @@ export async function getWeeklyCallVolume(): Promise<SeedWeeklyCallVolume[]> {
     }
   }
 
-  for (const call of callsRes.data as Array<{ owner_sf_id: string | null; activity_date: string | null }>) {
+  for (const call of callsResult.data) {
     if (!call.activity_date) continue
     const activityDate = new Date(call.activity_date + 'T00:00:00')
     activityDate.setDate(activityDate.getDate() - activityDate.getDay())
@@ -2638,13 +3227,28 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
   const supabase = createAdminClient()
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-  const { data: calls } = await supabase
-    .from('sf_profile_calls')
-    .select('profile_call_outcome')
-    .gte('activity_date', monthStart)
+  let calls: Array<{ profile_call_outcome: string | null }> = []
 
-  if (!calls || calls.length === 0) {
-    warnEmptyLiveTable('sf_profile_calls', 'call outcome breakdown')
+  try {
+    calls = await fetchAllRows(() =>
+      supabase
+        .from('sf_call_activities')
+        .select('profile_call_outcome')
+        .not('profile_call_outcome', 'is', null)
+        .gte('activity_date', monthStart)
+        .order('activity_date', { ascending: true })
+        .order('sf_id', { ascending: true })
+    )
+  } catch (error) {
+    if (isMissingRelationError(error)) {
+      warnEmptyLiveTable('sf_call_activities', 'profile call outcome enrichment')
+      return []
+    }
+    throw error
+  }
+
+  if (calls.length === 0) {
+    warnEmptyLiveTable('sf_call_activities', 'profile call outcome enrichment')
     return []
   }
 
@@ -2685,13 +3289,27 @@ export async function getTopCompetitorKeywords(limit: number = 10): Promise<Keyw
 
 async function getLiveTopKeywords(limit: number): Promise<KeywordResult[]> {
   const supabase = createAdminClient()
-  const { data: calls } = await supabase
-    .from('sf_profile_calls')
-    .select('sf_id, ringdna_keywords')
-    .not('ringdna_keywords', 'is', null)
+  let calls: Array<{ sf_id: string; ringdna_keywords: string | null }> = []
 
-  if (!calls || calls.length === 0) {
-    warnEmptyLiveTable('sf_profile_calls', 'competitor keywords')
+  try {
+    calls = await fetchAllRows(() =>
+      supabase
+        .from('sf_call_activities')
+        .select('sf_id, ringdna_keywords')
+        .not('ringdna_keywords', 'is', null)
+        .order('activity_date', { ascending: false })
+        .order('sf_id', { ascending: true })
+    )
+  } catch (error) {
+    if (isMissingRelationError(error)) {
+      warnEmptyLiveTable('sf_call_activities', 'ringdna keywords')
+      return []
+    }
+    throw error
+  }
+
+  if (calls.length === 0) {
+    warnEmptyLiveTable('sf_call_activities', 'ringdna keywords')
     return []
   }
 

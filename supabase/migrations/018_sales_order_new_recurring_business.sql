@@ -1,8 +1,3 @@
--- Reconciled from live DB (Phase 0, PRD §12): applied 2026-06-24 as version
--- 20260624223238 "sales_order_new_recurring_business" via MCP apply_migration,
--- but never committed to the repo. Recorded verbatim for repo/schema parity.
--- Do NOT re-apply to the production project.
-
 -- ============================================================
 -- Fishbowl Sales Order New vs Recurring Business Classification
 -- ============================================================

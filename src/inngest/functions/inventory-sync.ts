@@ -7,7 +7,28 @@ import { bulkUpdateProductInventory } from '@/lib/salesforce/mutations'
 import { getAllInventory } from '@/lib/fishbowl/inventory'
 import type { SFProductUpdate } from '@/lib/salesforce/types'
 import { runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
-import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
+import {
+  FishbowlPriorityYieldError,
+  FishbowlSessionLockError,
+  withFishbowlSession,
+} from '@/lib/fishbowl/session'
+
+async function isP2ScheduleActive() {
+  const { data, error } = await createAdminClient()
+    .from('sync_schedules')
+    .select('is_active')
+    .eq('automation', 'P2_INVENTORY_SYNC')
+    .maybeSingle()
+
+  if (error) {
+    logger.log('warn', 'P2_INVENTORY_SYNC', 'Could not read sync schedule; allowing P2 run', {
+      error: error.message,
+    })
+    return true
+  }
+
+  return data?.is_active !== false
+}
 
 async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = false) {
   const startTime = Date.now()
@@ -18,6 +39,30 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
   })
 
   try {
+    if (triggeredBy === 'schedule' && !(await isP2ScheduleActive())) {
+      await logSyncEvent({
+        automation: 'P2_INVENTORY_SYNC',
+        sourceSystem: 'fishbowl',
+        targetSystem: 'prometheus',
+        status: 'dismissed',
+        payload: { triggeredBy, fullSync },
+        errorMessage: 'P2_INVENTORY_SYNC is disabled in sync_schedules',
+      })
+
+      await updateSyncSchedule('P2_INVENTORY_SYNC', {
+        lastRunAt: new Date().toISOString(),
+        lastRunStatus: 'skipped',
+        lastRunDurationMs: Date.now() - startTime,
+        recordsProcessed: 0,
+      })
+
+      return {
+        synced: 0,
+        skipped: true,
+        reason: 'P2_INVENTORY_SYNC is disabled in sync_schedules',
+      }
+    }
+
     const inventory = await withFishbowlSession(
       {
         automation: 'P2_INVENTORY_SYNC',
@@ -103,7 +148,7 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
 
     return { synced: inventory.length, sfUpdates: updateResult }
   } catch (error) {
-    if (error instanceof FishbowlSessionLockError) {
+    if (error instanceof FishbowlSessionLockError || error instanceof FishbowlPriorityYieldError) {
       await logSyncEvent({
         automation: 'P2_INVENTORY_SYNC',
         sourceSystem: 'fishbowl',

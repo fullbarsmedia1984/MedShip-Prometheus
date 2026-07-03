@@ -25,7 +25,7 @@ function CustomTooltip({ active, payload }: {
     <div className="rounded-lg border bg-card px-3 py-2 text-xs shadow-md">
       <p className="font-semibold text-card-foreground">{d.outcome}</p>
       <p className="text-muted-foreground">
-        {d.count} profile calls ({d.percentage}%)
+        {d.count} enriched calls ({d.percentage}%)
       </p>
     </div>
   )
@@ -43,16 +43,16 @@ export function CallOutcomeChart({ data }: CallOutcomeChartProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </span>
-          Profile Call Outcomes
+          Profile Call Enrichment
           {data.length === 0 && <ComingSoonBadge />}
         </CardTitle>
-        <p className="text-xs text-muted-foreground">Distribution this month — {total} total profile calls</p>
+        <p className="text-xs text-muted-foreground">Structured outcomes this month - {total} enriched calls</p>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
           <ComingSoonPanel
-            title="Profile call outcomes"
-            description="Live Salesforce profile-call outcome data is not available yet."
+            title="Profile call enrichment"
+            description="RingDNA calls are available, but structured Profile Call outcomes are not currently logged."
             className="h-[220px]"
           />
         ) : (

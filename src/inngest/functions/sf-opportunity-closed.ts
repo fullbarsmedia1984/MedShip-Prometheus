@@ -19,7 +19,11 @@ import { validatePartNumbers } from '@/lib/fishbowl/inventory'
 import type { FBSalesOrderPayload } from '@/types'
 import type { SFOpportunity } from '@/lib/salesforce/types'
 import { CircuitBreakerOpenError, runWithAuthCircuitBreaker } from '@/lib/utils/circuit-breaker'
-import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
+import {
+  FishbowlPriorityYieldError,
+  FishbowlSessionLockError,
+  withFishbowlSession,
+} from '@/lib/fishbowl/session'
 
 type SalesforceClientInstance = ReturnType<typeof createSalesforceClient>
 type FishbowlClientInstance = FishbowlClient
@@ -479,7 +483,11 @@ export const sfOpportunityClosed = inngest.createFunction(
 
       return result
     } catch (error) {
-      if (error instanceof FishbowlSessionLockError || error instanceof CircuitBreakerOpenError) {
+      if (
+        error instanceof FishbowlSessionLockError ||
+        error instanceof FishbowlPriorityYieldError ||
+        error instanceof CircuitBreakerOpenError
+      ) {
         logger.log('warn', 'P1_OPP_TO_SO', `Skipping P1 external sync work: ${error.message}`, {
           triggeredBy: isOpportunityEvent ? 'event' : 'schedule',
           opportunityId,

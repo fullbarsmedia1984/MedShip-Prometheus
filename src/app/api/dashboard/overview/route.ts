@@ -15,6 +15,57 @@ import {
   getRegionSummaries,
   getProfileCallMetrics,
 } from '@/lib/data'
+import type { ProfileCallMetricsResult, RevenueMetrics, SalesKpis } from '@/lib/data'
+
+const DEFAULT_METRICS: RevenueMetrics = {
+  mtdRevenue: 0,
+  mtdRevenueChange: 0,
+  openOrders: 0,
+  openOrdersChange: 0,
+  fulfillmentRate: 0,
+  fulfillmentRateChange: 0,
+  avgShipDays: 0,
+  avgShipDaysChange: 0,
+}
+
+const DEFAULT_SALES_KPIS: SalesKpis = {
+  revenueMTD: 0,
+  revenueQTD: 0,
+  revenueYTD: 0,
+  newBusinessRevenueMTD: 0,
+  newBusinessRevenueQTD: 0,
+  newBusinessRevenueYTD: 0,
+  recurringBusinessRevenueMTD: 0,
+  recurringBusinessRevenueQTD: 0,
+  recurringBusinessRevenueYTD: 0,
+  newBusinessOrdersMTD: 0,
+  recurringBusinessOrdersMTD: 0,
+  newBusinessMixMTD: 0,
+  quotesSentMTD: 0,
+  dealsClosedMTD: 0,
+  avgDaysToClose: 0,
+  pipelineValue: 0,
+}
+
+const DEFAULT_PROFILE_CALL_DATA: ProfileCallMetricsResult = {
+  totalMTD: 0,
+  totalLastMonth: 0,
+  conversionRate: 0,
+  connectRate: 0,
+  avgDuration: 0,
+  voicemailCount: 0,
+  voicemailRate: 0,
+  byRep: [],
+}
+
+async function safeLoad<T>(label: string, load: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await load()
+  } catch (error) {
+    console.error(`[dashboard-overview] ${label} failed`, error)
+    return fallback
+  }
+}
 
 export async function GET() {
   try {
@@ -36,19 +87,19 @@ export async function GET() {
       regionSummaries,
       profileCallData,
     ] = await Promise.all([
-      getRevenueMetrics(),
-      getSalesKpis(),
-      getMonthlyRevenue(),
-      getCategorySales(),
-      getRecentOrders(10),
-      getInventoryAlerts(5),
-      getIntegrationStatus(),
-      getSalesLeaderboard(),
-      getSalesActivity(10),
-      getPipelineSnapshot(),
-      getCustomersWithLocations(),
-      getRegionSummaries(),
-      getProfileCallMetrics(),
+      safeLoad('revenue metrics', getRevenueMetrics, DEFAULT_METRICS),
+      safeLoad('sales kpis', getSalesKpis, DEFAULT_SALES_KPIS),
+      safeLoad('monthly revenue', getMonthlyRevenue, []),
+      safeLoad('category sales', getCategorySales, []),
+      safeLoad('recent orders', () => getRecentOrders(10), []),
+      safeLoad('inventory alerts', () => getInventoryAlerts(5), []),
+      safeLoad('integration status', getIntegrationStatus, []),
+      safeLoad('sales leaderboard', getSalesLeaderboard, []),
+      safeLoad('sales activity', () => getSalesActivity(10), []),
+      safeLoad('pipeline snapshot', getPipelineSnapshot, []),
+      safeLoad('map customers', getCustomersWithLocations, []),
+      safeLoad('region summaries', getRegionSummaries, []),
+      safeLoad('profile call metrics', getProfileCallMetrics, DEFAULT_PROFILE_CALL_DATA),
     ])
 
     return NextResponse.json({

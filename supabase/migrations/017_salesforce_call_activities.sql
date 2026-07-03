@@ -1,8 +1,3 @@
--- Reconciled from live DB (Phase 0, PRD §12): applied 2026-06-25 as version
--- 20260625154525 "salesforce_call_activities" via MCP apply_migration,
--- but never committed to the repo. Recorded verbatim for repo/schema parity.
--- Do NOT re-apply to the production project.
-
 -- Salesforce RingDNA call activity cache.
 -- Dashboard-safe call metrics sourced primarily from Task.TaskSubtype = 'Call'.
 CREATE TABLE IF NOT EXISTS sf_call_activities (
