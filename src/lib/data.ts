@@ -964,8 +964,9 @@ export interface YoYRevenueComparison {
 
 /**
  * Calendar-year vs prior-year monthly revenue, from Fishbowl issued SOs
- * (issue-date basis) scoped to the selected sales roster — the same basis
- * as the sales page's operational KPIs, so the YoY charts tie to them.
+ * (issue-date basis), COMPANY-WIDE — all business orders including house
+ * accounts (Steven, 2026-07-04: the YoY view is big-picture, not roster-
+ * scoped, so it will read higher than the roster-scoped operational KPIs).
  */
 export async function getYoYRevenueComparison(): Promise<YoYRevenueComparison> {
   void await getDataSourceMode()
@@ -976,22 +977,13 @@ export async function getYoYRevenueComparison(): Promise<YoYRevenueComparison> {
   const currentMonthIndex = now.getMonth() // 0-based
   const startKey = `${priorYear}-01-01`
 
-  const [mappings, rows] = await Promise.all([
-    getFishbowlSalespersonMappings(),
-    fetchAllRows<CanonicalSalesOrderRow>(() =>
-      supabase
-        .from('fb_sales_orders')
-        .select(SALES_ORDER_METRIC_SELECT)
-        .eq('canonical_state', 'order')
-        .or(`date_issued.gte.${startKey},date_completed.gte.${startKey},date_created.gte.${startKey}`)
-        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
-    ),
-  ])
-
-  const rosterAliases = new Set(
-    mappings
-      .filter((row) => row.show_on_sales_dashboard && !row.is_house_account && !row.is_system_alias)
-      .map((row) => aliasKey(row.fishbowl_salesperson))
+  const rows = await fetchAllRows<CanonicalSalesOrderRow>(() =>
+    supabase
+      .from('fb_sales_orders')
+      .select(SALES_ORDER_METRIC_SELECT)
+      .eq('canonical_state', 'order')
+      .or(`date_issued.gte.${startKey},date_completed.gte.${startKey},date_created.gte.${startKey}`)
+      .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
   )
 
   const currentTotals = Array.from({ length: 12 }, () => 0)
@@ -1000,7 +992,6 @@ export async function getYoYRevenueComparison(): Promise<YoYRevenueComparison> {
   for (const row of rows) {
     const amount = salesOrderAmount(row)
     if (!isBusinessSalesMetric(row, amount)) continue
-    if (!rosterAliases.has(aliasKey(row.salesperson))) continue
     const metricDate = salesOrderMetricDate(row)
     if (!metricDate) continue
     const year = Number(metricDate.slice(0, 4))

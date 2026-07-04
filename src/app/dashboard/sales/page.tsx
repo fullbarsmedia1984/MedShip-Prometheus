@@ -769,7 +769,7 @@ export default function SalesPage() {
           <ProfileCallLeaderboard reps={reps} metrics={profileMetrics} />
         )}
 
-        {/* Year-over-year revenue comparison (Fishbowl issue-date basis, selected roster) */}
+        {/* Year-over-year revenue comparison (Fishbowl issue-date basis, company-wide) */}
         {yoyRevenue && <YoYRevenueCharts data={yoyRevenue} />}
 
         {/* Charts */}

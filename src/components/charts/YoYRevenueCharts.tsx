@@ -81,7 +81,7 @@ export function YoYRevenueCharts({ data }: { data: YoYRevenueComparison }) {
           <CardTitle className="flex flex-wrap items-center gap-2">
             Revenue by Month — {data.currentYearLabel} vs {data.priorYearLabel}
             <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700">
-              Fishbowl SO revenue
+              Company-wide · Fishbowl SO revenue
             </Badge>
           </CardTitle>
         </CardHeader>
