@@ -2,8 +2,16 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, HelpCircle } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
 import {
   Select,
@@ -57,6 +65,57 @@ const activityBadge = (score: SeedSalesRep['activityScore']) => {
 
 const CURRENT_MONTH_VALUE = 'current'
 
+function LeaderboardHelpDialog() {
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-muted-foreground"
+            aria-label="How leaderboard revenue is calculated"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
+        }
+      />
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>How leaderboard revenue is calculated</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-[0.82rem] leading-relaxed text-muted-foreground">
+          <p>
+            Revenue comes from <b>Fishbowl issued Sales Orders</b> only — quotes, voided orders,
+            $0 orders, and test records are excluded. Credits (negative orders) are not counted here.
+          </p>
+          <p>
+            An order counts in the month its SO was <b>issued</b>, not when it was created or when
+            it ships. An order created in March that issues June 1 is <b>June revenue</b>, even if
+            it hasn&apos;t shipped yet. When an issue date isn&apos;t recorded, the completion date
+            (then creation date) stands in.
+          </p>
+          <p>
+            Each order credits the salesperson on the SO, resolved through the Fishbowl alias map;
+            only the selected roster appears here (house and system accounts are tracked separately).
+          </p>
+          <p>
+            The current month shows month-to-date figures; prior months in the selector are full
+            calendar months. Profile calls and connect rate come from RingDNA for the same month.
+            Win rate = issued SOs ÷ (issued SOs + quotes) in the month. Data syncs from Fishbowl
+            every 15 minutes.
+          </p>
+          <p className="border-t pt-2 text-xs">
+            The full methodology (including New/Winback/Recurring cohorts) is on the Sales page
+            under <b>Methodology</b>. Commission math is separate — see the Incentives page.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function SalesLeaderboard({ reps, history = [] }: SalesLeaderboardProps) {
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH_VALUE)
   const activeEntry = selectedMonth === CURRENT_MONTH_VALUE
@@ -78,6 +137,7 @@ export function SalesLeaderboard({ reps, history = [] }: SalesLeaderboardProps) 
               </svg>
             </span>
             Sales Leaderboard
+            <LeaderboardHelpDialog />
             {sorted.length === 0 && <ComingSoonBadge />}
           </CardTitle>
           {history.length > 0 && (

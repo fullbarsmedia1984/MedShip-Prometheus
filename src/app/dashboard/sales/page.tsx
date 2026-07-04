@@ -15,6 +15,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -97,9 +104,12 @@ const SUMMARY_CARD_IDS = [
 const DEFAULT_SUMMARY_CARD_IDS: string[] = SUMMARY_CARD_IDS.slice(0, 8)
 const SUMMARY_CARDS_STORAGE_KEY = 'medship.sales.summary-cards.v1'
 
+type LeaderboardHistoryEntry = { key: string; label: string; reps: SalesRepPerformance[] }
+
 type SalesDashboardResponse = {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
+  leaderboardHistory?: LeaderboardHistoryEntry[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
   monthlyBusinessRevenue: MonthlyBusinessRevenue[]
   monthlyBusinessRevenueByRep: MonthlyBusinessRevenueByRep[]
@@ -145,6 +155,8 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true)
   const [kpis, setKpis] = useState<SalesKpis | null>(null)
   const [reps, setReps] = useState<SalesRepPerformance[]>([])
+  const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardHistoryEntry[]>([])
+  const [selectedPerfMonth, setSelectedPerfMonth] = useState('current')
   const [monthlyRevenue, setMonthlyRevenue] = useState<SeedMonthlyRepRevenue[]>([])
   const [monthlyBusinessRevenue, setMonthlyBusinessRevenue] = useState<MonthlyBusinessRevenue[]>([])
   const [monthlyBusinessRevenueByRep, setMonthlyBusinessRevenueByRep] = useState<MonthlyBusinessRevenueByRep[]>([])
@@ -196,6 +208,7 @@ export default function SalesPage() {
       const data = await fetchJson<SalesDashboardResponse>('/api/dashboard/sales')
       setKpis(data.kpis)
       setReps(data.reps)
+      setLeaderboardHistory(data.leaderboardHistory ?? [])
       setMonthlyRevenue(data.monthlyRevenue)
       setMonthlyBusinessRevenue(data.monthlyBusinessRevenue ?? [])
       setMonthlyBusinessRevenueByRep(data.monthlyBusinessRevenueByRep ?? [])
@@ -288,7 +301,14 @@ export default function SalesPage() {
     }
   }
 
-  const sortedReps = [...reps].sort((a, b) => {
+  // The performance table can flip to a prior full month; every other
+  // section (charts, roster, call metrics) stays on the current period.
+  const perfMonthEntry = selectedPerfMonth === 'current'
+    ? null
+    : leaderboardHistory.find((month) => month.key === selectedPerfMonth) ?? null
+  const perfReps = perfMonthEntry?.reps ?? reps
+
+  const sortedReps = [...perfReps].sort((a, b) => {
     const multiplier = sortAsc ? 1 : -1
     return (a[sortKey] - b[sortKey]) * multiplier
   })
@@ -296,6 +316,8 @@ export default function SalesPage() {
   const topPerformerId = sortedReps[0]?.id
   const activeMetricLabel = salesHealth?.activeMetricPeriodLabel ?? 'MTD'
   const shortMetricLabel = salesHealth?.isMetricPeriodFallback ? activeMetricLabel : 'MTD'
+  // Column label for the month-scoped table columns.
+  const tableMetricLabel = perfMonthEntry ? perfMonthEntry.label : shortMetricLabel
 
   const summaryCards: SummaryCard[] = kpis
     ? [
@@ -544,15 +566,35 @@ export default function SalesPage() {
         {/* Sales Rep Performance Table */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2">
-              Sales Rep Performance
-              <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700">
-                Fishbowl SO revenue
-              </Badge>
-            </CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                Sales Rep Performance
+                <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700">
+                  Fishbowl SO revenue
+                </Badge>
+              </CardTitle>
+              {leaderboardHistory.length > 0 && (
+                <Select
+                  value={selectedPerfMonth}
+                  onValueChange={(value) => setSelectedPerfMonth(value ?? 'current')}
+                >
+                  <SelectTrigger className="w-[170px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="current">{activeMetricLabel} (current)</SelectItem>
+                    {leaderboardHistory.map((month) => (
+                      <SelectItem key={month.key} value={month.key}>
+                        {month.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
-            {reps.length === 0 ? (
+            {perfReps.length === 0 ? (
               <EmptyState
                 icon={Award}
                 title="No live sales reps found"
@@ -563,13 +605,13 @@ export default function SalesPage() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Rep</TableHead>
-                  <SortHeader label={`Revenue ${shortMetricLabel}`} field="revenueMTD" className="text-right" />
-                  <SortHeader label={`New Biz ${shortMetricLabel}`} field="newBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
-                  <SortHeader label={`Recurring ${shortMetricLabel}`} field="recurringBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label={`Revenue ${tableMetricLabel}`} field="revenueMTD" className="text-right" />
+                  <SortHeader label={`New Biz ${tableMetricLabel}`} field="newBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label={`Recurring ${tableMetricLabel}`} field="recurringBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
-                  <SortHeader label={`Issued SOs ${shortMetricLabel}`} field="dealsClosed" className="text-center" />
-                  <SortHeader label={`Quotes ${shortMetricLabel}`} field="quotesSent" className="hidden text-center md:table-cell" />
+                  <SortHeader label={`Issued SOs ${tableMetricLabel}`} field="dealsClosed" className="text-center" />
+                  <SortHeader label={`Quotes ${tableMetricLabel}`} field="quotesSent" className="hidden text-center md:table-cell" />
                   <SortHeader label="Quote Value" field="quoteValueMTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="SO Conv." field="winRate" className="text-center" />
                   <SortHeader label="Avg SO" field="avgDealSize" className="hidden text-right lg:table-cell" />

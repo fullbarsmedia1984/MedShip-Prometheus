@@ -82,6 +82,7 @@ const getSalesDashboardPayload = unstable_cache(
     return {
       kpis: salesCore.kpis,
       reps: salesCore.reps,
+      leaderboardHistory: salesCore.leaderboardHistory,
       monthlyRevenue: salesCore.monthlyRevenue,
       monthlyBusinessRevenue: salesCore.monthlyBusinessRevenue,
       monthlyBusinessRevenueByRep: salesCore.monthlyBusinessRevenueByRep,

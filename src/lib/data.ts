@@ -1899,13 +1899,13 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     aliasStats.set(alias, existing)
   }
 
-  type RepMonthAgg = { revenue: number; newRevenue: number; recurringRevenue: number; orders: number; quotes: number }
+  type RepMonthAgg = { revenue: number; newRevenue: number; recurringRevenue: number; orders: number; newOrders: number; recurringOrders: number; quotes: number; quoteValue: number }
   const historyIndexByKey = new Map(historyMonths.map((month, index) => [month.key, index]))
   const repHistory = new Map<string, RepMonthAgg[]>()
   function historyAgg(repId: string, monthIndex: number): RepMonthAgg {
     let buckets = repHistory.get(repId)
     if (!buckets) {
-      buckets = Array.from({ length: LEADERBOARD_HISTORY_MONTHS }, () => ({ revenue: 0, newRevenue: 0, recurringRevenue: 0, orders: 0, quotes: 0 }))
+      buckets = Array.from({ length: LEADERBOARD_HISTORY_MONTHS }, () => ({ revenue: 0, newRevenue: 0, recurringRevenue: 0, orders: 0, newOrders: 0, recurringOrders: 0, quotes: 0, quoteValue: 0 }))
       repHistory.set(repId, buckets)
     }
     return buckets[monthIndex]
@@ -1965,8 +1965,13 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         const agg = historyAgg(rep.id, historyIdx)
         agg.revenue += amount
         agg.orders++
-        if (businessClassification === 'new_business') agg.newRevenue += amount
-        else if (businessClassification === 'recurring_business') agg.recurringRevenue += amount
+        if (businessClassification === 'new_business') {
+          agg.newRevenue += amount
+          agg.newOrders++
+        } else if (businessClassification === 'recurring_business') {
+          agg.recurringRevenue += amount
+          agg.recurringOrders++
+        }
       }
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.revenueMTD += amount
@@ -2012,7 +2017,11 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         }
       }
     } else if (row.canonical_state === 'quote') {
-      if (historyIdx !== undefined) historyAgg(rep.id, historyIdx).quotes++
+      if (historyIdx !== undefined) {
+        const agg = historyAgg(rep.id, historyIdx)
+        agg.quotes++
+        agg.quoteValue += amount
+      }
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.quotesSent++
         rep.quoteValueMTD += amount
@@ -2109,7 +2118,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     const monthIndex = historyIndexByKey.get(month.key) as number
     const monthReps = reps
       .map((rep) => {
-        const agg = repHistory.get(rep.id)?.[monthIndex] ?? { revenue: 0, newRevenue: 0, recurringRevenue: 0, orders: 0, quotes: 0 }
+        const agg = repHistory.get(rep.id)?.[monthIndex] ?? { revenue: 0, newRevenue: 0, recurringRevenue: 0, orders: 0, newOrders: 0, recurringOrders: 0, quotes: 0, quoteValue: 0 }
         const calls = callMonthlyByOwner.get(rep.id)?.get(month.key)
         const prevCalls = callMonthlyByOwner.get(rep.id)?.get(priorMonthKey(month.key))
         const revenue = roundCurrency(agg.revenue)
@@ -2124,8 +2133,11 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
           revenueMTD: revenue,
           newBusinessRevenueMTD: roundCurrency(agg.newRevenue),
           recurringBusinessRevenueMTD: roundCurrency(agg.recurringRevenue),
+          newBusinessOrdersMTD: agg.newOrders,
+          recurringBusinessOrdersMTD: agg.recurringOrders,
           dealsClosed: agg.orders,
           quotesSent: agg.quotes,
+          quoteValueMTD: roundCurrency(agg.quoteValue),
           profileCalls,
           profileCallsChange: prevCalls && prevCalls.total > 0
             ? Math.round(((profileCalls - prevCalls.total) / prevCalls.total) * 1000) / 10
