@@ -12,6 +12,7 @@ import {
   pauseSalesOrderBackfill,
   prepareSalesOrderIncrementalCheckpoints,
   processSalesOrderPageBatch,
+  refreshIssuedDatesFromSource,
   retryFailedSalesOrderBackfill,
   discoverSalesOrdersByIdWindow,
   startSalesOrderBackfill,
@@ -369,9 +370,16 @@ async function processIncrementalChunk(supabase: ReturnType<typeof createAdminCl
     })
     const idDiscovery = await discoverSalesOrdersByIdWindow(supabase, client)
     const details = await hydrateSalesOrderDetailBatch(supabase, client)
+    let issuedDates: Record<string, unknown>
+    try {
+      issuedDates = await refreshIssuedDatesFromSource(supabase, client)
+    } catch (error) {
+      // Enrichment is best-effort; the data-query endpoint may be unavailable.
+      issuedDates = { error: error instanceof Error ? error.message : String(error) }
+    }
     const freshness = await assertSalesOrderCacheFreshness(supabase)
 
-    return { started, prepared, pages, idDiscovery, details, freshness }
+    return { started, prepared, pages, idDiscovery, details, issuedDates, freshness }
   })
 }
 

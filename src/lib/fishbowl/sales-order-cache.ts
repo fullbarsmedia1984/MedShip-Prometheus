@@ -167,6 +167,30 @@ export function normalizeSalesOrder(
     header.detail_error = options.detailError ?? null
   }
 
+  // Fishbowl list (header) payloads omit fields the detail payload carries —
+  // notably dateIssued. Writing those as null lets rotating header sweeps
+  // clobber values that detail hydration already filled (this shifted orders
+  // into the wrong dashboard month via the date_completed fallback). Omit
+  // null volatile fields so upserts preserve the existing values instead.
+  for (const key of [
+    'date_issued',
+    'date_completed',
+    'total_amount',
+    'subtotal_amount',
+    'tax_amount',
+    'shipping_amount',
+    'salesperson',
+  ] as const) {
+    if (header[key] === null || header[key] === undefined) delete header[key]
+  }
+
+  // Quality flags are only trustworthy when the payload actually included
+  // line items; an item-less header payload would re-write missing_line_items
+  // over flags computed from the hydrated detail.
+  if (!Array.isArray(rawItems)) {
+    delete header.data_quality_flags
+  }
+
   return {
     header,
     items: normalizedItems,
@@ -186,17 +210,46 @@ export async function upsertSalesOrdersToCache(
     return { orders: 0, items: 0, skipped: rawOrders.length }
   }
 
-  const { error: orderError } = await supabase
-    .from('fb_sales_orders')
-    .upsert(
-      normalized.map((order) => order.header),
-      { onConflict: 'so_number' }
-    )
+  // Headers can have heterogeneous columns (null volatile fields are omitted
+  // per row); PostgREST bulk upserts require uniform keys, so group by shape.
+  const headerGroups = new Map<string, Array<NormalizedSalesOrder['header']>>()
+  for (const order of normalized) {
+    const signature = Object.keys(order.header).sort().join(',')
+    const group = headerGroups.get(signature)
+    if (group) group.push(order.header)
+    else headerGroups.set(signature, [order.header])
+  }
 
-  if (orderError) throw new Error(`Supabase upsert error on fb_sales_orders: ${orderError.message}`)
+  for (const group of headerGroups.values()) {
+    const { error: orderError } = await supabase
+      .from('fb_sales_orders')
+      .upsert(group, { onConflict: 'so_number' })
+    if (orderError) throw new Error(`Supabase upsert error on fb_sales_orders: ${orderError.message}`)
+  }
 
-  const items = normalized.flatMap((order) => order.items)
+  // Fishbowl occasionally repeats line numbers within one SO; dedupe on the
+  // conflict key (keeping the last occurrence) or the bulk upsert fails with
+  // "cannot affect row a second time".
+  const itemsByKey = new Map<string, Record<string, unknown>>()
+  for (const item of normalized.flatMap((order) => order.items)) {
+    itemsByKey.set(`${item.sales_order_number}|${item.line_number}`, item)
+  }
+  const items = [...itemsByKey.values()]
   if (items.length > 0) {
+    // Detail payloads are the authoritative full line set — replace instead
+    // of upserting so renumbered lines can't collide with stale rows via the
+    // secondary (sales_order_number, fishbowl_line_id) unique constraint.
+    if (options.includeDetailStatus) {
+      const soNumbers = [...new Set(items.map((item) => String(item.sales_order_number)))]
+      const { error: deleteError } = await supabase
+        .from('fb_sales_order_items')
+        .delete()
+        .in('sales_order_number', soNumbers)
+      if (deleteError) {
+        throw new Error(`Supabase delete error on fb_sales_order_items: ${deleteError.message}`)
+      }
+    }
+
     const { error: itemError } = await supabase
       .from('fb_sales_order_items')
       .upsert(items, { onConflict: 'sales_order_number,line_number' })

@@ -1560,7 +1560,11 @@ function salesOrderBusinessClassification(row: CanonicalSalesOrderRow): 'new_bus
 }
 
 function metricFlags(row: CanonicalSalesOrderRow, amount: number): Set<string> {
-  const flags = new Set(row.data_quality_flags ?? [])
+  // Recomputed from the row's CURRENT values only. Stored data_quality_flags
+  // are deliberately not merged here: they can go stale (e.g. `zero_value`
+  // written before detail hydration filled total_amount) and were silently
+  // excluding months of real revenue from the sales dashboard.
+  const flags = new Set<string>()
   if (hasTestMarker(row.so_number, row.customer_name, row.salesperson)) flags.add(QUALITY_LIKELY_TEST)
   if (amount <= 0) flags.add(QUALITY_ZERO_VALUE)
   if (row.canonical_state === 'unknown') flags.add(QUALITY_UNKNOWN_STATE)

@@ -675,6 +675,47 @@ export async function hydrateSalesOrderDetailBatch(
   }
 }
 
+/**
+ * Backfill date_issued from the Fishbowl database via the data-query
+ * endpoint. The REST list/detail payloads never include dateIssued, so
+ * without this step issued dates go stale (or null) and orders land in the
+ * wrong dashboard month via the date_completed/date_created fallback.
+ */
+export async function refreshIssuedDatesFromSource(
+  supabase: SupabaseClient,
+  client: FishbowlClient,
+  options: { sinceDays?: number } = {}
+) {
+  const sinceDays = Math.max(1, options.sinceDays ?? 60)
+  const rows = await client.dataQuery<Array<{ num: string; dateIssued: string | null }>>(
+    'SELECT num, dateIssued FROM so ' +
+      `WHERE dateIssued IS NOT NULL AND dateIssued >= DATE_SUB(NOW(), INTERVAL ${sinceDays} DAY)`
+  )
+
+  let updated = 0
+  const chunkSize = 200
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const chunk = rows.slice(index, index + chunkSize)
+    const results = await Promise.all(
+      chunk.map((row) =>
+        supabase
+          .from('fb_sales_orders')
+          .update({ date_issued: row.dateIssued }, { count: 'exact' })
+          .eq('so_number', row.num)
+          .is('date_issued', null)
+      )
+    )
+    for (const result of results) {
+      if (result.error) {
+        throw new Error(`Could not backfill date_issued: ${result.error.message}`)
+      }
+      updated += result.count ?? 0
+    }
+  }
+
+  return { strategy: 'issued_date_backfill', sinceDays, sourceRows: rows.length, updated }
+}
+
 export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<SalesOrderCoverage> {
   const [
     headersRes,
