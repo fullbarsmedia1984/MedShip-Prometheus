@@ -52,7 +52,12 @@ export function KpiCard({
     'text-medship-secondary': 'bg-medship-secondary/10',
   }
   const iconBg = bgMap[iconColor] || 'bg-medship-primary/10'
-  const isLongTextValue = typeof value === 'string' && value.length > 10
+  // Size off the FORMATTED value (commas included) — that's what renders.
+  // Digits can't soft-wrap, so an oversized value silently clips against the
+  // card's overflow-hidden instead of wrapping.
+  const displayValue = formatValue(value)
+  const valueSizeClass =
+    displayValue.length > 13 ? 'text-lg' : displayValue.length > 9 ? 'text-xl' : 'text-[2rem]'
 
   return (
     <div className="overflow-hidden rounded-[0.625rem] border border-[#D6DEE3] bg-card shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)] dark:border-[rgba(255,255,255,0.1)] dark:shadow-none">
@@ -69,23 +74,18 @@ export function KpiCard({
         </div>
 
         {/* Content */}
-        <div className="flex flex-col">
-          <span
-            className={cn(
-              'font-semibold leading-tight text-card-foreground',
-              isLongTextValue ? 'text-xl' : 'text-[2rem]'
-            )}
-          >
-            {formatValue(value)}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className={cn('break-words font-semibold leading-tight text-card-foreground', valueSizeClass)}>
+            {displayValue}
           </span>
-          <span className="mt-0.5 text-[0.875rem] font-medium uppercase text-muted-foreground">
+          <span className="mt-0.5 text-[0.875rem] font-medium uppercase leading-snug text-muted-foreground">
             {title}
           </span>
         </div>
 
         {/* Trend */}
         {hasChange && (
-          <div className="ml-auto">
+          <div className="ml-auto shrink-0">
             <span
               className={cn(
                 'inline-flex items-center gap-0.5 rounded-full px-2 py-1 text-xs font-medium',
