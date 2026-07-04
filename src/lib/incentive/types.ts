@@ -133,3 +133,34 @@ export interface IncentiveRefreshState {
   last_refresh_at: string | null
   last_refresh_result: Record<string, unknown> | null
 }
+
+export interface PayoutSnapshotRow {
+  month: string // YYYY-MM-DD (first of month)
+  rep_key: string
+  rep_display_name: string | null
+  enrollments: number
+  enrollment_gate: number
+  qualifies: boolean
+  net_new_customer_revenue: number
+  base_commission: number
+  bonus_commission: number
+  projected_total: number
+  frozen_at: string
+  frozen_by: string | null
+}
+
+export interface PayoutVarianceRow {
+  month: string
+  rep_key: string
+  rep_display_name: string | null
+  frozen_at: string
+  frozen_total: number
+  live_total: number
+  variance: number
+  frozen_enrollments: number
+  live_enrollments: number
+  frozen_qualifies: boolean
+  live_qualifies: boolean
+  rep_gone_from_live: boolean
+  live_blocked: boolean
+}

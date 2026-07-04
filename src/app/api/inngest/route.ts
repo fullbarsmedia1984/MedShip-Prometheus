@@ -20,6 +20,7 @@ import {
   sfIncrementalSync,
   incentiveRecompute,
   incentiveRecomputeManual,
+  incentivePayoutFreeze,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -65,5 +66,6 @@ export const { GET, POST, PUT } = serve({
     // P8: Q3 incentive classification recompute + new-account bell
     incentiveRecompute,
     incentiveRecomputeManual,
+    incentivePayoutFreeze,
   ],
 })

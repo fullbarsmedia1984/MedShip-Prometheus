@@ -2,11 +2,14 @@ import { inngest } from '../client'
 import { updateSyncSchedule } from '@/lib/utils/logger'
 import { getIncentiveSettings } from '@/lib/incentive/settings'
 import {
+  freezeIncentiveMonth,
+  getPayoutSnapshots,
   getRefreshState,
   triggerIncentiveRefreshRpc,
   triggerIncentiveWorklistRefreshRpc,
   triggerRevenueCohortRefreshRpc,
 } from '@/lib/incentive/queries'
+import { autoFreezeTargetMonth } from '@/lib/incentive/dates'
 import { findUnrungEnrollments, ringBell } from '@/lib/incentive/bell'
 
 // P8: Q3 incentive classification recompute.
@@ -85,6 +88,35 @@ export const incentiveRecompute = inngest.createFunction(
     )
 
     return summary
+  }
+)
+
+// Auto-freeze: 7 days after a promo month ends (America/Chicago), freeze
+// its payout snapshot so finance pays immutable figures (Steven,
+// 2026-07-04). The RPC fail-louds if any rep row is still payout-blocked
+// by unmapped salespersons — in that case this cron retries daily and the
+// admin page shows the blocker until aliases are resolved.
+const FREEZE_GRACE_DAYS = 7
+
+export const incentivePayoutFreeze = inngest.createFunction(
+  {
+    id: 'incentive-payout-freeze',
+    name: 'P8: Incentive Payout Freeze',
+    retries: 1,
+    triggers: [{ cron: '0 15 * * *' }], // daily 15:00 UTC = 9/10am Chicago
+  },
+  async ({ step }) => {
+    const target = autoFreezeTargetMonth(new Date(), FREEZE_GRACE_DAYS)
+    if (!target) return { skipped: true, reason: 'inside grace period' }
+
+    const alreadyFrozen = await step.run('check-existing', async () => {
+      const snapshots = await getPayoutSnapshots()
+      return snapshots.some((row) => row.month === target)
+    })
+    if (alreadyFrozen) return { skipped: true, reason: `month ${target} already frozen` }
+
+    const result = await step.run('freeze', () => freezeIncentiveMonth(target, 'auto-freeze cron'))
+    return { skipped: false, target, result }
   }
 )
 

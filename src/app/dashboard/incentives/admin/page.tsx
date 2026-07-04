@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { GitMerge, Settings2, UserCheck } from 'lucide-react'
+import { GitMerge, Lock, Settings2, UserCheck } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/table'
 import { fetchJson } from '@/lib/client-api'
 import { formatUsd } from '@/lib/incentive/calculator'
-import type { IncentiveSettings, MergeCandidateRow, MergeMapRow, UnmappedRepRow } from '@/lib/incentive/types'
+import type { IncentiveSettings, MergeCandidateRow, MergeMapRow, PayoutSnapshotRow, PayoutVarianceRow, UnmappedRepRow } from '@/lib/incentive/types'
 
 type AliasesResponse = { unmapped: UnmappedRepRow[]; sfUsers: Array<{ sf_id: string; name: string }> }
 type MergeMapResponse = { mappings: MergeMapRow[]; candidates: MergeCandidateRow[] }
@@ -505,6 +505,145 @@ function SettingsSection() {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Payout freeze
+// ---------------------------------------------------------------------------
+
+type FreezeResponse = { snapshots: PayoutSnapshotRow[]; variance: PayoutVarianceRow[] }
+
+function monthLabel(month: string): string {
+  return new Date(`${month}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+function PayoutFreezeSection() {
+  const [snapshots, setSnapshots] = useState<PayoutSnapshotRow[]>([])
+  const [variance, setVariance] = useState<PayoutVarianceRow[]>([])
+  const [status, setStatus] = useState<Status>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const payload = await fetchJson<FreezeResponse>('/api/dashboard/incentives/freeze')
+      setSnapshots(payload.snapshots)
+      setVariance(payload.variance)
+    } catch (err) {
+      setStatus({ kind: 'error', message: err instanceof Error ? err.message : 'Failed to load payout freezes' })
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const frozenMonths = [...new Set(snapshots.map((row) => row.month))]
+  // Promo months that have ended but are not frozen yet are freezable now.
+  const now = new Date()
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const promoMonths = ['2026-07-01', '2026-08-01', '2026-09-01']
+  const freezable = promoMonths.filter((month) => month < currentMonthKey && !frozenMonths.includes(month))
+
+  const freeze = async (month: string) => {
+    setBusy(month)
+    setStatus(null)
+    try {
+      await fetchJson('/api/dashboard/incentives/freeze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month }),
+      })
+      setStatus({ kind: 'success', message: `${monthLabel(month)} frozen — finance pays these figures.` })
+      await load()
+    } catch (err) {
+      setStatus({ kind: 'error', message: err instanceof Error ? err.message : 'Freeze failed' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card id="freeze">
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center gap-2">
+          <Lock className="h-4 w-4" />
+          Payout Freeze
+          <Badge variant="outline">auto-freezes 7 days after month end</Badge>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Finance pays from frozen snapshots, never live numbers. Freezing fails while any rep is
+          payout-blocked by unmapped salespersons. Later data changes appear as variance — they never
+          restate paid figures.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <StatusLine status={status} />
+        {freezable.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {freezable.map((month) => (
+              <Button key={month} size="sm" onClick={() => freeze(month)} disabled={busy !== null}>
+                <Lock className="h-4 w-4" />
+                {busy === month ? 'Freezing…' : `Freeze ${monthLabel(month)}`}
+              </Button>
+            ))}
+          </div>
+        )}
+        {snapshots.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No months frozen yet. July freezes automatically around August 8, or freeze it manually
+            here once the month closes.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Month</TableHead>
+                <TableHead>Rep</TableHead>
+                <TableHead className="text-center">Enrollments</TableHead>
+                <TableHead className="text-center">Qualified</TableHead>
+                <TableHead className="text-right">Frozen payout</TableHead>
+                <TableHead className="text-right">Live now</TableHead>
+                <TableHead className="text-right">Variance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {snapshots.map((row) => {
+                const varianceRow = variance.find((v) => v.month === row.month && v.rep_key === row.rep_key)
+                const delta = varianceRow?.variance ?? 0
+                return (
+                  <TableRow key={`${row.month}-${row.rep_key}`}>
+                    <TableCell className="whitespace-nowrap">
+                      {monthLabel(row.month)}
+                      <p className="text-xs text-muted-foreground">
+                        frozen {new Date(row.frozen_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {row.frozen_by ? ` · ${row.frozen_by}` : ''}
+                      </p>
+                    </TableCell>
+                    <TableCell className="font-medium">{row.rep_display_name ?? row.rep_key}</TableCell>
+                    <TableCell className="text-center tabular-nums">
+                      {row.enrollments} / {row.enrollment_gate}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.qualifies ? (
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700">Yes</Badge>
+                      ) : (
+                        <Badge variant="outline">No</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{formatUsd(row.projected_total)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{varianceRow ? formatUsd(varianceRow.live_total) : '—'}</TableCell>
+                    <TableCell className={`text-right font-medium tabular-nums ${Math.abs(delta) > 0.005 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                      {Math.abs(delta) > 0.005 ? `${delta > 0 ? '+' : ''}${formatUsd(delta)}` : '—'}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function IncentiveAdminPage() {
   return (
     <div className="flex flex-col">
@@ -513,6 +652,7 @@ export default function IncentiveAdminPage() {
         <AliasSection />
         <MergeMapSection />
         <SettingsSection />
+        <PayoutFreezeSection />
       </main>
     </div>
   )

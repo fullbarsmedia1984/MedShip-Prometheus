@@ -42,3 +42,20 @@ export function chicagoMonthStart(instant: Date = new Date()): string {
   }).format(instant)
   return `${parts.replace('/', '-')}-01`
 }
+
+/**
+ * The month (YYYY-MM-01) whose payout snapshot is due for auto-freeze:
+ * the previous Chicago month, but only once `freezeAfterDays` full days
+ * have elapsed since that month ended (grace period for late credits and
+ * issue dates). Null while still inside the grace period.
+ */
+export function autoFreezeTargetMonth(now: Date = new Date(), freezeAfterDays = 7): string | null {
+  const currentMonthStart = chicagoMonthStart(now)
+  const monthEndUtc = chicagoMidnightUtc(currentMonthStart)
+  const graceEndsUtc = new Date(monthEndUtc.getTime() + freezeAfterDays * 86_400_000)
+  if (now < graceEndsUtc) return null
+
+  const prev = new Date(`${currentMonthStart}T00:00:00Z`)
+  prev.setUTCMonth(prev.getUTCMonth() - 1)
+  return prev.toISOString().slice(0, 10)
+}

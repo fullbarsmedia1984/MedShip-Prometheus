@@ -28,6 +28,7 @@ export {
 export { sfFullSync } from './functions/sf-full-sync'
 export { sfIncrementalSync } from './functions/sf-incremental-sync'
 export {
+  incentivePayoutFreeze,
   incentiveRecompute,
   incentiveRecomputeManual,
 } from './functions/incentive-recompute'

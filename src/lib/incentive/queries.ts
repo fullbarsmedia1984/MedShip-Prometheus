@@ -7,6 +7,8 @@ import type {
   MergeCandidateRow,
   MergeMapRow,
   OrderIncentiveDetailRow,
+  PayoutSnapshotRow,
+  PayoutVarianceRow,
   RepIncentiveMonthlyRow,
   RepNewAccount,
   UnmappedRepRow,
@@ -346,6 +348,61 @@ export async function triggerIncentiveWorklistRefreshRpc(): Promise<Record<strin
   const { data, error } = await supabase.rpc('refresh_incentive_worklists')
   if (error) throw error
   return (data ?? {}) as Record<string, unknown>
+}
+
+export async function freezeIncentiveMonth(
+  month: string,
+  frozenBy: string | null,
+  force = false
+): Promise<Record<string, unknown>> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('freeze_incentive_month', {
+    p_month: month,
+    p_frozen_by: frozenBy,
+    p_force: force,
+  })
+  if (error) throw error
+  return (data ?? {}) as Record<string, unknown>
+}
+
+export async function getPayoutSnapshots(): Promise<PayoutSnapshotRow[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('incentive_payout_snapshot')
+    .select('month, rep_key, rep_display_name, enrollments, enrollment_gate, qualifies, net_new_customer_revenue, base_commission, bonus_commission, projected_total, frozen_at, frozen_by')
+    .order('month', { ascending: true })
+    .order('projected_total', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    ...row,
+    month: String(row.month),
+    enrollments: toNumber(row.enrollments),
+    enrollment_gate: toNumber(row.enrollment_gate),
+    net_new_customer_revenue: toNumber(row.net_new_customer_revenue),
+    base_commission: toNumber(row.base_commission),
+    bonus_commission: toNumber(row.bonus_commission),
+    projected_total: toNumber(row.projected_total),
+  })) as PayoutSnapshotRow[]
+}
+
+export async function getPayoutVariance(): Promise<PayoutVarianceRow[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('v_incentive_payout_variance')
+    .select('*')
+    .order('month', { ascending: true })
+    .limit(2000)
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    ...row,
+    month: String(row.month),
+    frozen_total: toNumber(row.frozen_total),
+    live_total: toNumber(row.live_total),
+    variance: toNumber(row.variance),
+    frozen_enrollments: toNumber(row.frozen_enrollments),
+    live_enrollments: toNumber(row.live_enrollments),
+  })) as PayoutVarianceRow[]
 }
 
 export async function getRefreshState(): Promise<IncentiveRefreshState | null> {
