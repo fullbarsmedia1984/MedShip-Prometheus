@@ -4,6 +4,7 @@ import { getIncentiveSettings } from '@/lib/incentive/settings'
 import {
   getRefreshState,
   triggerIncentiveRefreshRpc,
+  triggerIncentiveWorklistRefreshRpc,
   triggerRevenueCohortRefreshRpc,
 } from '@/lib/incentive/queries'
 import { findUnrungEnrollments, ringBell } from '@/lib/incentive/bell'
@@ -41,6 +42,9 @@ async function runRecompute(force: boolean): Promise<RecomputeSummary> {
   // Revenue cohorts (NEW / WINBACK / RECURRING, migration 028) share the
   // same inputs and dirty flag — rebuild them in the same pass.
   const cohortResult = await triggerRevenueCohortRefreshRpc()
+  // Admin worklist snapshots (migration 031): the merge-candidate and
+  // reconciliation views are too expensive to compute per request.
+  await triggerIncentiveWorklistRefreshRpc()
 
   const settings = await getIncentiveSettings()
   const candidates = await findUnrungEnrollments(settings)

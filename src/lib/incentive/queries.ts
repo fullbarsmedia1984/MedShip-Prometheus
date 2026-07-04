@@ -341,6 +341,13 @@ export async function triggerRevenueCohortRefreshRpc(): Promise<Record<string, u
   return (data ?? {}) as Record<string, unknown>
 }
 
+export async function triggerIncentiveWorklistRefreshRpc(): Promise<Record<string, unknown>> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('refresh_incentive_worklists')
+  if (error) throw error
+  return (data ?? {}) as Record<string, unknown>
+}
+
 export async function getRefreshState(): Promise<IncentiveRefreshState | null> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
