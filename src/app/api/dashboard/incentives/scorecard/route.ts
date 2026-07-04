@@ -14,17 +14,24 @@ import type { IncentiveSettings } from '@/lib/incentive/types'
 
 const MONTH_PATTERN = /^\d{4}-\d{2}-01$/
 
-/** Selectable months: one month before the promo through the current month. */
+/**
+ * Selectable months: January of the current Chicago year (or the month
+ * before the promo, if that's earlier) through the current month. The
+ * engine classifies all history, so every listed month has real data.
+ */
 function buildMonthOptions(settings: IncentiveSettings): string[] {
-  const start = new Date(`${settings.promoStart.slice(0, 7)}-01T00:00:00Z`)
-  start.setUTCMonth(start.getUTCMonth() - 1)
   const currentKey = chicagoMonthStart()
-  const end = new Date(`${settings.promoEnd.slice(0, 7)}-01T00:00:00Z`)
+  const promoPrev = new Date(`${settings.promoStart.slice(0, 7)}-01T00:00:00Z`)
+  promoPrev.setUTCMonth(promoPrev.getUTCMonth() - 1)
+  const promoPrevKey = promoPrev.toISOString().slice(0, 10)
+  const yearStartKey = `${currentKey.slice(0, 4)}-01-01`
+  const startKey = promoPrevKey < yearStartKey ? promoPrevKey : yearStartKey
+
   const options: string[] = []
-  for (let cursor = new Date(start); cursor <= end; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+  for (let cursor = new Date(`${startKey}T00:00:00Z`); ; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
     const key = cursor.toISOString().slice(0, 10)
     options.push(key)
-    if (key === currentKey) break
+    if (key >= currentKey) break
   }
   return options
 }
@@ -41,12 +48,15 @@ const getScorecardPayload = unstable_cache(
     const row = monthRows.find((candidate) => candidate.rep_key === repKey) ?? null
     const blocked = isPayoutBlocked(monthRows)
     const monthOptions = buildMonthOptions(settings)
+    const inPromoPeriod =
+      month >= `${settings.promoStart.slice(0, 7)}-01` && month <= `${settings.promoEnd.slice(0, 7)}-01`
 
     if (!row) {
       return {
         rep: repKey,
         month,
         monthOptions,
+        inPromoPeriod,
         reps,
         found: false,
         payoutBlocked: blocked.blocked,
@@ -62,6 +72,7 @@ const getScorecardPayload = unstable_cache(
       repDisplayName: row.rep_display_name,
       month,
       monthOptions,
+      inPromoPeriod,
       reps,
       found: true,
       gate: {

@@ -27,6 +27,7 @@ type ScorecardResponse = {
   repDisplayName?: string | null
   month: string
   monthOptions: string[]
+  inPromoPeriod: boolean
   reps: Array<{ key: string; name: string }>
   found: boolean
   locked: boolean
@@ -169,6 +170,12 @@ function ScorecardContent({
         </Card>
       ) : data && data.found && data.gate && data.commission ? (
         <>
+          {!data.inPromoPeriod && (
+            <p className="rounded-md border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm text-slate-700">
+              {monthLabel(data.month)} is outside the Q3 promo period — these are reference
+              figures computed under the program rules, not payable commissions.
+            </p>
+          )}
           {data.payoutBlocked && <PayoutBlockedCard blockingUnmappedCount={data.blockingUnmappedCount} />}
 
           <div className="grid gap-6 lg:grid-cols-3">

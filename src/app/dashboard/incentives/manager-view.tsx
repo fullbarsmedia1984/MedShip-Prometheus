@@ -43,18 +43,25 @@ function monthLabel(month: string): string {
   return new Date(`${month}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-/** Selectable months: one month before the promo through the current month. */
+/**
+ * Selectable months: January of the current year (or the month before the
+ * promo, if that's earlier) through the current month. The engine
+ * classifies all history, so every listed month has real data.
+ */
 function buildMonthOptions(settings: IncentiveSettings): string[] {
-  const start = new Date(`${settings.promoStart.slice(0, 7)}-01T00:00:00Z`)
-  start.setUTCMonth(start.getUTCMonth() - 1)
   const now = new Date()
   const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const end = new Date(`${settings.promoEnd.slice(0, 7)}-01T00:00:00Z`)
+  const promoPrev = new Date(`${settings.promoStart.slice(0, 7)}-01T00:00:00Z`)
+  promoPrev.setUTCMonth(promoPrev.getUTCMonth() - 1)
+  const promoPrevKey = promoPrev.toISOString().slice(0, 10)
+  const yearStartKey = `${currentKey.slice(0, 4)}-01-01`
+  const startKey = promoPrevKey < yearStartKey ? promoPrevKey : yearStartKey
+
   const options: string[] = []
-  for (let cursor = new Date(start); cursor <= end; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+  for (let cursor = new Date(`${startKey}T00:00:00Z`); ; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
     const key = cursor.toISOString().slice(0, 10)
     options.push(key)
-    if (key === currentKey) break
+    if (key >= currentKey) break
   }
   return options
 }
