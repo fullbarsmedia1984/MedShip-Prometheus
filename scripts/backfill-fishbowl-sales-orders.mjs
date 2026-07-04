@@ -63,7 +63,7 @@ function objectValue(value) {
 function classifySalesOrder(statusValue) {
   const status = String(statusValue ?? '').trim().toLowerCase()
   if (!status) return 'unknown'
-  if (['issued', 'in progress', 'partial', 'fulfilled', 'completed', 'closed'].includes(status)) return 'order'
+  if (['issued', 'in progress', 'partial', 'fulfilled', 'completed', 'closed', 'closed short'].includes(status)) return 'order'
   if (['void', 'voided', 'cancelled', 'canceled', 'deleted'].includes(status)) return 'void'
   return 'quote'
 }
