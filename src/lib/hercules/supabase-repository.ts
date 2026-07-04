@@ -3,6 +3,8 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type {
   HerculesAdminPricingResult,
+  HerculesApiSyncStateInput,
+  HerculesApiSyncStateRecord,
   HerculesCatalogItemRecord,
   HerculesImportJobCounters,
   HerculesImportJobRecord,
@@ -45,6 +47,12 @@ function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function toIsoString(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string') return value
+  return String(value)
 }
 
 function toImportJob(row: DbRow): HerculesImportJobRecord {
@@ -263,6 +271,44 @@ function toOfferUom(row: DbRow): HerculesOfferUomRecord {
       null,
     rawPayload: (row.raw_payload as JsonObject | null) ?? {},
     lastSeenImportJobId: String(row.last_seen_import_job_id),
+  }
+}
+
+function apiSyncStatePayload(input: HerculesApiSyncStateInput) {
+  return {
+    source_key: input.sourceKey,
+    supplier_code: input.supplierCode,
+    phase: input.phase,
+    status: input.status,
+    page_limit: input.pageLimit,
+    next_offset: input.nextOffset,
+    backfill_started_at: input.backfillStartedAt,
+    backfill_completed_at: input.backfillCompletedAt,
+    delta_cursor: input.deltaCursor,
+    last_processed_updated_at: input.lastProcessedUpdatedAt,
+    last_import_job_id: input.lastImportJobId,
+    last_error: input.lastError,
+    metadata: input.metadata,
+    updated_at: new Date().toISOString(),
+  }
+}
+
+function toApiSyncState(row: DbRow): HerculesApiSyncStateRecord {
+  return {
+    id: String(row.id),
+    sourceKey: String(row.source_key),
+    supplierCode: (row.supplier_code as string | null) ?? null,
+    phase: row.phase as HerculesApiSyncStateRecord['phase'],
+    status: row.status as HerculesApiSyncStateRecord['status'],
+    pageLimit: Number(row.page_limit ?? 500),
+    nextOffset: toNumber(row.next_offset),
+    backfillStartedAt: toIsoString(row.backfill_started_at),
+    backfillCompletedAt: toIsoString(row.backfill_completed_at),
+    deltaCursor: toIsoString(row.delta_cursor),
+    lastProcessedUpdatedAt: toIsoString(row.last_processed_updated_at),
+    lastImportJobId: (row.last_import_job_id as string | null) ?? null,
+    lastError: (row.last_error as string | null) ?? null,
+    metadata: (row.metadata as JsonObject | null) ?? {},
   }
 }
 
@@ -524,6 +570,30 @@ export class SupabaseHerculesPricingRepository implements HerculesImportReposito
         }))
       }),
     }
+  }
+
+  async getApiSyncState(sourceKey: string): Promise<HerculesApiSyncStateRecord | null> {
+    const { data, error } = await this.supabase
+      .from('hercules_api_sync_states')
+      .select('*')
+      .eq('source_key', sourceKey)
+      .maybeSingle()
+
+    if (error && !isMissingRow(error)) assertNoError(error)
+    return data ? toApiSyncState(data as DbRow) : null
+  }
+
+  async upsertApiSyncState(
+    input: HerculesApiSyncStateInput
+  ): Promise<HerculesApiSyncStateRecord> {
+    const { data, error } = await this.supabase
+      .from('hercules_api_sync_states')
+      .upsert(apiSyncStatePayload(input), { onConflict: 'source_key' })
+      .select('*')
+      .single()
+
+    assertNoError(error)
+    return toApiSyncState(data as DbRow)
   }
 
   private async findOne(table: string, column: string, value: string) {

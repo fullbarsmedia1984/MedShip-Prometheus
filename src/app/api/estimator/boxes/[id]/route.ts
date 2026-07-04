@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { deleteStandardBox, updateStandardBox } from '@/lib/estimator/repositories'
 
 type BoxContext = {
@@ -24,7 +24,7 @@ const patchSchema = z
 
 export async function PATCH(request: NextRequest, context: BoxContext) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params
@@ -48,7 +48,7 @@ export async function PATCH(request: NextRequest, context: BoxContext) {
 
 export async function DELETE(_request: NextRequest, context: BoxContext) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params

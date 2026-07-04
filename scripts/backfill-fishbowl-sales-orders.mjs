@@ -63,7 +63,7 @@ function objectValue(value) {
 function classifySalesOrder(statusValue) {
   const status = String(statusValue ?? '').trim().toLowerCase()
   if (!status) return 'unknown'
-  if (['issued', 'in progress', 'partial', 'fulfilled', 'completed', 'closed', 'closed short'].includes(status)) return 'order'
+  if (['issued', 'in progress', 'partial', 'fulfilled', 'completed', 'closed'].includes(status)) return 'order'
   if (['void', 'voided', 'cancelled', 'canceled', 'deleted'].includes(status)) return 'void'
   return 'quote'
 }
@@ -117,26 +117,6 @@ function normalizeLineItem(soNumber, item, index) {
   }
 }
 
-// Mirrors src/lib/fishbowl/sales-order-quality.ts. This script MUST write
-// data_quality_flags on every upsert: omitting the column preserves whatever
-// flags were stored before, which left stale zero_value/missing_line_items
-// flags on ~64k rows and suppressed months of dashboard revenue.
-const TEST_RECORD_PATTERN = /(^|\b)(test|testing|do not use|sample|warehouse)/i
-const STALE_QUOTE_DAYS = 365
-
-function getQualityFlags({ soNumber, status, customerName, salesperson, amount, subtotalAmount, dateCreated, lineCount, lineTotal }) {
-  const flags = new Set()
-  const effectiveAmount = Number(amount ?? subtotalAmount ?? 0)
-  if ([soNumber, customerName, salesperson].some((v) => v && TEST_RECORD_PATTERN.test(v))) flags.add('likely_test')
-  if ((lineCount ?? 0) === 0) flags.add('missing_line_items')
-  if (effectiveAmount <= 0) flags.add('zero_value')
-  const createdTime = dateCreated ? new Date(dateCreated).getTime() : NaN
-  if (Number.isFinite(createdTime) && (Date.now() - createdTime) / 86_400_000 > STALE_QUOTE_DAYS) flags.add('historical')
-  if ((lineCount ?? 0) > 0 && effectiveAmount > 0 && Math.abs(effectiveAmount - Number(lineTotal ?? 0)) > 1) flags.add('line_total_mismatch')
-  if (classifySalesOrder(status) === 'unknown') flags.add('unknown_state')
-  return [...flags]
-}
-
 function normalizeSalesOrder(raw) {
   const soNumber = toText(valueAt(raw, ['number', 'soNumber', 'salesOrderNumber']))
   if (!soNumber) return null
@@ -146,9 +126,6 @@ function normalizeSalesOrder(raw) {
   const status = toText(valueAt(raw, ['status', 'statusName'])) ?? 'Unknown'
   const rawItems = valueAt(raw, ['items', 'lines', 'salesOrderItems', 'soItems'])
   const items = Array.isArray(rawItems) ? rawItems : []
-  const normalizedItems = items.map((item, index) => normalizeLineItem(soNumber, item, index))
-  const totalAmount = toNumber(valueAt(raw, ['total', 'totalAmount', 'grandTotal', 'totalPrice']))
-  const subtotalAmount = toNumber(valueAt(raw, ['subtotal', 'subTotal', 'subTotalPrice']))
 
   return {
     header: {
@@ -163,8 +140,8 @@ function normalizeSalesOrder(raw) {
       date_scheduled: toText(valueAt(raw, ['dateScheduled', 'scheduledDate'])),
       date_issued: toText(valueAt(raw, ['dateIssued', 'issuedDate'])),
       date_completed: toText(valueAt(raw, ['dateCompleted', 'completedDate'])),
-      total_amount: totalAmount,
-      subtotal_amount: subtotalAmount,
+      total_amount: toNumber(valueAt(raw, ['total', 'totalAmount', 'grandTotal', 'totalPrice'])),
+      subtotal_amount: toNumber(valueAt(raw, ['subtotal', 'subTotal', 'subTotalPrice'])),
       tax_amount: toNumber(valueAt(raw, ['taxTotal', 'taxAmount', 'totalTax'])),
       shipping_amount: toNumber(valueAt(raw, ['shippingTotal', 'shippingAmount', 'shippingCost'])),
       currency: toText(valueAt(raw, ['currency'])) ?? 'USD',
@@ -178,49 +155,21 @@ function normalizeSalesOrder(raw) {
       quote_status: status,
       canonical_state: classifySalesOrder(status),
       raw_data: raw,
-      data_quality_flags: getQualityFlags({
-        soNumber,
-        status,
-        customerName: toText(valueAt(raw, ['customerName']) ?? valueAt(customer, ['name'])),
-        salesperson: toText(valueAt(objectValue(valueAt(raw, ['salesperson', 'salesPerson'])), ['name']) ?? valueAt(raw, ['salesperson', 'salesPerson'])),
-        amount: totalAmount,
-        subtotalAmount,
-        dateCreated: toText(valueAt(raw, ['dateCreated', 'createdDate', 'createdAt'])),
-        lineCount: normalizedItems.length,
-        lineTotal: normalizedItems.reduce((sum, item) => sum + (toNumber(item.total_price) ?? 0), 0),
-      }),
       last_synced_at: new Date().toISOString(),
     },
-    items: normalizedItems,
-    hadItemsArray: Array.isArray(rawItems),
+    items: items.map((item, index) => normalizeLineItem(soNumber, item, index)),
   }
 }
 
-// List payloads omit detail-only fields (notably dateIssued); writing them as
-// null clobbers hydrated values, so prune null volatile fields before upsert.
-const VOLATILE_HEADER_FIELDS = [
-  'date_issued', 'date_completed', 'total_amount', 'subtotal_amount',
-  'tax_amount', 'shipping_amount', 'salesperson',
-]
-
-function pruneHeader(header, hadItemsArray) {
-  for (const key of VOLATILE_HEADER_FIELDS) {
-    if (header[key] === null || header[key] === undefined) delete header[key]
+function compactSparseHeader(header) {
+  const compact = {}
+  for (const [key, value] of Object.entries(header)) {
+    // raw_data from a sparse row must never replace a full stored payload.
+    if (key === 'raw_data') continue
+    if (value === null || value === undefined) continue
+    compact[key] = value
   }
-  if (!hadItemsArray) delete header.data_quality_flags
-  return header
-}
-
-// PostgREST bulk upserts need uniform keys per request; pruning makes header
-// shapes heterogeneous, so group them by key signature.
-function groupBySignature(rows) {
-  const groups = new Map()
-  for (const row of rows) {
-    const signature = Object.keys(row).sort().join(',')
-    if (!groups.has(signature)) groups.set(signature, [])
-    groups.get(signature).push(row)
-  }
-  return [...groups.values()]
+  return compact
 }
 
 async function fishbowlLogin(baseUrl) {
@@ -329,11 +278,23 @@ async function main() {
     const normalized = orders
       .map((order) => {
         const detail = detailById.get(String(order.id))
-        return normalizeSalesOrder(detail ? { ...order, ...detail } : order)
+        const result = normalizeSalesOrder(detail ? { ...order, ...detail } : order)
+        if (!result) return null
+        if (!detail) {
+          // The list endpoint returns a sparse row (id, number, status,
+          // customerPo, dateIssued, customerName, dateScheduled). Without
+          // the detail fetch, normalizeSalesOrder maps every missing field
+          // to null — and a full-row upsert would OVERWRITE existing values
+          // (salesperson, customer_id, totals, dates, raw_data) with nulls.
+          // That corrupted 1,866 orders on 2026-07-01/02. For sparse rows,
+          // only upsert the fields the payload actually carries.
+          result.header = compactSparseHeader(result.header)
+        }
+        return result
       })
       .filter(Boolean)
 
-    const headers = normalized.map((order) => pruneHeader(order.header, order.hadItemsArray))
+    const headers = normalized.map((order) => order.header)
     const items = normalized.flatMap((order) => order.items)
     const summary = {
       dryRun,
@@ -353,9 +314,19 @@ async function main() {
     const supabase = createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'), {
       auth: { autoRefreshToken: false, persistSession: false },
     })
+    // PostgREST bulk upserts null-fill missing keys when rows in one payload
+    // have different shapes — batching sparse and full headers together would
+    // reintroduce the null-overwrite corruption. Group rows by key signature
+    // so every batch is uniform.
+    const headerGroups = new Map()
+    for (const header of headers) {
+      const signature = Object.keys(header).sort().join(',')
+      if (!headerGroups.has(signature)) headerGroups.set(signature, [])
+      headerGroups.get(signature).push(header)
+    }
     let writtenHeaders = 0
-    for (const headerGroup of groupBySignature(headers)) {
-      writtenHeaders += await upsertChunks(supabase, 'fb_sales_orders', headerGroup, 'so_number')
+    for (const group of headerGroups.values()) {
+      writtenHeaders += await upsertChunks(supabase, 'fb_sales_orders', group, 'so_number')
     }
     const writtenItems = items.length > 0
       ? await upsertChunks(supabase, 'fb_sales_order_items', items, 'sales_order_number,line_number')

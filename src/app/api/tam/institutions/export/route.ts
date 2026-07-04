@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { csvEscape, parseInstitutionListParams } from '@/lib/tam/api'
 import { listTamInstitutions, type TamInstitutionListRow } from '@/lib/tam/supabase'
 
@@ -21,7 +21,7 @@ const HEADERS = [
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const params = parseInstitutionListParams(new URL(request.url).searchParams)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,6 +24,7 @@ import {
   Clock,
   Play,
   Zap,
+  Users,
 } from 'lucide-react'
 import type { ConnectionConfig } from '@/types'
 import { toast } from 'sonner'
@@ -620,6 +622,28 @@ export default function SettingsPage() {
           </div>
         ) : (
           <>
+            {/* ============================================================ */}
+            {/* User Management                                               */}
+            {/* ============================================================ */}
+            <Link href="/dashboard/settings/users" className="block">
+              <Card className="overflow-hidden border-2 border-border/60 transition-colors hover:border-medship-primary/40">
+                <CardContent className="flex items-center justify-between py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-medship-primary/10">
+                      <Users className="h-5 w-5 text-medship-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">User Management</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        Invite teammates, assign roles, and deactivate access
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
+
             {/* ============================================================ */}
             {/* Data Source Section                                           */}
             {/* ============================================================ */}

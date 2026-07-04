@@ -253,6 +253,41 @@ export type HerculesImportRepository = {
   ): Promise<UpsertResult<HerculesOfferUomRecord>>
 }
 
+export type HerculesApiSyncPhase = 'full_backfill' | 'delta'
+
+export type HerculesApiSyncStatus =
+  | 'idle'
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'partial'
+
+export type HerculesApiSyncStateRecord = {
+  id: string
+  sourceKey: string
+  supplierCode: string | null
+  phase: HerculesApiSyncPhase
+  status: HerculesApiSyncStatus
+  pageLimit: number
+  nextOffset: number | null
+  backfillStartedAt: string | null
+  backfillCompletedAt: string | null
+  deltaCursor: string | null
+  lastProcessedUpdatedAt: string | null
+  lastImportJobId: string | null
+  lastError: string | null
+  metadata: JsonObject
+}
+
+export type HerculesApiSyncStateInput = Omit<HerculesApiSyncStateRecord, 'id'>
+
+export type HerculesApiSyncStateRepository = {
+  getApiSyncState(sourceKey: string): Promise<HerculesApiSyncStateRecord | null>
+  upsertApiSyncState(
+    input: HerculesApiSyncStateInput
+  ): Promise<HerculesApiSyncStateRecord>
+}
+
 export type ZeusEligibleSupplierCost = {
   supplierName: string
   supplierCode: string | null

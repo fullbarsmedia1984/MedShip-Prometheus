@@ -9,6 +9,15 @@ type NormalizeOptions = {
   includeDetailStatus?: boolean
   detailStatus?: 'pending' | 'success' | 'failed'
   detailError?: string | null
+  /**
+   * Set when rawOrders are sparse LIST-endpoint rows (id, number, status,
+   * customerPo, dateIssued, customerName, dateScheduled). Sparse rows must
+   * only ever ADD data: normalizeSalesOrder maps every absent field to null,
+   * and a full-row upsert overwrites salesperson / customer_id / totals /
+   * dates / raw_data on already-hydrated records with those nulls. That
+   * corrupted 15k+ orders on 2026-07-01..03.
+   */
+  sparse?: boolean
 }
 
 type UpsertSalesOrdersOptions = NormalizeOptions
@@ -167,34 +176,22 @@ export function normalizeSalesOrder(
     header.detail_error = options.detailError ?? null
   }
 
-  // Fishbowl list (header) payloads omit fields the detail payload carries —
-  // notably dateIssued. Writing those as null lets rotating header sweeps
-  // clobber values that detail hydration already filled (this shifted orders
-  // into the wrong dashboard month via the date_completed fallback). Omit
-  // null volatile fields so upserts preserve the existing values instead.
-  for (const key of [
-    'date_issued',
-    'date_completed',
-    'total_amount',
-    'subtotal_amount',
-    'tax_amount',
-    'shipping_amount',
-    'salesperson',
-  ] as const) {
-    if (header[key] === null || header[key] === undefined) delete header[key]
-  }
-
-  // Quality flags are only trustworthy when the payload actually included
-  // line items; an item-less header payload would re-write missing_line_items
-  // over flags computed from the hydrated detail.
-  if (!Array.isArray(rawItems)) {
-    delete header.data_quality_flags
-  }
-
   return {
     header,
     items: normalizedItems,
   }
+}
+
+function compactSparseHeader(header: NormalizedSalesOrder['header']): NormalizedSalesOrder['header'] {
+  const compact: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(header)) {
+    // A sparse row's raw_data / quality flags describe the 7-key list row,
+    // not the order — never let them replace the hydrated versions.
+    if (key === 'raw_data' || key === 'data_quality_flags') continue
+    if (value === null || value === undefined) continue
+    compact[key] = value
+  }
+  return compact as NormalizedSalesOrder['header']
 }
 
 export async function upsertSalesOrdersToCache(
@@ -210,20 +207,34 @@ export async function upsertSalesOrdersToCache(
     return { orders: 0, items: 0, skipped: rawOrders.length }
   }
 
-  // Headers can have heterogeneous columns (null volatile fields are omitted
-  // per row); PostgREST bulk upserts require uniform keys, so group by shape.
+  const headers = normalized.map((order) => {
+    if (options.sparse) return compactSparseHeader(order.header)
+    // The DETAIL endpoint never returns dateIssued (only the list endpoint
+    // does) — a null here means "not in this payload", not "un-issued".
+    // Omit the key so upserts leave the stored value untouched.
+    if (order.header.date_issued === null) {
+      const { date_issued: _omitted, ...rest } = order.header
+      return rest as NormalizedSalesOrder['header']
+    }
+    return order.header
+  })
+
+  // PostgREST null-fills missing keys when rows in one upsert payload have
+  // different shapes — batch rows by key signature so a compacted row can
+  // never re-null a fuller row's columns.
   const headerGroups = new Map<string, Array<NormalizedSalesOrder['header']>>()
-  for (const order of normalized) {
-    const signature = Object.keys(order.header).sort().join(',')
+  for (const header of headers) {
+    const signature = Object.keys(header).sort().join(',')
     const group = headerGroups.get(signature)
-    if (group) group.push(order.header)
-    else headerGroups.set(signature, [order.header])
+    if (group) group.push(header)
+    else headerGroups.set(signature, [header])
   }
 
   for (const group of headerGroups.values()) {
     const { error: orderError } = await supabase
       .from('fb_sales_orders')
       .upsert(group, { onConflict: 'so_number' })
+
     if (orderError) throw new Error(`Supabase upsert error on fb_sales_orders: ${orderError.message}`)
   }
 

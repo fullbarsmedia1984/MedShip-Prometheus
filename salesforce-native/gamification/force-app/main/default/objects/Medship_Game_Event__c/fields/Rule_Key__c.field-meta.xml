@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>DeveloperName of the custom metadata rule that created this event.</description>
+    <label>Rule Key</label>
+    <length>80</length>
+    <required>true</required>
+    <type>Text</type>
+</CustomField>
+

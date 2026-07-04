@@ -1,0 +1,5627 @@
+{
+  "ok": true,
+  "generatedAt": "2026-06-25T01:03:38.374Z",
+  "source": "Salesforce API via local environment variables",
+  "safety": {
+    "readOnly": true,
+    "mutationsAttempted": false,
+    "recordSamplesFetched": false,
+    "excludedByDefault": [
+      "Subject",
+      "Description",
+      "WhoId",
+      "WhatId",
+      "AccountId",
+      "Call_Notes_Summary__c",
+      "Competitor_Intel__c",
+      "ringdna__Call_Recording_URL__c",
+      "ringdna__Recording_URL__c",
+      "ringdna__RecordingUrl__c"
+    ],
+    "note": "Record data discovery used aggregate counts only. Metadata includes field names/labels/picklists."
+  },
+  "orgSummary": {
+    "attributes": {
+      "type": "Organization",
+      "url": "/services/data/v60.0/sobjects/Organization/00D2E0000013VqFUAU"
+    },
+    "Id": "00D2E0000013VqFUAU",
+    "Name": "Medical Shipment",
+    "OrganizationType": "Enterprise Edition",
+    "IsSandbox": false
+  },
+  "describeStats": {
+    "totalGlobalObjects": 2148,
+    "describedObjects": 1615,
+    "describeErrors": []
+  },
+  "ringDnaObjects": [
+    {
+      "name": "Account",
+      "label": "Account",
+      "labelPlural": "Accounts",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 154,
+      "ringDnaFields": [
+        {
+          "name": "ringdna100__Call_Attempts__c",
+          "label": "Call Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Days_Since_Last_Attempt__c",
+          "label": "Days Since Last Attempt (Call or Email)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Email_Attempts__c",
+          "label": "Email Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Inbound_Call__c",
+          "label": "First Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Outbound_Call__c",
+          "label": "First Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Email_Attempt__c",
+          "label": "Last Email Attempt",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Inbound_Call__c",
+          "label": "Last Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Outbound_Call__c",
+          "label": "Last Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Response_Type__c",
+          "label": "Response Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Call",
+            "Email"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__RingDNA_Context__c",
+          "label": "RingDNA Context",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Days__c",
+          "label": "Time Since Last Call Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Minutes__c",
+          "label": "Time Since Last Call Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Days__c",
+          "label": "Time Since Last Email Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Minutes__c",
+          "label": "Time Since Last Email Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Dial_Minutes__c",
+          "label": "Time to First Dial (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Response__c",
+          "label": "Time to First Response (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "AIInsightValue",
+      "label": "AI Insight Value",
+      "labelPlural": "AI Insight Values",
+      "custom": false,
+      "queryable": true,
+      "createable": false,
+      "updateable": false,
+      "searchable": false,
+      "fieldCount": 18,
+      "ringDnaFields": [
+        {
+          "name": "SobjectLookupValueId",
+          "label": "sObject Lookup Value ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "AIRecordInsight",
+      "label": "AI Record Insight",
+      "labelPlural": "AI Record Insights",
+      "custom": false,
+      "queryable": true,
+      "createable": false,
+      "updateable": false,
+      "searchable": false,
+      "fieldCount": 21,
+      "ringDnaFields": [
+        {
+          "name": "TargetId",
+          "label": "Target ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Attachment",
+      "label": "Attachment",
+      "labelPlural": "Attachments",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 15,
+      "ringDnaFields": [
+        {
+          "name": "ParentId",
+          "label": "Parent ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Campaign",
+      "label": "Campaign",
+      "labelPlural": "Campaigns",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 48,
+      "ringDnaFields": [
+        {
+          "name": "ringdna100__Call_Attempts__c",
+          "label": "Call Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Days_Since_Last_Attempt__c",
+          "label": "Days Since Last Attempt (Call or Email)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Email_Attempts__c",
+          "label": "Email Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Inbound_Call__c",
+          "label": "First Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Outbound_Call__c",
+          "label": "First Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Email_Attempt__c",
+          "label": "Last Email Attempt",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Inbound_Call__c",
+          "label": "Last Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Outbound_Call__c",
+          "label": "Last Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Response_Type__c",
+          "label": "Response Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Call",
+            "Email"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__RingDNA_Context__c",
+          "label": "RingDNA Context",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Dial_Minutes__c",
+          "label": "Time to First Dial (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Response__c",
+          "label": "Time to First Response (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "CollaborationGroupRecord",
+      "label": "Group Record",
+      "labelPlural": "Group Records",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 9,
+      "ringDnaFields": [
+        {
+          "name": "RecordId",
+          "label": "Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Contact",
+      "label": "Contact",
+      "labelPlural": "Contacts",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 114,
+      "ringDnaFields": [
+        {
+          "name": "ringdna__HasOptedOutOfSms__c",
+          "label": "SMS Opt Out",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Call_Attempts__c",
+          "label": "Call Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Days_Since_Last_Attempt__c",
+          "label": "Days Since Last Attempt (Call or Email)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Email_Attempts__c",
+          "label": "Email Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Inbound_Call__c",
+          "label": "First Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Inbound_Message__c",
+          "label": "First Inbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Outbound_Call__c",
+          "label": "First Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Outbound_Message__c",
+          "label": "First Outbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Email_Attempt__c",
+          "label": "Last Email Attempt",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Inbound_Call__c",
+          "label": "Last Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Inbound_Message__c",
+          "label": "Last Inbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Outbound_Call__c",
+          "label": "Last Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Outbound_Message__c",
+          "label": "Last Outbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Message_Attempts__c",
+          "label": "Message Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Response_Type__c",
+          "label": "Response Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Call",
+            "Email"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__RingDNA_Context__c",
+          "label": "RingDNA Context",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Days__c",
+          "label": "Time Since Last Call Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Minutes__c",
+          "label": "Time Since Last Call Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Days__c",
+          "label": "Time Since Last Email Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Minutes__c",
+          "label": "Time Since Last Email Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Message_Attempt_Days__c",
+          "label": "Time Since Last Message Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Message_Attempt_Minutes__c",
+          "label": "Time Since Last Message Attempt (Mins)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Dial_Minutes__c",
+          "label": "Time to First Dial (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Response__c",
+          "label": "Time to First Response (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ContactRequest",
+      "label": "Contact Request",
+      "labelPlural": "Contact Requests",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 19,
+      "ringDnaFields": [
+        {
+          "name": "WhatId",
+          "label": "Related To ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": false
+        }
+      ]
+    },
+    {
+      "name": "ContentDistribution",
+      "label": "Content Delivery",
+      "labelPlural": "Content Deliveries",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 28,
+      "ringDnaFields": [
+        {
+          "name": "RelatedRecordId",
+          "label": "Related Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ContentDocumentLink",
+      "label": "Content Document Link",
+      "labelPlural": "Content Document Link",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 7,
+      "ringDnaFields": [
+        {
+          "name": "LinkedEntityId",
+          "label": "Linked Entity ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ContentVersion",
+      "label": "Content Version",
+      "labelPlural": "Content Versions",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 43,
+      "ringDnaFields": [
+        {
+          "name": "FirstPublishLocationId",
+          "label": "First Publish Location ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "DuplicateRecordItem",
+      "label": "Duplicate Record Item",
+      "labelPlural": "Duplicate Record Items",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 10,
+      "ringDnaFields": [
+        {
+          "name": "RecordId",
+          "label": "Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "EntitySubscription",
+      "label": "Entity Subscription",
+      "labelPlural": "Entity Subscriptions",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": false,
+      "searchable": false,
+      "fieldCount": 6,
+      "ringDnaFields": [
+        {
+          "name": "ParentId",
+          "label": "Parent ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Event",
+      "label": "Event",
+      "labelPlural": "Events",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 101,
+      "ringDnaFields": [
+        {
+          "name": "ringdna__Abandoned_Call__c",
+          "label": "Abandoned Call",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail__c",
+          "label": "Automated Voicemail?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Link__c",
+          "label": "Automated Voicemail Link",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Used__c",
+          "label": "Automated Voicemail Used",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": true,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Inbound",
+            "Outbound"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Wrong Number",
+            "Left Voicemail",
+            "Contacted",
+            "Set Appointment",
+            "DO NOT CALL",
+            "No Answer",
+            "Profile Call",
+            "Pyxis Call"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration__c",
+          "label": "Duration",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Flow__c",
+          "label": "Call Flow",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Agent__c",
+          "label": "Call Hour Of Day (Agent)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Local__c",
+          "label": "Hour Of Day (Local)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Recording__c",
+          "label": "Recording",
+          "type": "string",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Recording_URL__c",
+          "label": "Recording URL",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": false
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Status__c",
+          "label": "Call Status",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Connected",
+            "Failed",
+            "Busy",
+            "No Answer",
+            "Missed"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Called_Back__c",
+          "label": "Called Back?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Created_by_RingDNA__c",
+          "label": "Created by RingDNA",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__From_Number__c",
+          "label": "From Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Host_ID__c",
+          "label": "Host ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Initiating_Record_ID__c",
+          "label": "Initiating Record ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence__c",
+          "label": "Local Presence?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence_Num__c",
+          "label": "Local Presence #",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Meeting_ID__c",
+          "label": "Meeting ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__No_Answer_Number_Used__c",
+          "label": "No Answer Number Used",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue__c",
+          "label": "Queue",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue_Hold_Time__c",
+          "label": "Queue Hold Time",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Supervisor_Notes__c",
+          "label": "Supervisor Notes",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__To_Number__c",
+          "label": "To Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "EventRelation",
+      "label": "Event Relation",
+      "labelPlural": "Event Relations",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 16,
+      "ringDnaFields": [
+        {
+          "name": "RelationId",
+          "label": "Relation ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "FeedComment",
+      "label": "Feed Comment",
+      "labelPlural": "Feed Comments",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 22,
+      "ringDnaFields": [
+        {
+          "name": "ParentId",
+          "label": "Parent ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "FeedItem",
+      "label": "Feed Item",
+      "labelPlural": "Feed Items",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 26,
+      "ringDnaFields": [
+        {
+          "name": "ParentId",
+          "label": "Parent ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "FlowOrchestrationWorkItem",
+      "label": "Orchestration Work Item",
+      "labelPlural": "Orchestration Work Items",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 20,
+      "ringDnaFields": [
+        {
+          "name": "RelatedRecordId",
+          "label": "Context Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "FlowRecordRelation",
+      "label": "Flow Record Relation",
+      "labelPlural": "Flow Record Relations",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 10,
+      "ringDnaFields": [
+        {
+          "name": "RelatedRecordId",
+          "label": "Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Lead",
+      "label": "Lead",
+      "labelPlural": "Leads",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 117,
+      "ringDnaFields": [
+        {
+          "name": "ringdna__HasOptedOutOfSms__c",
+          "label": "SMS Opt Out",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Call_Attempts__c",
+          "label": "Call Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Days_Since_Last_Attempt__c",
+          "label": "Days Since Last Attempt (Call or Email)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Email_Attempts__c",
+          "label": "Email Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Inbound_Call__c",
+          "label": "First Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Inbound_Message__c",
+          "label": "First Inbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Outbound_Call__c",
+          "label": "First Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Outbound_Message__c",
+          "label": "First Outbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Email_Attempt__c",
+          "label": "Last Email Attempt",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Inbound_Call__c",
+          "label": "Last Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Inbound_Message__c",
+          "label": "Last Inbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Outbound_Call__c",
+          "label": "Last Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Outbound_Message__c",
+          "label": "Last Outbound Message",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Message_Attempts__c",
+          "label": "Message Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Response_Type__c",
+          "label": "Response Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Call",
+            "Email"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__RingDNA_Context__c",
+          "label": "RingDNA Context",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Days__c",
+          "label": "Time Since Last Call Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Minutes__c",
+          "label": "Time Since Last Call Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Days__c",
+          "label": "Time Since Last Email Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Minutes__c",
+          "label": "Time Since Last Email Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Message_Attempt_Days__c",
+          "label": "Time Since Last Message Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Message_Attempt_Minutes__c",
+          "label": "Time Since Last Message Attempt (Mins)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Dial_Minutes__c",
+          "label": "Time to First Dial (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_Respond__c",
+          "label": "Time to First Response (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Note",
+      "label": "Note",
+      "labelPlural": "Notes",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 12,
+      "ringDnaFields": [
+        {
+          "name": "ParentId",
+          "label": "Parent ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Opportunity",
+      "label": "Opportunity",
+      "labelPlural": "Opportunities",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 71,
+      "ringDnaFields": [
+        {
+          "name": "ringdna100__Call_Attempts__c",
+          "label": "Call Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Days_Since_Last_Attempt_Call_or_Email__c",
+          "label": "Days Since Last Attempt (Call or Email)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Email_Attempts__c",
+          "label": "Email Attempts",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Inbound_Call__c",
+          "label": "First Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__First_Outbound_Call__c",
+          "label": "First Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Email_Attempt__c",
+          "label": "Last Email Attempt",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Inbound_Call__c",
+          "label": "Last Inbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Last_Outbound_Call__c",
+          "label": "Last Outbound Call",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Response_Type__c",
+          "label": "Response Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Call",
+            "Email"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__RingDNA_Context__c",
+          "label": "RingDNA Context",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Days__c",
+          "label": "Time Since Last Call Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Call_Attempt_Minutes__c",
+          "label": "Time Since Last Call Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Days__c",
+          "label": "Time Since Last Email Attempt (Days)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_Since_Last_Email_Attempt_Minutes__c",
+          "label": "Time Since Last Email Attempt (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Dial_Minutes__c",
+          "label": "Time to First Dial (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Time_to_First_Response__c",
+          "label": "Time to First Response (Minutes)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ProcessException",
+      "label": "Process Exception",
+      "labelPlural": "Process Exceptions",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 22,
+      "ringDnaFields": [
+        {
+          "name": "AttachedToId",
+          "label": "Attached To ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ProcessInstance",
+      "label": "Process Instance",
+      "labelPlural": "Process Instance",
+      "custom": false,
+      "queryable": true,
+      "createable": false,
+      "updateable": false,
+      "searchable": false,
+      "fieldCount": 16,
+      "ringDnaFields": [
+        {
+          "name": "TargetObjectId",
+          "label": "Target Object ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "RecordAction",
+      "label": "Record Action",
+      "labelPlural": "Record Actions",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 17,
+      "ringDnaFields": [
+        {
+          "name": "RecordId",
+          "label": "Parent Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "RecordActionHistory",
+      "label": "RecordActionHistory",
+      "labelPlural": "RecordActionHistories",
+      "custom": false,
+      "queryable": true,
+      "createable": false,
+      "updateable": false,
+      "searchable": false,
+      "fieldCount": 16,
+      "ringDnaFields": [
+        {
+          "name": "ParentRecordId",
+          "label": "Parent Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ringdna__Call_Flow__c",
+      "label": "Call Flow",
+      "labelPlural": "Call Flows",
+      "custom": true,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 10,
+      "ringDnaFields": [
+        {
+          "name": "ringdna__Number_of_Steps__c",
+          "label": "Number of Steps",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ringdna__Call_Flow__Share",
+      "label": "Share: Call Flow",
+      "labelPlural": "Share: Call Flow",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 8,
+      "ringDnaFields": [
+        {
+          "name": "ParentId",
+          "label": "Parent ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ringdna__Call_Flow_Step__c",
+      "label": "Call Flow Step",
+      "labelPlural": "Call Flow Steps",
+      "custom": true,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 19,
+      "ringDnaFields": [
+        {
+          "name": "ringdna__Audio_Filename__c",
+          "label": "Audio Filename",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Audio_Text__c",
+          "label": "Audio Text",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Flow__c",
+          "label": "Call Flow",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Dial_Destination__c",
+          "label": "Dial Destination",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Dial_Type__c",
+          "label": "Dial Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "User",
+            "Call Queue",
+            "Skill",
+            "Phone Number"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Input__c",
+          "label": "Input",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Order__c",
+          "label": "Order",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Speech_Confidence__c",
+          "label": "Speech Confidence",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Speech_Result__c",
+          "label": "Speech Result",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Type__c",
+          "label": "Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Dial",
+            "Greeting",
+            "Menu",
+            "Prompt",
+            "Voicemail",
+            "SMS",
+            "Time",
+            "Conference",
+            "Hangup",
+            "Callout",
+            "Loop",
+            "Branch"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Valid_Response__c",
+          "label": "Valid Response",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ringdna100__Agent_Stats__c",
+      "label": "Agent Stat",
+      "labelPlural": "Agent Stats",
+      "custom": true,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 19,
+      "ringDnaFields": [
+        {
+          "name": "ringdna100__Connects__c",
+          "label": "Connects",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Date__c",
+          "label": "Date",
+          "type": "date",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Dials__c",
+          "label": "Dials",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Dials_1_Connect__c",
+          "label": "Dials:1 Connect",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Dials_1_Opp__c",
+          "label": "Dials:1 Opp",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Dials_1_Win__c",
+          "label": "Dials:1 Win",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Opp_1_Win__c",
+          "label": "Opp:1 Win",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Opportunities__c",
+          "label": "Opportunities",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__User__c",
+          "label": "User",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna100__Won_Opportunities__c",
+          "label": "Won Opportunities",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ringdna100__Agent_Stats__Share",
+      "label": "Share: Agent Stat",
+      "labelPlural": "Share: Agent Stat",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 8,
+      "ringDnaFields": [
+        {
+          "name": "ParentId",
+          "label": "Parent ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "ringdna100__Feature_Control__c",
+      "label": "Feature Control",
+      "labelPlural": "Feature Control",
+      "custom": true,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 10,
+      "ringDnaFields": [
+        {
+          "name": "ringdna100__Active__c",
+          "label": "Active",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Task",
+      "label": "Task",
+      "labelPlural": "Tasks",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 92,
+      "ringDnaFields": [
+        {
+          "name": "ringdna__Abandoned_Call__c",
+          "label": "Abandoned Call",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail__c",
+          "label": "Automated Voicemail?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Link__c",
+          "label": "Automated Voicemail Link",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Used__c",
+          "label": "Automated Voicemail Used",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": true,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Inbound",
+            "Outbound"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Wrong Number",
+            "Left Voicemail",
+            "Contacted",
+            "Set Appointment",
+            "DO NOT CALL",
+            "No Answer",
+            "Profile Call",
+            "Pyxis Call"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration__c",
+          "label": "Duration",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Flow__c",
+          "label": "Call Flow",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Agent__c",
+          "label": "Call Hour Of Day (Agent)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Local__c",
+          "label": "Hour Of Day (Local)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Recording__c",
+          "label": "Recording",
+          "type": "string",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Recording_URL__c",
+          "label": "Recording URL",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": false
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Status__c",
+          "label": "Call Status",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Connected",
+            "Failed",
+            "Busy",
+            "No Answer",
+            "Missed"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Called_Back__c",
+          "label": "Called Back?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Created_by_RingDNA__c",
+          "label": "Created by RingDNA",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__From_Number__c",
+          "label": "From Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Host_ID__c",
+          "label": "Host ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Initiating_Record_ID__c",
+          "label": "Initiating Record ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence__c",
+          "label": "Local Presence?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence_Num__c",
+          "label": "Local Presence #",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Meeting_ID__c",
+          "label": "Meeting ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__No_Answer_Number_Used__c",
+          "label": "No Answer Number Used",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue__c",
+          "label": "Queue",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue_Hold_Time__c",
+          "label": "Queue Hold Time",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Supervisor_Notes__c",
+          "label": "Supervisor Notes",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__To_Number__c",
+          "label": "To Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "TaskRelation",
+      "label": "Task Relation",
+      "labelPlural": "Task Relations",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": false,
+      "searchable": false,
+      "fieldCount": 11,
+      "ringDnaFields": [
+        {
+          "name": "RelationId",
+          "label": "Relation ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "TopicAssignment",
+      "label": "Topic Assignment",
+      "labelPlural": "Topic Assignments",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": false,
+      "searchable": false,
+      "fieldCount": 9,
+      "ringDnaFields": [
+        {
+          "name": "EntityId",
+          "label": "Entity ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "UserDefinedLabelAssignment",
+      "label": "Label Assignment",
+      "labelPlural": "Label Assignments",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": false,
+      "fieldCount": 11,
+      "ringDnaFields": [
+        {
+          "name": "ItemId",
+          "label": "Item ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "VideoCall",
+      "label": "Video Call",
+      "labelPlural": "Video Calls",
+      "custom": false,
+      "queryable": true,
+      "createable": true,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 27,
+      "ringDnaFields": [
+        {
+          "name": "RelatedRecordId",
+          "label": "Related Record ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    {
+      "name": "VoiceCall",
+      "label": "Voice Call",
+      "labelPlural": "Voice Calls",
+      "custom": false,
+      "queryable": true,
+      "createable": false,
+      "updateable": true,
+      "searchable": true,
+      "fieldCount": 36,
+      "ringDnaFields": [
+        {
+          "name": "RelatedRecordId",
+          "label": "RelatedRecord ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    }
+  ],
+  "callActivityObjects": {
+    "Task": {
+      "label": "Task",
+      "ringDnaFields": [
+        {
+          "name": "ringdna__Abandoned_Call__c",
+          "label": "Abandoned Call",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Link__c",
+          "label": "Automated Voicemail Link",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Used__c",
+          "label": "Automated Voicemail Used",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail__c",
+          "label": "Automated Voicemail?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": true,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Inbound",
+            "Outbound"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Wrong Number",
+            "Left Voicemail",
+            "Contacted",
+            "Set Appointment",
+            "DO NOT CALL",
+            "No Answer",
+            "Profile Call",
+            "Pyxis Call"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration__c",
+          "label": "Duration",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Flow__c",
+          "label": "Call Flow",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Agent__c",
+          "label": "Call Hour Of Day (Agent)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Local__c",
+          "label": "Hour Of Day (Local)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Recording_URL__c",
+          "label": "Recording URL",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": false
+        },
+        {
+          "name": "ringdna__Call_Recording__c",
+          "label": "Recording",
+          "type": "string",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Status__c",
+          "label": "Call Status",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Connected",
+            "Failed",
+            "Busy",
+            "No Answer",
+            "Missed"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Called_Back__c",
+          "label": "Called Back?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Created_by_RingDNA__c",
+          "label": "Created by RingDNA",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__From_Number__c",
+          "label": "From Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Host_ID__c",
+          "label": "Host ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Initiating_Record_ID__c",
+          "label": "Initiating Record ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence_Num__c",
+          "label": "Local Presence #",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence__c",
+          "label": "Local Presence?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Meeting_ID__c",
+          "label": "Meeting ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__No_Answer_Number_Used__c",
+          "label": "No Answer Number Used",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue_Hold_Time__c",
+          "label": "Queue Hold Time",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue__c",
+          "label": "Queue",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Supervisor_Notes__c",
+          "label": "Supervisor Notes",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__To_Number__c",
+          "label": "To Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ],
+      "safeReportingFields": [
+        {
+          "name": "Id",
+          "label": "Activity ID",
+          "type": "id",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "OwnerId",
+          "label": "Assigned To ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ActivityDate",
+          "label": "Due Date Only",
+          "type": "date",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "CreatedDate",
+          "label": "Created Date",
+          "type": "datetime",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "LastModifiedDate",
+          "label": "Last Modified Date",
+          "type": "datetime",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "TaskSubtype",
+          "label": "Task Subtype",
+          "type": "picklist",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Task",
+            "Email",
+            "ListEmail",
+            "Cadence",
+            "Call",
+            "LinkedIn"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "CallType",
+          "label": "Call Type",
+          "type": "picklist",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Internal",
+            "Inbound",
+            "Outbound"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "CallDisposition",
+          "label": "Call Result",
+          "type": "string",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "CallDurationInSeconds",
+          "label": "Call Duration",
+          "type": "int",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Profile_Call_Type__c",
+          "label": "Profile Call Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Initial Discovery",
+            "Follow-Up",
+            "Product Demo",
+            "Needs Assessment",
+            "Budget Discussion",
+            "Contract Review"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Profile_Call_Outcome__c",
+          "label": "Profile Call Outcome",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Interested - Next Steps",
+            "Needs Follow-Up",
+            "Not Interested",
+            "Scheduled Demo",
+            "Quote Requested"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Products_Discussed__c",
+          "label": "Products Discussed",
+          "type": "multipicklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Pyxis MedStation",
+            "Manikins",
+            "Hospital Beds",
+            "IV Pumps",
+            "Private Label",
+            "Customized Kits"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Program_Size__c",
+          "label": "Program Size",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Small (<50 students)",
+            "Medium (50-150)",
+            "Large (150-500+)"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Budget_Timeframe__c",
+          "label": "Budget Timeframe",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "This Quarter",
+            "Next Quarter",
+            "This Fiscal Year",
+            "Next Fiscal Year",
+            "Unknown"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Follow_Up_Date__c",
+          "label": "Follow Up Date",
+          "type": "date",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Converted_to_Opp__c",
+          "label": "Converted to Opportunity",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Related_Opportunity__c",
+          "label": "Related Opportunity",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Inbound",
+            "Outbound"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": true,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Wrong Number",
+            "Left Voicemail",
+            "Contacted",
+            "Set Appointment",
+            "DO NOT CALL",
+            "No Answer",
+            "Profile Call",
+            "Pyxis Call"
+          ],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    },
+    "Event": {
+      "label": "Event",
+      "ringDnaFields": [
+        {
+          "name": "ringdna__Abandoned_Call__c",
+          "label": "Abandoned Call",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Link__c",
+          "label": "Automated Voicemail Link",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail_Used__c",
+          "label": "Automated Voicemail Used",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Automated_Voicemail__c",
+          "label": "Automated Voicemail?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": true,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Inbound",
+            "Outbound"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Wrong Number",
+            "Left Voicemail",
+            "Contacted",
+            "Set Appointment",
+            "DO NOT CALL",
+            "No Answer",
+            "Profile Call",
+            "Pyxis Call"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration__c",
+          "label": "Duration",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Flow__c",
+          "label": "Call Flow",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Agent__c",
+          "label": "Call Hour Of Day (Agent)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Hour_Of_Day_Local__c",
+          "label": "Hour Of Day (Local)",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Recording_URL__c",
+          "label": "Recording URL",
+          "type": "url",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": false
+        },
+        {
+          "name": "ringdna__Call_Recording__c",
+          "label": "Recording",
+          "type": "string",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Status__c",
+          "label": "Call Status",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Connected",
+            "Failed",
+            "Busy",
+            "No Answer",
+            "Missed"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Called_Back__c",
+          "label": "Called Back?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Created_by_RingDNA__c",
+          "label": "Created by RingDNA",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__From_Number__c",
+          "label": "From Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Host_ID__c",
+          "label": "Host ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Initiating_Record_ID__c",
+          "label": "Initiating Record ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence_Num__c",
+          "label": "Local Presence #",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Local_Presence__c",
+          "label": "Local Presence?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Meeting_ID__c",
+          "label": "Meeting ID",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__No_Answer_Number_Used__c",
+          "label": "No Answer Number Used",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue_Hold_Time__c",
+          "label": "Queue Hold Time",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Queue__c",
+          "label": "Queue",
+          "type": "string",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Supervisor_Notes__c",
+          "label": "Supervisor Notes",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__To_Number__c",
+          "label": "To Number",
+          "type": "phone",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        }
+      ],
+      "safeReportingFields": [
+        {
+          "name": "Id",
+          "label": "Activity ID",
+          "type": "id",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "OwnerId",
+          "label": "Assigned To ID",
+          "type": "reference",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ActivityDate",
+          "label": "Due Date Only",
+          "type": "date",
+          "custom": false,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": false,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "CreatedDate",
+          "label": "Created Date",
+          "type": "datetime",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "LastModifiedDate",
+          "label": "Last Modified Date",
+          "type": "datetime",
+          "custom": false,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": false,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Profile_Call_Type__c",
+          "label": "Profile Call Type",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Initial Discovery",
+            "Follow-Up",
+            "Product Demo",
+            "Needs Assessment",
+            "Budget Discussion",
+            "Contract Review"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Profile_Call_Outcome__c",
+          "label": "Profile Call Outcome",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Interested - Next Steps",
+            "Needs Follow-Up",
+            "Not Interested",
+            "Scheduled Demo",
+            "Quote Requested"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Products_Discussed__c",
+          "label": "Products Discussed",
+          "type": "multipicklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Pyxis MedStation",
+            "Manikins",
+            "Hospital Beds",
+            "IV Pumps",
+            "Private Label",
+            "Customized Kits"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Program_Size__c",
+          "label": "Program Size",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "Small (<50 students)",
+            "Medium (50-150)",
+            "Large (150-500+)"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Budget_Timeframe__c",
+          "label": "Budget Timeframe",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": true,
+          "picklistValues": [
+            "This Quarter",
+            "Next Quarter",
+            "This Fiscal Year",
+            "Next Fiscal Year",
+            "Unknown"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Follow_Up_Date__c",
+          "label": "Follow Up Date",
+          "type": "date",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Converted_to_Opp__c",
+          "label": "Converted to Opportunity",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "Related_Opportunity__c",
+          "label": "Related Opportunity",
+          "type": "reference",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Inbound",
+            "Outbound"
+          ],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "custom": true,
+          "calculated": true,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "custom": true,
+          "calculated": true,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": false,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "custom": true,
+          "calculated": false,
+          "nillable": false,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [],
+          "dashboardSafeByDefault": true
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "custom": true,
+          "calculated": false,
+          "nillable": true,
+          "permissionable": true,
+          "updateable": true,
+          "restrictedPicklist": false,
+          "picklistValues": [
+            "Wrong Number",
+            "Left Voicemail",
+            "Contacted",
+            "Set Appointment",
+            "DO NOT CALL",
+            "No Answer",
+            "Profile Call",
+            "Pyxis Call"
+          ],
+          "dashboardSafeByDefault": true
+        }
+      ]
+    }
+  },
+  "queries": [
+    {
+      "name": "taskCallLast365Count",
+      "ok": true,
+      "totalSize": 8324,
+      "records": []
+    },
+    {
+      "name": "taskAnyRingDnaLast365Count",
+      "ok": true,
+      "totalSize": 31781,
+      "records": []
+    },
+    {
+      "name": "taskCallAnyRingDnaLast365Count",
+      "ok": true,
+      "totalSize": 8324,
+      "records": []
+    },
+    {
+      "name": "eventAnyRingDnaLast365Count",
+      "ok": true,
+      "totalSize": 287,
+      "records": []
+    },
+    {
+      "name": "taskSubtypeLast365",
+      "ok": true,
+      "totalSize": 3,
+      "records": [
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "TaskSubtype": "Email",
+          "total": 21838
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "TaskSubtype": "Call",
+          "total": 8324
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "TaskSubtype": "Task",
+          "total": 1619
+        }
+      ]
+    },
+    {
+      "name": "taskCallByDispositionLast365",
+      "ok": true,
+      "totalSize": 1,
+      "records": [
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "ringdna__Call_Disposition__c": null,
+          "total": 8324
+        }
+      ]
+    },
+    {
+      "name": "taskCallByDirectionLast365",
+      "ok": true,
+      "totalSize": 2,
+      "records": [
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "ringdna__Call_Direction__c": "Outbound",
+          "total": 7205
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "ringdna__Call_Direction__c": "Inbound",
+          "total": 1119
+        }
+      ]
+    },
+    {
+      "name": "taskCallByConnectedLast365",
+      "ok": true,
+      "totalSize": 2,
+      "records": [
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "ringdna__Call_Connected__c": false,
+          "total": 5523
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "ringdna__Call_Connected__c": true,
+          "total": 2801
+        }
+      ]
+    },
+    {
+      "name": "taskCallByVoicemailLast365",
+      "ok": true,
+      "totalSize": 2,
+      "records": [
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "ringdna__Voicemail__c": false,
+          "total": 8112
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "ringdna__Voicemail__c": true,
+          "total": 212
+        }
+      ]
+    },
+    {
+      "name": "taskCallByOwnerLast90",
+      "ok": true,
+      "totalSize": 7,
+      "records": [
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000M1qRMQAZ",
+          "total": 634
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000NdGDeQAN",
+          "total": 385
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000JxFvcQAF",
+          "total": 288
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000Ip9EmQAJ",
+          "total": 189
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000Ip9DhQAJ",
+          "total": 91
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000Hlo1lQAB",
+          "total": 12
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000Kuuj8QAB",
+          "total": 1
+        }
+      ]
+    },
+    {
+      "name": "taskCallMonthlyLast365",
+      "ok": false,
+      "error": {
+        "name": "MALFORMED_QUERY",
+        "message": "\nSELECT CALENDAR_YEAR(ActivityDate) year, CALENDAR_MONTH(ActivityDate)\n                     ^\nERROR at Row:1:Column:22\nfield ActivityDate does not support date function CALENDAR_YEAR"
+      },
+      "soql": "SELECT CALENDAR_YEAR(ActivityDate) year, CALENDAR_MONTH(ActivityDate) month, COUNT(Id) total FROM Task WHERE ActivityDate = LAST_N_DAYS:365 AND TaskSubtype = 'Call' GROUP BY CALENDAR_YEAR(ActivityDate), CALENDAR_MONTH(ActivityDate) ORDER BY CALENDAR_YEAR(ActivityDate), CALENDAR_MONTH(ActivityDate) LIMIT 24"
+    },
+    {
+      "name": "eventRingDnaByOwnerLast90",
+      "ok": true,
+      "totalSize": 2,
+      "records": [
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000Ip9EmQAJ",
+          "total": 67
+        },
+        {
+          "attributes": {
+            "type": "AggregateResult"
+          },
+          "OwnerId": "0052E00000Ip9DhQAJ",
+          "total": 2
+        }
+      ]
+    }
+  ],
+  "ownerLookup": [
+    {
+      "attributes": {
+        "type": "User",
+        "url": "/services/data/v60.0/sobjects/User/0052E00000Hlo1lQAB"
+      },
+      "Id": "0052E00000Hlo1lQAB",
+      "Name": "Dan Micic",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "User",
+        "url": "/services/data/v60.0/sobjects/User/0052E00000Ip9DhQAJ"
+      },
+      "Id": "0052E00000Ip9DhQAJ",
+      "Name": "Teodora Lazarevic",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "User",
+        "url": "/services/data/v60.0/sobjects/User/0052E00000Ip9EmQAJ"
+      },
+      "Id": "0052E00000Ip9EmQAJ",
+      "Name": "Mike Franzese",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "User",
+        "url": "/services/data/v60.0/sobjects/User/0052E00000JxFvcQAF"
+      },
+      "Id": "0052E00000JxFvcQAF",
+      "Name": "Leo Joanidhi",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "User",
+        "url": "/services/data/v60.0/sobjects/User/0052E00000Kuuj8QAB"
+      },
+      "Id": "0052E00000Kuuj8QAB",
+      "Name": "Kristina Bugarski",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "User",
+        "url": "/services/data/v60.0/sobjects/User/0052E00000M1qRMQAZ"
+      },
+      "Id": "0052E00000M1qRMQAZ",
+      "Name": "Danny Torres",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "User",
+        "url": "/services/data/v60.0/sobjects/User/0052E00000NdGDeQAN"
+      },
+      "Id": "0052E00000NdGDeQAN",
+      "Name": "Samantha Elliott",
+      "IsActive": true
+    }
+  ],
+  "callActivityCoverage": {
+    "taskCallLast365": {
+      "objectName": "Task",
+      "whereClause": "ActivityDate = LAST_N_DAYS:365 AND TaskSubtype = 'Call'",
+      "total": null,
+      "fields": [
+        {
+          "name": "OwnerId",
+          "label": "Assigned To ID",
+          "type": "reference",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ActivityDate",
+          "label": "Due Date Only",
+          "type": "date",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "CreatedDate",
+          "label": "Created Date",
+          "type": "datetime",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "LastModifiedDate",
+          "label": "Last Modified Date",
+          "type": "datetime",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "TaskSubtype",
+          "label": "Task Subtype",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "CallType",
+          "label": "Call Type",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "CallDisposition",
+          "label": "Call Result",
+          "type": "string",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "CallDurationInSeconds",
+          "label": "Call Duration",
+          "type": "int",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Profile_Call_Type__c",
+          "label": "Profile Call Type",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Profile_Call_Outcome__c",
+          "label": "Profile Call Outcome",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Products_Discussed__c",
+          "label": "Products Discussed",
+          "type": "multipicklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Program_Size__c",
+          "label": "Program Size",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Budget_Timeframe__c",
+          "label": "Budget Timeframe",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Follow_Up_Date__c",
+          "label": "Follow Up Date",
+          "type": "date",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Converted_to_Opp__c",
+          "label": "Converted to Opportunity",
+          "type": "boolean",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Related_Opportunity__c",
+          "label": "Related Opportunity",
+          "type": "reference",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        }
+      ],
+      "queryErrors": [
+        {
+          "name": "Task.coverage.1",
+          "ok": false,
+          "error": {
+            "name": "MALFORMED_QUERY",
+            "message": "\nCOUNT(OwnerId) OwnerId__count, COUNT(ActivityDate) ActivityDate__count\n                                     ^\nERROR at Row:1:Column:62\nfield ActivityDate does not support aggregate operator COUNT"
+          },
+          "soql": "SELECT COUNT(Id) total, COUNT(OwnerId) OwnerId__count, COUNT(ActivityDate) ActivityDate__count, COUNT(CreatedDate) CreatedDate__count, COUNT(LastModifiedDate) LastModifiedDate__count, COUNT(TaskSubtype) TaskSubtype__count, COUNT(CallType) CallType__count, COUNT(CallDisposition) CallDisposition__count, COUNT(CallDurationInSeconds) CallDurationInSeconds__count FROM Task WHERE ActivityDate = LAST_N_DAYS:365 AND TaskSubtype = 'Call'"
+        },
+        {
+          "name": "Task.coverage.2",
+          "ok": false,
+          "error": {
+            "name": "MALFORMED_QUERY",
+            "message": "\nProfile_Call_Outcome__c__count, COUNT(Products_Discussed__c) Products_Discussed__c__count\n                                      ^\nERROR at Row:1:Column:151\nfield Products_Discussed__c does not support aggregate operator COUNT"
+          },
+          "soql": "SELECT COUNT(Id) total, COUNT(Profile_Call_Type__c) Profile_Call_Type__c__count, COUNT(Profile_Call_Outcome__c) Profile_Call_Outcome__c__count, COUNT(Products_Discussed__c) Products_Discussed__c__count, COUNT(Program_Size__c) Program_Size__c__count, COUNT(Budget_Timeframe__c) Budget_Timeframe__c__count, COUNT(Follow_Up_Date__c) Follow_Up_Date__c__count, COUNT(Converted_to_Opp__c) Converted_to_Opp__c__count, COUNT(Related_Opportunity__c) Related_Opportunity__c__count FROM Task WHERE ActivityDate = LAST_N_DAYS:365 AND TaskSubtype = 'Call'"
+        },
+        {
+          "name": "Task.coverage.3",
+          "ok": false,
+          "error": {
+            "name": "MALFORMED_QUERY",
+            "message": "\nringdna__Call_Duration_min__c__count, COUNT(ringdna__Call_Connected__c) ringdna__Call_Connected__c__count\n                                            ^\nERROR at Row:1:Column:175\nfield ringdna__Call_Connected__c does not support aggregate operator COUNT"
+          },
+          "soql": "SELECT COUNT(Id) total, COUNT(ringdna__Call_Direction__c) ringdna__Call_Direction__c__count, COUNT(ringdna__Call_Duration_min__c) ringdna__Call_Duration_min__c__count, COUNT(ringdna__Call_Connected__c) ringdna__Call_Connected__c__count, COUNT(ringdna__Call_Rating__c) ringdna__Call_Rating__c__count, COUNT(ringdna__Voicemail__c) ringdna__Voicemail__c__count, COUNT(ringdna__Keywords__c) ringdna__Keywords__c__count, COUNT(ringdna__Call_Start_Time__c) ringdna__Call_Start_Time__c__count, COUNT(ringdna__Call_Disposition__c) ringdna__Call_Disposition__c__count FROM Task WHERE ActivityDate = LAST_N_DAYS:365 AND TaskSubtype = 'Call'"
+        }
+      ]
+    },
+    "eventRingDnaLast365": {
+      "objectName": "Event",
+      "whereClause": "ActivityDate = LAST_N_DAYS:365 AND (ringdna__Abandoned_Call__c != null OR ringdna__Automated_Voicemail_Link__c != null OR ringdna__Automated_Voicemail_Used__c != null OR ringdna__Automated_Voicemail__c != null OR ringdna__Call_Connected__c != null OR ringdna__Call_Direction__c != null OR ringdna__Call_Disposition__c != null OR ringdna__Call_Duration__c != null OR ringdna__Call_Duration_min__c != null OR ringdna__Call_Flow__c != null OR ringdna__Call_Hour_Of_Day_Agent__c != null OR ringdna__Call_Hour_Of_Day_Local__c != null OR ringdna__Call_Rating__c != null OR ringdna__Call_Recording_URL__c != null OR ringdna__Call_Recording__c != null OR ringdna__Call_Start_Time__c != null OR ringdna__Call_Status__c != null OR ringdna__Called_Back__c != null OR ringdna__Created_by_RingDNA__c != null OR ringdna__From_Number__c != null OR ringdna__Host_ID__c != null OR ringdna__Initiating_Record_ID__c != null OR ringdna__Keywords__c != null OR ringdna__Local_Presence_Num__c != null OR ringdna__Local_Presence__c != null OR ringdna__Meeting_ID__c != null OR ringdna__No_Answer_Number_Used__c != null OR ringdna__Queue_Hold_Time__c != null OR ringdna__Queue__c != null OR ringdna__Supervisor_Notes__c != null OR ringdna__To_Number__c != null OR ringdna__Voicemail__c != null)",
+      "total": null,
+      "fields": [
+        {
+          "name": "OwnerId",
+          "label": "Assigned To ID",
+          "type": "reference",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ActivityDate",
+          "label": "Due Date Only",
+          "type": "date",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "CreatedDate",
+          "label": "Created Date",
+          "type": "datetime",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "LastModifiedDate",
+          "label": "Last Modified Date",
+          "type": "datetime",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Profile_Call_Type__c",
+          "label": "Profile Call Type",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Profile_Call_Outcome__c",
+          "label": "Profile Call Outcome",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Products_Discussed__c",
+          "label": "Products Discussed",
+          "type": "multipicklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Program_Size__c",
+          "label": "Program Size",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Budget_Timeframe__c",
+          "label": "Budget Timeframe",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Follow_Up_Date__c",
+          "label": "Follow Up Date",
+          "type": "date",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Converted_to_Opp__c",
+          "label": "Converted to Opportunity",
+          "type": "boolean",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "Related_Opportunity__c",
+          "label": "Related Opportunity",
+          "type": "reference",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Direction__c",
+          "label": "Direction",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Duration_min__c",
+          "label": "Duration (min)",
+          "type": "double",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Connected__c",
+          "label": "Call Connected?",
+          "type": "boolean",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Rating__c",
+          "label": "Rating",
+          "type": "double",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Voicemail__c",
+          "label": "Voicemail",
+          "type": "boolean",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Keywords__c",
+          "label": "Keywords",
+          "type": "textarea",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Start_Time__c",
+          "label": "Start Time",
+          "type": "datetime",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        },
+        {
+          "name": "ringdna__Call_Disposition__c",
+          "label": "Disposition",
+          "type": "picklist",
+          "nonNullCount": null,
+          "total": null,
+          "percentPopulated": null,
+          "queryOk": false
+        }
+      ],
+      "queryErrors": [
+        {
+          "name": "Event.coverage.1",
+          "ok": false,
+          "error": {
+            "name": "MALFORMED_QUERY",
+            "message": "\nCOUNT(OwnerId) OwnerId__count, COUNT(ActivityDate) ActivityDate__count\n                                     ^\nERROR at Row:1:Column:62\nfield ActivityDate does not support aggregate operator COUNT"
+          },
+          "soql": "SELECT COUNT(Id) total, COUNT(OwnerId) OwnerId__count, COUNT(ActivityDate) ActivityDate__count, COUNT(CreatedDate) CreatedDate__count, COUNT(LastModifiedDate) LastModifiedDate__count, COUNT(Profile_Call_Type__c) Profile_Call_Type__c__count, COUNT(Profile_Call_Outcome__c) Profile_Call_Outcome__c__count, COUNT(Products_Discussed__c) Products_Discussed__c__count, COUNT(Program_Size__c) Program_Size__c__count FROM Event WHERE ActivityDate = LAST_N_DAYS:365 AND (ringdna__Abandoned_Call__c != null OR ringdna__Automated_Voicemail_Link__c != null OR ringdna__Automated_Voicemail_Used__c != null OR ringdna__Automated_Voicemail__c != null OR ringdna__Call_Connected__c != null OR ringdna__Call_Direction__c != null OR ringdna__Call_Disposition__c != null OR ringdna__Call_Duration__c != null OR ringdna__Call_Duration_min__c != null OR ringdna__Call_Flow__c != null OR ringdna__Call_Hour_Of_Day_Agent__c != null OR ringdna__Call_Hour_Of_Day_Local__c != null OR ringdna__Call_Rating__c != null OR ringdna__Call_Recording_URL__c != null OR ringdna__Call_Recording__c != null OR ringdna__Call_Start_Time__c != null OR ringdna__Call_Status__c != null OR ringdna__Called_Back__c != null OR ringdna__Created_by_RingDNA__c != null OR ringdna__From_Number__c != null OR ringdna__Host_ID__c != null OR ringdna__Initiating_Record_ID__c != null OR ringdna__Keywords__c != null OR ringdna__Local_Presence_Num__c != null OR ringdna__Local_Presence__c != null OR ringdna__Meeting_ID__c != null OR ringdna__No_Answer_Number_Used__c != null OR ringdna__Queue_Hold_Time__c != null OR ringdna__Queue__c != null OR ringdna__Supervisor_Notes__c != null OR ringdna__To_Number__c != null OR ringdna__Voicemail__c != null)"
+        },
+        {
+          "name": "Event.coverage.2",
+          "ok": false,
+          "error": {
+            "name": "MALFORMED_QUERY",
+            "message": "\nFollow_Up_Date__c__count, COUNT(Converted_to_Opp__c) Converted_to_Opp__c__count\n                                ^\nERROR at Row:1:Column:137\nfield Converted_to_Opp__c does not support aggregate operator COUNT"
+          },
+          "soql": "SELECT COUNT(Id) total, COUNT(Budget_Timeframe__c) Budget_Timeframe__c__count, COUNT(Follow_Up_Date__c) Follow_Up_Date__c__count, COUNT(Converted_to_Opp__c) Converted_to_Opp__c__count, COUNT(Related_Opportunity__c) Related_Opportunity__c__count, COUNT(ringdna__Call_Direction__c) ringdna__Call_Direction__c__count, COUNT(ringdna__Call_Duration_min__c) ringdna__Call_Duration_min__c__count, COUNT(ringdna__Call_Connected__c) ringdna__Call_Connected__c__count, COUNT(ringdna__Call_Rating__c) ringdna__Call_Rating__c__count FROM Event WHERE ActivityDate = LAST_N_DAYS:365 AND (ringdna__Abandoned_Call__c != null OR ringdna__Automated_Voicemail_Link__c != null OR ringdna__Automated_Voicemail_Used__c != null OR ringdna__Automated_Voicemail__c != null OR ringdna__Call_Connected__c != null OR ringdna__Call_Direction__c != null OR ringdna__Call_Disposition__c != null OR ringdna__Call_Duration__c != null OR ringdna__Call_Duration_min__c != null OR ringdna__Call_Flow__c != null OR ringdna__Call_Hour_Of_Day_Agent__c != null OR ringdna__Call_Hour_Of_Day_Local__c != null OR ringdna__Call_Rating__c != null OR ringdna__Call_Recording_URL__c != null OR ringdna__Call_Recording__c != null OR ringdna__Call_Start_Time__c != null OR ringdna__Call_Status__c != null OR ringdna__Called_Back__c != null OR ringdna__Created_by_RingDNA__c != null OR ringdna__From_Number__c != null OR ringdna__Host_ID__c != null OR ringdna__Initiating_Record_ID__c != null OR ringdna__Keywords__c != null OR ringdna__Local_Presence_Num__c != null OR ringdna__Local_Presence__c != null OR ringdna__Meeting_ID__c != null OR ringdna__No_Answer_Number_Used__c != null OR ringdna__Queue_Hold_Time__c != null OR ringdna__Queue__c != null OR ringdna__Supervisor_Notes__c != null OR ringdna__To_Number__c != null OR ringdna__Voicemail__c != null)"
+        },
+        {
+          "name": "Event.coverage.3",
+          "ok": false,
+          "error": {
+            "name": "MALFORMED_QUERY",
+            "message": "\nSELECT COUNT(Id) total, COUNT(ringdna__Voicemail__c) ringdna__Voicemail__c__count\n                              ^\nERROR at Row:1:Column:31\nfield ringdna__Voicemail__c does not support aggregate operator COUNT"
+          },
+          "soql": "SELECT COUNT(Id) total, COUNT(ringdna__Voicemail__c) ringdna__Voicemail__c__count, COUNT(ringdna__Keywords__c) ringdna__Keywords__c__count, COUNT(ringdna__Call_Start_Time__c) ringdna__Call_Start_Time__c__count, COUNT(ringdna__Call_Disposition__c) ringdna__Call_Disposition__c__count FROM Event WHERE ActivityDate = LAST_N_DAYS:365 AND (ringdna__Abandoned_Call__c != null OR ringdna__Automated_Voicemail_Link__c != null OR ringdna__Automated_Voicemail_Used__c != null OR ringdna__Automated_Voicemail__c != null OR ringdna__Call_Connected__c != null OR ringdna__Call_Direction__c != null OR ringdna__Call_Disposition__c != null OR ringdna__Call_Duration__c != null OR ringdna__Call_Duration_min__c != null OR ringdna__Call_Flow__c != null OR ringdna__Call_Hour_Of_Day_Agent__c != null OR ringdna__Call_Hour_Of_Day_Local__c != null OR ringdna__Call_Rating__c != null OR ringdna__Call_Recording_URL__c != null OR ringdna__Call_Recording__c != null OR ringdna__Call_Start_Time__c != null OR ringdna__Call_Status__c != null OR ringdna__Called_Back__c != null OR ringdna__Created_by_RingDNA__c != null OR ringdna__From_Number__c != null OR ringdna__Host_ID__c != null OR ringdna__Initiating_Record_ID__c != null OR ringdna__Keywords__c != null OR ringdna__Local_Presence_Num__c != null OR ringdna__Local_Presence__c != null OR ringdna__Meeting_ID__c != null OR ringdna__No_Answer_Number_Used__c != null OR ringdna__Queue_Hold_Time__c != null OR ringdna__Queue__c != null OR ringdna__Supervisor_Notes__c != null OR ringdna__To_Number__c != null OR ringdna__Voicemail__c != null)"
+        }
+      ]
+    }
+  },
+  "recommendations": {
+    "primarySource": "Task WHERE TaskSubtype = 'Call'",
+    "secondarySource": "Event rows where RingDNA fields are populated",
+    "optionalEnrichment": "Profile_Call_* fields when present/populated",
+    "defaultExclusions": [
+      "Subject",
+      "Description",
+      "WhoId",
+      "WhatId",
+      "AccountId",
+      "Call_Notes_Summary__c",
+      "Competitor_Intel__c",
+      "ringdna__Call_Recording_URL__c",
+      "ringdna__Recording_URL__c",
+      "ringdna__RecordingUrl__c"
+    ]
+  }
+}

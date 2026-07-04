@@ -1,5 +1,6 @@
 export * from './api-client'
 export * from './api-source'
+export * from './api-sync'
 export * from './eligibility'
 export * from './fixtures'
 export * from './importer'

@@ -13,8 +13,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+  const [step, setStep] = useState<'password' | '2fa'>('password')
+  const [code, setCode] = useState('')
   const router = useRouter()
   const supabase = createClient()
+
+  const finishLogin = () => {
+    router.push('/dashboard')
+    router.refresh()
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,12 +38,55 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      // Password accepted. Ask the server to start the 2FA challenge; if 2FA
+      // isn't enforced, go straight to the dashboard.
+      const res = await fetch('/api/auth/2fa', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+
+      if (res.ok && data.enforced) {
+        setStep('2fa')
+        toast.success('We emailed you a sign-in code.')
+      } else {
+        finishLogin()
+      }
     } catch {
       toast.error('An error occurred during login')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/auth/2fa', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error ?? 'Verification failed')
+        return
+      }
+
+      finishLogin()
+    } catch {
+      toast.error('An error occurred during verification')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    const res = await fetch('/api/auth/2fa', { method: 'POST' })
+    if (res.ok) {
+      toast.success('A new code is on the way.')
+    } else {
+      toast.error('Could not resend the code.')
     }
   }
 
@@ -112,14 +162,60 @@ export default function LoginPage() {
             real-time sync activity.
           </p>
 
-          {/* Divider with "Login" label */}
+          {/* Divider with step label */}
           <div className="mb-8 flex items-center gap-4">
             <div className="h-px flex-1 bg-[#D6DEE3]" />
-            <span className="text-sm font-semibold text-[#1C3C6E]">Login</span>
+            <span className="text-sm font-semibold text-[#1C3C6E]">
+              {step === '2fa' ? 'Verify' : 'Login'}
+            </span>
             <div className="h-px flex-1 bg-[#D6DEE3]" />
           </div>
 
-          {/* Form */}
+          {/* 2FA code step */}
+          {step === '2fa' ? (
+            <form onSubmit={handleVerify} className="space-y-5">
+              <p className="text-sm leading-relaxed text-[#576671]">
+                Enter the 6-digit code we emailed to{' '}
+                <span className="font-medium text-[#1C3C6E]">{email}</span>.
+              </p>
+              <div>
+                <label htmlFor="code" className="mb-1.5 block text-sm font-medium text-[#1C3C6E]">
+                  Sign-in code
+                </label>
+                <input
+                  id="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000"
+                  required
+                  className="h-12 w-full rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 text-center text-lg tracking-[0.5em] text-[#1C3C6E] outline-none transition-all placeholder:tracking-[0.5em] placeholder:text-[#bbb] focus:border-[#1E98D5] focus:ring-2 focus:ring-[#1E98D5]/20"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading || code.length !== 6}
+                className={cn(
+                  'flex h-12 w-full items-center justify-center rounded-[0.625rem] text-sm font-semibold text-white transition-all',
+                  loading || code.length !== 6
+                    ? 'cursor-not-allowed bg-[#1E98D5]/70'
+                    : 'bg-[#1E98D5] shadow-[0_4px_20px_rgba(30,152,213,0.35)] hover:bg-[#1a87bf] active:scale-[0.98]'
+                )}
+              >
+                {loading ? 'Verifying...' : 'Verify & Sign In'}
+              </button>
+              <button
+                type="button"
+                onClick={handleResend}
+                className="w-full text-center text-sm text-[#1E98D5] hover:underline"
+              >
+                Resend code
+              </button>
+            </form>
+          ) : (
+          /* Password form */
           <form onSubmit={handleLogin} className="space-y-5">
             {/* Email */}
             <div>
@@ -211,6 +307,7 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+          )}
 
           {/* Footer text */}
           <p className="mt-8 text-center text-sm text-[#576671]">

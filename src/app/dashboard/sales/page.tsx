@@ -50,6 +50,9 @@ import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
 import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
 import { CallActivitySummaryCard } from '@/components/dashboard/CallActivitySummaryCard'
 import { RingDnaRepActivityCharts } from '@/components/charts/RingDnaRepActivityCharts'
+import { RevenueCohortSection } from '@/components/dashboard/RevenueCohortSection'
+import { ReportingMethodologyDialog } from '@/components/dashboard/ReportingMethodologyDialog'
+import type { CohortDashboard } from '@/lib/cohorts'
 
 type SortKey =
   | 'revenueMTD'
@@ -79,6 +82,7 @@ type SalesDashboardResponse = {
   outcomeBreakdown: Array<{ outcome: string; count: number; percentage: number; color: string }>
   profileMetrics: ProfileCallMetricsResult
   callActivitySummary: CallActivitySummary
+  cohorts: CohortDashboard | null
 }
 
 function formatDate(dateStr: string): string {
@@ -123,6 +127,7 @@ export default function SalesPage() {
   const [outcomeBreakdown, setOutcomeBreakdown] = useState<Array<{ outcome: string; count: number; percentage: number; color: string }>>([])
   const [profileMetrics, setProfileMetrics] = useState<ProfileCallMetricsResult | null>(null)
   const [callActivitySummary, setCallActivitySummary] = useState<CallActivitySummary | null>(null)
+  const [cohorts, setCohorts] = useState<CohortDashboard | null>(null)
   const [selectedRosterAliases, setSelectedRosterAliases] = useState<string[]>([])
   const [rosterExpanded, setRosterExpanded] = useState(false)
   const [savingRoster, setSavingRoster] = useState(false)
@@ -147,6 +152,7 @@ export default function SalesPage() {
       setOutcomeBreakdown(data.outcomeBreakdown)
       setProfileMetrics(data.profileMetrics)
       setCallActivitySummary(data.callActivitySummary)
+      setCohorts(data.cohorts ?? null)
     } catch (error) {
       console.error('Failed to load sales data:', error)
     } finally {
@@ -356,6 +362,8 @@ export default function SalesPage() {
                   </p>
                 </div>
               </div>
+              <div className="flex flex-col items-start gap-2 md:items-end">
+                <ReportingMethodologyDialog />
               <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
                 <Badge variant="outline">Mapped aliases: {salesHealth.mappedAliasCount}</Badge>
                 <Badge variant="outline" className={salesHealth.unmappedAliasCount > 0 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700' : ''}>
@@ -363,6 +371,7 @@ export default function SalesPage() {
                 </Badge>
                 <Badge variant="outline">SO links: {salesHealth.linkCoverage}%</Badge>
                 <Badge variant="outline">Link rows: {salesHealth.linkRows}</Badge>
+              </div>
               </div>
             </CardContent>
           </Card>
@@ -438,6 +447,9 @@ export default function SalesPage() {
             )}
           </Card>
         )}
+
+        {/* Revenue Cohorts (NEW / WINBACK / RECURRING, migration 028) */}
+        {cohorts && <RevenueCohortSection cohorts={cohorts} />}
 
         {/* Sales Rep Performance Table */}
         <Card>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <caseSensitive>false</caseSensitive>
+    <description>Unique user and period key for idempotent monthly score rollups.</description>
+    <externalId>true</externalId>
+    <label>Score Key</label>
+    <length>120</length>
+    <required>true</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>
+

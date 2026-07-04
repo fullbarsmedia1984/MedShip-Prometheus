@@ -27,6 +27,10 @@ export {
 } from './functions/fishbowl-sales-orders-sync'
 export { sfFullSync } from './functions/sf-full-sync'
 export { sfIncrementalSync } from './functions/sf-incremental-sync'
+export {
+  incentiveRecompute,
+  incentiveRecomputeManual,
+} from './functions/incentive-recompute'
 
 // Re-export client for convenience
 export { inngest } from './client'

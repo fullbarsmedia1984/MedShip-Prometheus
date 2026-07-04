@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, SUPERADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { getDataSourceMode, setDataSourceMode, clearDataSourceCache } from '@/lib/utils/app-settings'
 
 // GET /api/settings/data-source — returns current mode
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const mode = await getDataSourceMode()
@@ -22,7 +22,7 @@ export async function GET() {
 // Body: { mode: 'live' }
 export async function POST(req: Request) {
   try {
-    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
+    const auth = await requireApiAuth(SUPERADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const body = await req.json()

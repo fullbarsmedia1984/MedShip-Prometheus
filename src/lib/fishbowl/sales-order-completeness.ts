@@ -412,6 +412,8 @@ export async function processSalesOrderPageBatch(
         const page = await getSalesOrdersPage(client, checkpoint.page_number, checkpoint.page_size)
         const cacheResult = await upsertSalesOrdersToCache(supabase, page.results, {
           sourcePageNumber: checkpoint.page_number,
+          // List rows are sparse — they must never overwrite hydrated fields.
+          sparse: true,
         })
         const queueRows: Array<Record<string, unknown>> = page.results
           .map((order) => ({

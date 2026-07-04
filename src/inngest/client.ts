@@ -76,6 +76,13 @@ export type InngestEvents = {
     }
   }
 
+  // P8: Q3 incentive classification recompute (full deterministic rebuild)
+  'incentive/recompute': {
+    data: {
+      triggeredBy?: string
+    }
+  }
+
   // Manual retry trigger
   'sync/retry': {
     data: {

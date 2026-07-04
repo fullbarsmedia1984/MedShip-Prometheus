@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0.0",
+  "profile_name": "detecto_v1",
+  "profile_version": "1.0.0",
+  "status": "review_required",
+  "distributor_name": "Detecto",
+  "distributor_id": null,
+  "description": "Pilot profile for Detecto pricing workbooks in family F003.",
+  "applicable_family_ids": ["F003"],
+  "workbook_match_rules": {
+    "filename_patterns": ["Detecto.*Pricing.*\\.xlsx$"],
+    "sheet_name_patterns": ["^Sheet1$"],
+    "required_headers": ["Model", "Item Description", "Stock UOM", "Net Price", "Sales Description"],
+    "optional_headers": ["UPC", "List Price", "Start Qty", "Stop Qty"],
+    "forbidden_headers": [],
+    "minimum_match_score": 8
+  },
+  "sheet_rules": {
+    "exact_sheet_name": "Sheet1",
+    "case_insensitive_sheet_name": null,
+    "regex_sheet_name": null,
+    "include_patterns": [],
+    "exclude_patterns": [],
+    "include_hidden_sheets": false,
+    "process_multiple_matching_sheets": false
+  },
+  "header_rules": {
+    "exact_header_row": 26,
+    "candidate_row_range": { "start": 20, "end": 30 },
+    "required_header_terms": ["Model", "Stock UOM", "Net Price", "Sales Description"],
+    "optional_header_terms": ["UPC", "Item Description", "List Price", "Start Qty", "Stop Qty"],
+    "multi_row_header": false,
+    "merged_header_handling": "error",
+    "normalized_header_matching": true,
+    "minimum_header_match_score": 4
+  },
+  "data_region_rules": {
+    "explicit_first_data_row": 27,
+    "first_row_after_detected_header": false,
+    "explicit_last_row": null,
+    "stop_after_consecutive_blank_required_field_rows": 20,
+    "maximum_row_limit": null,
+    "skip_hidden_rows": true,
+    "include_hidden_rows_with_warning": false,
+    "skip_subtotal_and_total_rows": true,
+    "repeated_header_detection": true
+  },
+  "column_mappings": [
+    {
+      "canonical_field": "manufacturer_part_number",
+      "source_header": "Model",
+      "source_header_aliases": ["MODEL"],
+      "source_column_letter": "A",
+      "source_column_index": 1,
+      "required": true,
+      "transforms": ["normalize_identifier"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "Detecto uses Model as the stable item identifier for this profile."
+    },
+    {
+      "canonical_field": "gtin",
+      "source_header": "UPC",
+      "source_header_aliases": [],
+      "source_column_letter": "D",
+      "source_column_index": 4,
+      "required": false,
+      "transforms": ["normalize_identifier"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "UPC is optional supporting identity."
+    },
+    {
+      "canonical_field": "item_description_raw",
+      "source_header": "Sales Description",
+      "source_header_aliases": [],
+      "source_column_letter": "M",
+      "source_column_index": 13,
+      "required": true,
+      "transforms": ["normalize_description"],
+      "fallback_source_headers": ["Item Description"],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "Sales Description appears to be the richer product description."
+    },
+    {
+      "canonical_field": "raw_uom",
+      "source_header": "Stock UOM",
+      "source_header_aliases": [],
+      "source_column_letter": "E",
+      "source_column_index": 5,
+      "required": false,
+      "transforms": ["normalize_uom"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "Missing or unknown UOM produces a warning."
+    },
+    {
+      "canonical_field": "price",
+      "source_header": "Net Price",
+      "source_header_aliases": [],
+      "source_column_letter": "L",
+      "source_column_index": 12,
+      "required": true,
+      "transforms": ["parse_currency"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "Net Price is the proposed contract-pricing value for review."
+    },
+    {
+      "canonical_field": "minimum_quantity",
+      "source_header": "Start Qty",
+      "source_header_aliases": [],
+      "source_column_letter": "J",
+      "source_column_index": 10,
+      "required": false,
+      "transforms": ["parse_decimal"],
+      "fallback_source_headers": [],
+      "constant_value": null,
+      "default_value": null,
+      "notes": "Quantity tier start when present."
+    }
+  ],
+  "transforms": ["normalize_identifier", "normalize_description", "normalize_uom", "parse_currency", "parse_decimal"],
+  "default_values": {
+    "currency": { "source": "constant", "value": "USD", "manifest_field": null, "required": false },
+    "contract_name": { "source": "manifest", "value": null, "manifest_field": "contract_name", "required": false },
+    "contract_number": { "source": "manifest", "value": null, "manifest_field": "contract_number", "required": false },
+    "account_number": { "source": "manifest", "value": null, "manifest_field": "account_number", "required": false },
+    "location": { "source": "manifest", "value": null, "manifest_field": "location", "required": false },
+    "effective_date": { "source": "manifest", "value": null, "manifest_field": "effective_date", "required": false },
+    "expiration_date": { "source": "manifest", "value": null, "manifest_field": "expiration_date", "required": false }
+  },
+  "validation_rules": {
+    "price_required": true,
+    "description_required": true,
+    "item_identifier_required": true,
+    "uom_warning_only": true
+  },
+  "exception_rules": {
+    "unknown_uom": "warning",
+    "missing_uom": "warning"
+  },
+  "notes": "Review whether Model should be mapped as manufacturer_part_number or distributor_sku before approval.",
+  "created_at": "2026-06-17",
+  "reviewed_by": null,
+  "review_status": "not_reviewed"
+}

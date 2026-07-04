@@ -43,3 +43,40 @@ design-reference/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Salesforce CLI local state and auth material
+.sf/
+.sfdx/
+
+# Real distributor contract pricing files
+data/pricing/raw/**
+data/pricing/manifest.csv
+data/pricing/business_decisions.local.json
+data/pricing/uom_decisions.local.csv
+outputs/pricing_discovery/**
+
+# Keep folder placeholders if needed
+!data/pricing/raw/.gitkeep
+!outputs/pricing_discovery/.gitkeep
+
+# Do not accidentally commit exported price data
+*.price_export.csv
+*.pricing_discovery.json
+*.pricing_rows.csv
+
+# Real distributor contract pricing files
+data/pricing/raw/**
+outputs/pricing_discovery/**
+
+# Keep folder placeholders if needed
+!data/pricing/raw/.gitkeep
+!outputs/pricing_discovery/.gitkeep
+
+# Do not accidentally commit exported price data
+*.price_export.csv
+*.pricing_discovery.json
+*.pricing_rows.csv
+
+# P7 repair run logs
+repair-run*.log
+

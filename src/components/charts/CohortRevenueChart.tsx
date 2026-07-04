@@ -1,0 +1,116 @@
+'use client'
+
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
+import type { CohortMonthlyPoint } from '@/lib/cohorts'
+
+export const COHORT_COLORS: Record<'NEW' | 'WINBACK' | 'RECURRING', string> = {
+  NEW: '#0FA62C',
+  WINBACK: '#E89C0C',
+  RECURRING: '#1E98D5',
+}
+
+const COHORT_LABELS: Record<'NEW' | 'WINBACK' | 'RECURRING', string> = {
+  NEW: 'New',
+  WINBACK: 'Winback',
+  RECURRING: 'Recurring',
+}
+
+function formatYAxis(value: number): string {
+  return `$${Math.round(value / 1000)}k`
+}
+
+function CustomTooltip({ active, payload, label }: {
+  active?: boolean
+  payload?: Array<{ name?: string; value?: number; color?: string }>
+  label?: string
+}) {
+  if (!active || !payload || payload.length === 0) return null
+
+  const total = payload.reduce((sum, entry) => sum + (entry.value || 0), 0)
+
+  return (
+    <div className="rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 py-3 shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)]">
+      <p className="mb-2 text-[0.813rem] font-medium text-[#1C3C6E]">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.name} className="flex items-center gap-2 text-[0.75rem] text-[#576671]">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+          {entry.name}: <span className="font-semibold" style={{ color: entry.color }}>
+            ${(entry.value || 0).toLocaleString()}
+          </span>
+        </p>
+      ))}
+      <p className="mt-1.5 border-t border-[#D6DEE3] pt-1.5 text-[0.75rem] font-semibold text-[#1C3C6E]">
+        Total: ${total.toLocaleString()}
+      </p>
+    </div>
+  )
+}
+
+export function CohortRevenueChart({ data }: { data: CohortMonthlyPoint[] }) {
+  const cohorts: Array<'NEW' | 'WINBACK' | 'RECURRING'> = ['RECURRING', 'WINBACK', 'NEW']
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Monthly Revenue by Cohort
+          {data.length === 0 && <ComingSoonBadge />}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <ComingSoonPanel
+            title="Revenue cohorts"
+            description="No cohort-classified sales orders yet."
+            className="h-[350px]"
+          />
+        ) : (
+        <ResponsiveContainer width="100%" height={350}>
+          <BarChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#D6DEE3" />
+            <XAxis
+              dataKey="month"
+              tick={{ fontSize: 12, fill: '#576671', fontFamily: 'Outfit' }}
+              axisLine={{ stroke: '#D6DEE3' }}
+              tickLine={false}
+            />
+            <YAxis
+              tickFormatter={formatYAxis}
+              tick={{ fontSize: 12, fill: '#576671', fontFamily: 'Outfit' }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ fontSize: '0.75rem', fontFamily: 'Outfit' }}
+            />
+            {cohorts.map((cohort, index) => (
+              <Bar
+                key={cohort}
+                dataKey={cohort}
+                name={COHORT_LABELS[cohort]}
+                stackId="cohort"
+                fill={COHORT_COLORS[cohort]}
+                radius={index === cohorts.length - 1 ? [3, 3, 0, 0] : undefined}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
