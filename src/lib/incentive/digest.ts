@@ -1,4 +1,5 @@
 import 'server-only'
+import { businessDaysLeftInMonth, chicagoTodayIso } from '@/lib/business-days'
 import { getIncentiveSettings } from './settings'
 import { chicagoMonthStart } from './dates'
 import { formatUsd } from './calculator'
@@ -28,11 +29,6 @@ export async function postSlackMessage(text: string): Promise<{ sent: boolean; e
   }
 }
 
-function daysLeftInMonth(now: Date): number {
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86_400_000))
-}
-
 function repSection(
   row: RepIncentiveMonthlyRow,
   accounts: RepNewAccount[],
@@ -60,8 +56,8 @@ export async function buildWeeklyDigest(): Promise<string> {
   const settings = await getIncentiveSettings()
   const month = chicagoMonthStart()
   const rows = await getRepIncentiveMonthly(month)
-  const now = new Date()
   const monthName = new Date(`${month}T00:00:00`).toLocaleDateString('en-US', { month: 'long' })
+  const sellingDaysLeft = businessDaysLeftInMonth(chicagoTodayIso())
 
   const repRows = rows.sort((a, b) => b.enrollments - a.enrollments || b.net_new_customer_revenue - a.net_new_customer_revenue)
   const sections: string[] = []
@@ -73,7 +69,7 @@ export async function buildWeeklyDigest(): Promise<string> {
   const teamEnrollments = repRows.reduce((sum, row) => sum + row.enrollments, 0)
   const teamNeeded = settings.enrollmentGate * Math.max(repRows.length, 1)
 
-  const header = `📊 *Q3 Incentive — Weekly Digest* · ${monthName} · ${daysLeftInMonth(now)} days left in the month`
+  const header = `📊 *Q3 Incentive — Weekly Digest* · ${monthName} · ${sellingDaysLeft} selling days left in the month`
   const footer =
     `Team pace: ${teamEnrollments} enrollment${teamEnrollments === 1 ? '' : 's'} so far vs ${teamNeeded} needed for everyone to qualify. ` +
     `Scorecards: /dashboard/incentives/scorecard`

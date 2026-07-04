@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { businessDaysLeftInMonth, chicagoTodayIso } from '@/lib/business-days'
 import { getIncentiveSettings } from './settings'
 import { chicagoMonthStart } from './dates'
 import { formatUsd } from './calculator'
@@ -19,6 +20,7 @@ export interface BriefingMetrics {
   date: string // YYYY-MM-DD (Chicago)
   month: string
   daysLeftInMonth: number
+  sellingDaysLeftInMonth: number // business days: Mon-Fri excl. major US holidays
   reps: Array<{ name: string; enrollments: number; gate: number; qualifies: boolean; newRevenue: number }>
   teamEnrollments: number
   teamNeededForFullQualification: number
@@ -60,11 +62,13 @@ export async function gatherBriefingMetrics(): Promise<BriefingMetrics> {
 
   const now = new Date()
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const today = chicagoTodayIso(now)
 
   return {
-    date: chicagoToday(),
+    date: today,
     month,
     daysLeftInMonth: Math.max(0, Math.ceil((monthEnd.getTime() - now.getTime()) / 86_400_000)),
+    sellingDaysLeftInMonth: businessDaysLeftInMonth(today),
     reps: rows.map((row) => ({
       name: row.rep_display_name ?? row.rep_key,
       enrollments: row.enrollments,
@@ -92,9 +96,9 @@ export function buildFallbackBriefing(metrics: BriefingMetrics): string {
   const qualified = metrics.reps.filter((rep) => rep.qualifies).map((rep) => rep.name)
   if (qualified.length > 0) parts.push(`${qualified.join(' and ')} ${qualified.length === 1 ? 'has' : 'have'} cleared the enrollment gate — worth a shout-out.`)
 
-  if (metrics.inPromoPeriod && pace < 0.5 && metrics.daysLeftInMonth <= 20) {
+  if (metrics.inPromoPeriod && pace < 0.5 && metrics.sellingDaysLeftInMonth <= 15) {
     parts.push(
-      `⚠️ Gate pace concern: ${metrics.teamEnrollments} team enrollments vs ${metrics.teamNeededForFullQualification} needed with ${metrics.daysLeftInMonth} days left. If this holds, consider whether the gate needs calibration.`
+      `⚠️ Gate pace concern: ${metrics.teamEnrollments} team enrollments vs ${metrics.teamNeededForFullQualification} needed with ${metrics.sellingDaysLeftInMonth} selling days left. If this holds, consider whether the gate needs calibration.`
     )
   }
   if (metrics.windowsExpiring14d > 0) {
@@ -107,8 +111,8 @@ export function buildFallbackBriefing(metrics: BriefingMetrics): string {
     const top = [...metrics.reps].sort((a, b) => b.newRevenue - a.newRevenue)[0]
     parts.push(
       top && top.newRevenue > 0
-        ? `Quiet day. ${top.name} leads on new-customer revenue (${formatUsd(top.newRevenue)}); team is ${metrics.teamEnrollments}/${metrics.teamNeededForFullQualification} on the gate with ${metrics.daysLeftInMonth} days left.`
-        : `Quiet day — no new enrollments yet this month; ${metrics.daysLeftInMonth} days left.`
+        ? `Quiet day. ${top.name} leads on new-customer revenue (${formatUsd(top.newRevenue)}); team is ${metrics.teamEnrollments}/${metrics.teamNeededForFullQualification} on the gate with ${metrics.sellingDaysLeftInMonth} selling days left.`
+        : `Quiet day — no new enrollments yet this month; ${metrics.sellingDaysLeftInMonth} selling days left.`
     )
   }
   return parts.join(' ')
@@ -125,6 +129,8 @@ async function fetchHaikuBriefing(metrics: BriefingMetrics): Promise<string | nu
     'Lead with the single most important thing today: congratulations when reps clear the gate or new accounts land, ' +
     'concern when pace makes the gate unreachable (suggest a calibration look, never a specific new number), ' +
     'or operational blockers. Be specific with names and figures from the JSON only — never invent numbers. ' +
+    'Business days are Monday through Friday: reason about pace using sellingDaysLeftInMonth (not calendar days), ' +
+    'and never frame a normal weekend or holiday lull as a concern. ' +
     'No greeting, no preamble, no emoji, plain text.'
 
   try {
