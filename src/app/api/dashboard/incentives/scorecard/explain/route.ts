@@ -7,7 +7,7 @@ import { computeCommission, computeCounterfactual } from '@/lib/incentive/calcul
 import { getCommissionExplanation } from '@/lib/incentive/explain'
 import {
   INCENTIVE_CACHE_TAG,
-  getRepClassBreakdown,
+  buildCohortBreakdown,
   getRepIncentiveMonthly,
   getRepKeyForUser,
 } from '@/lib/incentive/queries'
@@ -24,8 +24,9 @@ const getExplanationPayload = unstable_cache(
     if (!row) return { found: false as const }
 
     const commission = computeCommission(row, settings)
-    const breakdown = await getRepClassBreakdown(repKey, month)
-    const oldModelTotal = Math.round(settings.baseRate * row.attributed_revenue * 100) / 100
+    const breakdown = buildCohortBreakdown(row)
+    const oldModelTotal =
+      commission.legacyFlat ?? Math.round(settings.baseRate * row.attributed_revenue * 100) / 100
     const newModelTotal = commission.projected ?? oldModelTotal
     const monthLabel = new Date(`${month}T00:00:00`).toLocaleDateString('en-US', {
       month: 'long',
@@ -41,11 +42,23 @@ const getExplanationPayload = unstable_cache(
       enrollments: row.enrollments,
       enrollmentGate: row.enrollment_gate,
       qualifies: commission.qualifies,
+      recurringRate: commission.recurringRate,
+      rates: {
+        new: settings.newRate,
+        winback: settings.winbackRate,
+        recurringFull: settings.recurringRateFull,
+        recurringPartial: settings.recurringRatePartial,
+        recurringZero: settings.recurringRateZero,
+        legacyFlat: settings.baseRate,
+      },
       breakdown,
-      baseRate: settings.baseRate,
-      bonusRate: settings.bonusRate,
+      commissions: {
+        new: commission.newCommission ?? 0,
+        winback: commission.winbackCommission ?? 0,
+        recurring: commission.recurringCommission ?? 0,
+        total: newModelTotal,
+      },
       oldModelTotal,
-      newModelTotal,
       delta: Math.round((newModelTotal - oldModelTotal) * 100) / 100,
       counterfactualMessage: computeCounterfactual(row, settings)?.message ?? null,
     })

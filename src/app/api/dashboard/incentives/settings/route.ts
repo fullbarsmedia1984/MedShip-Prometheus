@@ -16,6 +16,11 @@ const PATCHABLE_KEYS: Array<keyof IncentiveSettings> = [
   'enrollmentGate',
   'baseRate',
   'bonusRate',
+  'newRate',
+  'winbackRate',
+  'recurringRateFull',
+  'recurringRatePartial',
+  'recurringRateZero',
   'newWindowDays',
   'winBackGapDays',
 ]

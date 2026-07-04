@@ -15,8 +15,16 @@ export interface IncentiveSettings {
   promoStart: string // YYYY-MM-DD (America/Chicago calendar date, inclusive)
   promoEnd: string // YYYY-MM-DD (inclusive)
   enrollmentGate: number
+  // Legacy flat model — kept for the honest "vs old 4% flat" comparison only.
   baseRate: number
   bonusRate: number
+  // Tiered cohort model (migration 034): NEW pays newRate, WINBACK pays
+  // winbackRate, RECURRING pays full/partial/zero by monthly NEW enrollments.
+  newRate: number
+  winbackRate: number
+  recurringRateFull: number
+  recurringRatePartial: number
+  recurringRateZero: number
   newWindowDays: number
   winBackGapDays: number
 }
@@ -28,18 +36,25 @@ export interface RepIncentiveMonthlyRow {
   in_promo_period: boolean
   enrollments: number
   enrollment_gate: number
-  qualifies: boolean
+  qualifies: boolean // enrollments >= gate (full recurring rate earned)
+  recurring_rate: number // the tier rate actually applied this month
   order_count: number
-  new_window_order_count: number
+  new_order_count: number
+  winback_order_count: number
+  recurring_order_count: number
+  new_revenue: number
+  winback_revenue: number
+  recurring_revenue: number
   attributed_revenue: number
-  new_customer_revenue_gross: number
-  net_new_customer_revenue: number
-  win_back_revenue: number
+  credit_amount: number // negative; already netted inside the cohort buckets
+  credit_count: number
   blocking_unmapped_count: number
   // NULL when payout is blocked by unmapped rep strings (fail-loudly contract)
-  base_commission: number | null
-  bonus_commission: number | null
+  new_commission: number | null
+  winback_commission: number | null
+  recurring_commission: number | null
   projected_total: number | null
+  legacy_flat_commission: number | null // what the old 4% flat model would pay
 }
 
 export interface OrderIncentiveClassRow {
@@ -141,10 +156,15 @@ export interface PayoutSnapshotRow {
   enrollments: number
   enrollment_gate: number
   qualifies: boolean
-  net_new_customer_revenue: number
-  base_commission: number
-  bonus_commission: number
+  recurring_rate: number
+  new_revenue: number
+  winback_revenue: number
+  recurring_revenue: number
+  new_commission: number
+  winback_commission: number
+  recurring_commission: number
   projected_total: number
+  legacy_flat_commission: number
   frozen_at: string
   frozen_by: string | null
 }

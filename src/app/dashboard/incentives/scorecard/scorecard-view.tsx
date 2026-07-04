@@ -31,24 +31,35 @@ type ScorecardResponse = {
   reps: Array<{ key: string; name: string }>
   found: boolean
   locked: boolean
-  gate?: { enrollments: number; threshold: number; qualifies: boolean }
+  gate?: { enrollments: number; threshold: number; qualifies: boolean; recurringRate: number }
   newCustomerRevenueMTD?: number
-  commission?: { base: number | null; bonus: number | null; projected: number | null }
-  counterfactual?: { enrollmentsAway: number; bonusAtStake: number; message: string } | null
+  commission?: {
+    new: number | null
+    winback: number | null
+    recurring: number | null
+    projected: number | null
+  }
+  counterfactual?: { enrollmentsAway: number; recurringAtStake: number; message: string } | null
   accounts?: RepNewAccount[]
   breakdown?: {
-    newWindowRevenue: number
-    newWindowOrders: number
-    winBackRevenue: number
-    winBackOrders: number
+    newRevenue: number
+    newOrders: number
+    winbackRevenue: number
+    winbackOrders: number
     recurringRevenue: number
     recurringOrders: number
     creditsAmount: number
     creditsOrders: number
   }
   modelComparison?: { oldModelTotal: number; newModelTotal: number | null; delta: number | null }
-  baseRate?: number
-  bonusRate?: number
+  rates?: {
+    new: number
+    winback: number
+    recurringFull: number
+    recurringPartial: number
+    recurringZero: number
+    legacyFlat: number
+  }
   payoutBlocked: boolean
   blockingUnmappedCount: number
 }
@@ -60,6 +71,11 @@ type ExplainResponse = {
 
 function usd(value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')}`
+}
+
+function pct(rate: number): string {
+  const value = rate * 100
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`
 }
 
 function monthLabel(month: string): string {
@@ -221,6 +237,8 @@ function ScorecardContent({
               enrollments={data.gate.enrollments}
               threshold={data.gate.threshold}
               qualifies={data.gate.qualifies}
+              recurringRate={data.gate.recurringRate}
+              fullRate={data.rates?.recurringFull ?? 0.04}
             />
             <KpiCard
               title={`New-Customer Revenue — ${monthLabel(data.month)}`}
@@ -229,8 +247,9 @@ function ScorecardContent({
               iconColor="text-medship-success"
             />
             <CommissionProjectionCard
-              base={data.commission.base}
-              bonus={data.commission.bonus}
+              newCommission={data.commission.new}
+              winbackCommission={data.commission.winback}
+              recurringCommission={data.commission.recurring}
               projected={data.commission.projected}
               counterfactual={data.counterfactual ?? null}
               payoutBlocked={data.payoutBlocked}
@@ -238,14 +257,15 @@ function ScorecardContent({
             />
           </div>
 
-          {data.breakdown && data.baseRate !== undefined && data.bonusRate !== undefined && (
+          {data.breakdown && data.rates && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Commission Breakdown — {monthLabel(data.month)}</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  The {(data.baseRate * 100).toFixed(0)}% base pays on every revenue type; the{' '}
-                  {(data.bonusRate * 100).toFixed(0)}% bonus applies to new-business revenue only, and only
-                  when the enrollment gate is met.
+                  New business pays {pct(data.rates.new)} and winbacks pay {pct(data.rates.winback)} for the
+                  first 365 days after enrollment. Recurring business pays {pct(data.rates.recurringFull)} when
+                  you land {data.gate.threshold}+ new enrollments in the month, {pct(data.rates.recurringPartial)} at
+                  one, and {pct(data.rates.recurringZero)} at zero.
                 </p>
               </CardHeader>
               <CardContent className="overflow-x-auto p-0">
@@ -255,37 +275,56 @@ function ScorecardContent({
                       <th className="px-4 py-2 font-medium">Revenue type</th>
                       <th className="px-4 py-2 text-center font-medium">Orders</th>
                       <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                      <th className="px-4 py-2 text-right font-medium">Base {(data.baseRate * 100).toFixed(0)}%</th>
-                      <th className="px-4 py-2 text-right font-medium">Bonus {(data.bonusRate * 100).toFixed(0)}%</th>
+                      <th className="px-4 py-2 text-center font-medium">Rate</th>
+                      <th className="px-4 py-2 text-right font-medium">Commission</th>
                     </tr>
                   </thead>
                   <tbody>
                     {([
-                      ['New business', data.breakdown.newWindowOrders, data.breakdown.newWindowRevenue, true],
-                      ['Winback', data.breakdown.winBackOrders, data.breakdown.winBackRevenue, false],
-                      ['Recurring', data.breakdown.recurringOrders, data.breakdown.recurringRevenue, false],
-                    ] as Array<[string, number, number, boolean]>).map(([label, orders, revenue, bonusEligible]) => (
-                      <tr key={label} className="border-b">
-                        <td className="px-4 py-2 font-medium">{label}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{orders}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{usd(revenue)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{usd(revenue * (data.baseRate ?? 0))}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">
-                          {bonusEligible
-                            ? data.gate?.qualifies
-                              ? usd(data.commission?.bonus ?? 0)
-                              : <span className="text-muted-foreground">gate not met</span>
-                            : <span className="text-muted-foreground">—</span>}
-                        </td>
-                      </tr>
-                    ))}
+                      ['New business', data.breakdown.newOrders, data.breakdown.newRevenue, data.rates.new, data.commission?.new ?? null, null],
+                      ['Winback', data.breakdown.winbackOrders, data.breakdown.winbackRevenue, data.rates.winback, data.commission?.winback ?? null, null],
+                      [
+                        'Recurring',
+                        data.breakdown.recurringOrders,
+                        data.breakdown.recurringRevenue,
+                        data.gate.recurringRate,
+                        data.commission?.recurring ?? null,
+                        data.gate.qualifies
+                          ? 'quota met'
+                          : `${data.gate.enrollments}/${data.gate.threshold} enrollments — reduced rate`,
+                      ],
+                    ] as Array<[string, number, number, number, number | null, string | null]>).map(
+                      ([label, orders, revenue, rate, commission, note]) => (
+                        <tr key={label} className="border-b">
+                          <td className="px-4 py-2 font-medium">{label}</td>
+                          <td className="px-4 py-2 text-center tabular-nums">{orders}</td>
+                          <td className="px-4 py-2 text-right tabular-nums">{usd(revenue)}</td>
+                          <td className="px-4 py-2 text-center tabular-nums">
+                            {pct(rate)}
+                            {note && (
+                              <span
+                                className={`ml-1.5 text-[0.65rem] ${
+                                  note === 'quota met' ? 'text-emerald-600' : 'text-amber-600'
+                                }`}
+                              >
+                                ({note})
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums">
+                            {commission === null ? '—' : usd(commission)}
+                          </td>
+                        </tr>
+                      )
+                    )}
                     {data.breakdown.creditsOrders > 0 && (
-                      <tr className="border-b text-red-600">
-                        <td className="px-4 py-2 font-medium">Credits / adjustments</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{data.breakdown.creditsOrders}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{usd(data.breakdown.creditsAmount)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">—</td>
-                        <td className="px-4 py-2 text-right tabular-nums">—</td>
+                      <tr className="border-b text-xs text-muted-foreground">
+                        <td className="px-4 py-2" colSpan={5}>
+                          Includes {data.breakdown.creditsOrders} credit
+                          {data.breakdown.creditsOrders === 1 ? '' : 's'} / adjustment
+                          {data.breakdown.creditsOrders === 1 ? '' : 's'} totaling{' '}
+                          {usd(data.breakdown.creditsAmount)}, already netted into the revenue above.
+                        </td>
                       </tr>
                     )}
                     <tr className="font-semibold">
@@ -293,14 +332,17 @@ function ScorecardContent({
                       <td className="px-4 py-2" />
                       <td className="px-4 py-2 text-right tabular-nums">
                         {usd(
-                          data.breakdown.newWindowRevenue +
-                            data.breakdown.winBackRevenue +
-                            data.breakdown.recurringRevenue +
-                            data.breakdown.creditsAmount
+                          data.breakdown.newRevenue +
+                            data.breakdown.winbackRevenue +
+                            data.breakdown.recurringRevenue
                         )}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">{data.commission?.base !== null && data.commission?.base !== undefined ? usd(data.commission.base) : '—'}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{data.commission?.bonus !== null && data.commission?.bonus !== undefined ? usd(data.commission.bonus) : '—'}</td>
+                      <td className="px-4 py-2" />
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {data.commission?.projected !== null && data.commission?.projected !== undefined
+                          ? usd(data.commission.projected)
+                          : '—'}
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -313,16 +355,20 @@ function ScorecardContent({
           {data.modelComparison && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">vs. the old 4% flat commission</CardTitle>
+                <CardTitle className="text-base">
+                  vs. the old {pct(data.rates?.legacyFlat ?? 0.04)} flat commission
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">Old model (4% flat)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Old model ({pct(data.rates?.legacyFlat ?? 0.04)} flat)
+                    </p>
                     <p className="text-xl font-bold tabular-nums">{usd(data.modelComparison.oldModelTotal)}</p>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">New model (base + bonus)</p>
+                    <p className="text-xs text-muted-foreground">New model (tiered by cohort)</p>
                     <p className="text-xl font-bold tabular-nums">
                       {data.modelComparison.newModelTotal === null ? '—' : usd(data.modelComparison.newModelTotal)}
                     </p>
@@ -331,18 +377,26 @@ function ScorecardContent({
                     className={`rounded-lg border p-3 ${
                       (data.modelComparison.delta ?? 0) > 0.005
                         ? 'border-emerald-500/40 bg-emerald-500/5'
-                        : 'bg-muted/30'
+                        : (data.modelComparison.delta ?? 0) < -0.005
+                          ? 'border-red-500/40 bg-red-500/5'
+                          : 'bg-muted/30'
                     }`}
                   >
-                    <p className="text-xs text-muted-foreground">Your upside this month</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(data.modelComparison.delta ?? 0) < -0.005 ? 'Quota penalty this month' : 'Your upside this month'}
+                    </p>
                     <p
                       className={`text-xl font-bold tabular-nums ${
-                        (data.modelComparison.delta ?? 0) > 0.005 ? 'text-emerald-700' : ''
+                        (data.modelComparison.delta ?? 0) > 0.005
+                          ? 'text-emerald-700'
+                          : (data.modelComparison.delta ?? 0) < -0.005
+                            ? 'text-red-700'
+                            : ''
                       }`}
                     >
                       {data.modelComparison.delta === null
                         ? '—'
-                        : `${data.modelComparison.delta > 0.005 ? '+' : ''}${usd(data.modelComparison.delta)}`}
+                        : `${data.modelComparison.delta > 0.005 ? '+' : data.modelComparison.delta < -0.005 ? '−' : ''}${usd(Math.abs(data.modelComparison.delta))}`}
                     </p>
                   </div>
                 </div>
@@ -352,8 +406,12 @@ function ScorecardContent({
                   <p className="px-1 text-xs text-muted-foreground">Preparing your month summary…</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  The new model never pays less than the old one: the {((data.baseRate ?? 0.04) * 100).toFixed(0)}%
-                  base matches the old flat commission, and the bonus is pure upside for landing new customers.
+                  How this compares: new business ({pct(data.rates?.new ?? 0.06)}) and winbacks (
+                  {pct(data.rates?.winback ?? 0.05)}) pay above the old flat rate, but the recurring rate rides on
+                  your monthly enrollment quota — {pct(data.rates?.recurringFull ?? 0.04)} at{' '}
+                  {data.gate.threshold}+, {pct(data.rates?.recurringPartial ?? 0.03)} at one,{' '}
+                  {pct(data.rates?.recurringZero ?? 0.02)} at zero. Missing the quota can pay less than the old
+                  model; hitting it protects your recurring book and keeps the premium rates pure upside.
                 </p>
               </CardContent>
             </Card>

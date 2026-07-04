@@ -6,7 +6,7 @@ import { chicagoMonthStart } from '@/lib/incentive/dates'
 import { computeCommission, computeCounterfactual, isPayoutBlocked } from '@/lib/incentive/calculator'
 import {
   INCENTIVE_CACHE_TAG,
-  getRepClassBreakdown,
+  buildCohortBreakdown,
   getRepIncentiveMonthly,
   getRepKeyForUser,
   getRepNewAccounts,
@@ -66,20 +66,20 @@ const getScorecardPayload = unstable_cache(
     }
 
     const commission = computeCommission(row, settings)
-    const [accounts, breakdown] = await Promise.all([
-      getRepNewAccounts(repKey, settings),
-      getRepClassBreakdown(repKey, month),
-    ])
+    const accounts = await getRepNewAccounts(repKey, settings)
+    const breakdown = buildCohortBreakdown(row)
 
     // Legacy comparison: the deprecated model paid a flat baseRate on all
-    // territory revenue — the same attribution basis as attributed_revenue,
-    // so old = base and the delta vs the old model is exactly the bonus.
-    const oldModelTotal = Math.round(settings.baseRate * row.attributed_revenue * 100) / 100
-    const newModelTotal = commission.projected
+    // territory revenue — same attribution basis as attributed_revenue.
+    // Under the tiered model the delta CAN be negative (quota penalty).
+    const oldModelTotal =
+      commission.legacyFlat ?? Math.round(settings.baseRate * row.attributed_revenue * 100) / 100
     const modelComparison = {
       oldModelTotal,
-      newModelTotal,
-      delta: newModelTotal === null ? null : Math.round((newModelTotal - oldModelTotal) * 100) / 100,
+      newModelTotal: commission.projected,
+      delta: commission.projected === null
+        ? null
+        : Math.round((commission.projected - oldModelTotal) * 100) / 100,
     }
 
     return {
@@ -94,19 +94,27 @@ const getScorecardPayload = unstable_cache(
         enrollments: row.enrollments,
         threshold: row.enrollment_gate,
         qualifies: commission.qualifies,
+        recurringRate: commission.recurringRate,
       },
-      newCustomerRevenueMTD: row.net_new_customer_revenue,
+      newCustomerRevenueMTD: row.new_revenue,
       commission: {
-        base: commission.base,
-        bonus: commission.bonus,
+        new: commission.newCommission,
+        winback: commission.winbackCommission,
+        recurring: commission.recurringCommission,
         projected: commission.projected,
       },
       counterfactual: computeCounterfactual(row, settings),
       accounts,
       breakdown,
       modelComparison,
-      baseRate: settings.baseRate,
-      bonusRate: settings.bonusRate,
+      rates: {
+        new: settings.newRate,
+        winback: settings.winbackRate,
+        recurringFull: settings.recurringRateFull,
+        recurringPartial: settings.recurringRatePartial,
+        recurringZero: settings.recurringRateZero,
+        legacyFlat: settings.baseRate,
+      },
       payoutBlocked: blocked.blocked,
       blockingUnmappedCount: blocked.count,
     }

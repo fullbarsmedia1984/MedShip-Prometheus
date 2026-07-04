@@ -9,21 +9,32 @@ type ScorecardPayload = {
   repDisplayName?: string | null
   month: string
   found: boolean
-  gate?: { enrollments: number; threshold: number; qualifies: boolean }
-  commission?: { base: number | null; bonus: number | null; projected: number | null }
+  gate?: { enrollments: number; threshold: number; qualifies: boolean; recurringRate: number }
+  commission?: {
+    new: number | null
+    winback: number | null
+    recurring: number | null
+    projected: number | null
+  }
   breakdown?: {
-    newWindowRevenue: number
-    newWindowOrders: number
-    winBackRevenue: number
-    winBackOrders: number
+    newRevenue: number
+    newOrders: number
+    winbackRevenue: number
+    winbackOrders: number
     recurringRevenue: number
     recurringOrders: number
     creditsAmount: number
     creditsOrders: number
   }
   modelComparison?: { oldModelTotal: number; newModelTotal: number | null; delta: number | null }
-  baseRate?: number
-  bonusRate?: number
+  rates?: {
+    new: number
+    winback: number
+    recurringFull: number
+    recurringPartial: number
+    recurringZero: number
+    legacyFlat: number
+  }
   inPromoPeriod: boolean
   payoutBlocked: boolean
 }
@@ -34,9 +45,12 @@ type FreezePayload = {
     rep_key: string
     enrollments: number
     qualifies: boolean
-    base_commission: number
-    bonus_commission: number
+    recurring_rate: number
+    new_commission: number
+    winback_commission: number
+    recurring_commission: number
     projected_total: number
+    legacy_flat_commission: number
     frozen_at: string
     frozen_by: string | null
   }>
@@ -46,6 +60,11 @@ type ExplainPayload = { found: boolean; explanation?: { text: string } }
 
 function usd(value: number): string {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function pct(rate: number): string {
+  const value = rate * 100
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`
 }
 
 function monthLabel(month: string): string {
@@ -99,21 +118,29 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
     )
   }
 
-  const baseRate = data.baseRate ?? 0.04
-  const bonusRate = data.bonusRate ?? 0.02
+  const rates = data.rates ?? {
+    new: 0.06, winback: 0.05, recurringFull: 0.04, recurringPartial: 0.03, recurringZero: 0.02, legacyFlat: 0.04,
+  }
+  const recurringRate = frozen?.recurring_rate ?? data.gate?.recurringRate ?? rates.recurringFull
   // Frozen figures are authoritative for payout; live figures otherwise.
   const totals = frozen
-    ? { base: frozen.base_commission, bonus: frozen.bonus_commission, total: frozen.projected_total }
+    ? {
+        new: frozen.new_commission,
+        winback: frozen.winback_commission,
+        recurring: frozen.recurring_commission,
+        total: frozen.projected_total,
+      }
     : {
-        base: data.commission.base ?? 0,
-        bonus: data.commission.bonus ?? 0,
+        new: data.commission.new ?? 0,
+        winback: data.commission.winback ?? 0,
+        recurring: data.commission.recurring ?? 0,
         total: data.commission.projected ?? 0,
       }
 
-  const rows: Array<[string, number, number]> = [
-    ['New business', data.breakdown.newWindowOrders, data.breakdown.newWindowRevenue],
-    ['Winback', data.breakdown.winBackOrders, data.breakdown.winBackRevenue],
-    ['Recurring', data.breakdown.recurringOrders, data.breakdown.recurringRevenue],
+  const rows: Array<[string, number, number, number, number]> = [
+    ['New business', data.breakdown.newOrders, data.breakdown.newRevenue, rates.new, totals.new],
+    ['Winback', data.breakdown.winbackOrders, data.breakdown.winbackRevenue, rates.winback, totals.winback],
+    ['Recurring', data.breakdown.recurringOrders, data.breakdown.recurringRevenue, recurringRate, totals.recurring],
   ]
 
   return (
@@ -168,24 +195,27 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
               <th className="py-2">Revenue type</th>
               <th className="py-2 text-center">Orders</th>
               <th className="py-2 text-right">Revenue</th>
-              <th className="py-2 text-right">Base ({(baseRate * 100).toFixed(0)}%)</th>
+              <th className="py-2 text-center">Rate</th>
+              <th className="py-2 text-right">Commission</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(([label, orders, revenue]) => (
+            {rows.map(([label, orders, revenue, rate, commission]) => (
               <tr key={label} className="border-b border-slate-200">
                 <td className="py-2">{label}</td>
                 <td className="py-2 text-center tabular-nums">{orders}</td>
                 <td className="py-2 text-right tabular-nums">{usd(revenue)}</td>
-                <td className="py-2 text-right tabular-nums">{usd(revenue * baseRate)}</td>
+                <td className="py-2 text-center tabular-nums">{pct(rate)}</td>
+                <td className="py-2 text-right tabular-nums">{usd(commission)}</td>
               </tr>
             ))}
             {data.breakdown.creditsOrders > 0 && (
-              <tr className="border-b border-slate-200 text-red-700">
-                <td className="py-2">Credits / adjustments</td>
-                <td className="py-2 text-center tabular-nums">{data.breakdown.creditsOrders}</td>
-                <td className="py-2 text-right tabular-nums">{usd(data.breakdown.creditsAmount)}</td>
-                <td className="py-2 text-right tabular-nums">—</td>
+              <tr className="border-b border-slate-200 text-xs text-slate-500">
+                <td className="py-2" colSpan={5}>
+                  Includes {data.breakdown.creditsOrders} credit{data.breakdown.creditsOrders === 1 ? '' : 's'} /
+                  adjustment{data.breakdown.creditsOrders === 1 ? '' : 's'} totaling {usd(data.breakdown.creditsAmount)},
+                  netted into the revenue above.
+                </td>
               </tr>
             )}
           </tbody>
@@ -194,24 +224,28 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
 
       <section className="mt-6 rounded border border-slate-300 p-4">
         <div className="grid grid-cols-2 gap-y-2 text-sm">
-          <p>Base commission ({(baseRate * 100).toFixed(0)}% of attributed revenue)</p>
-          <p className="text-right font-semibold tabular-nums">{usd(totals.base)}</p>
+          <p>New business ({pct(rates.new)} — first 365 days from enrollment)</p>
+          <p className="text-right font-semibold tabular-nums">{usd(totals.new)}</p>
+          <p>Winback ({pct(rates.winback)} — first 365 days from re-entry)</p>
+          <p className="text-right font-semibold tabular-nums">{usd(totals.winback)}</p>
           <p>
-            New-customer bonus ({(bonusRate * 100).toFixed(0)}%) —{' '}
+            Recurring at {pct(recurringRate)} —{' '}
             {data.gate?.qualifies
-              ? `gate met (${data.gate.enrollments}/${data.gate.threshold} enrollments)`
-              : `gate not met (${data.gate?.enrollments ?? 0}/${data.gate?.threshold ?? 0} enrollments)`}
+              ? `quota met (${data.gate.enrollments}/${data.gate.threshold} new enrollments)`
+              : `quota not met (${data.gate?.enrollments ?? 0}/${data.gate?.threshold ?? 0} new enrollments; full rate is ${pct(rates.recurringFull)})`}
           </p>
-          <p className="text-right font-semibold tabular-nums">{usd(totals.bonus)}</p>
+          <p className="text-right font-semibold tabular-nums">{usd(totals.recurring)}</p>
           <p className="border-t border-slate-900 pt-2 text-base font-bold">Total commission</p>
           <p className="border-t border-slate-900 pt-2 text-right text-base font-bold tabular-nums">{usd(totals.total)}</p>
         </div>
         {data.modelComparison && (
           <p className="mt-3 text-xs text-slate-600">
-            Legacy 4% flat model would have paid {usd(data.modelComparison.oldModelTotal)} — the new model
+            The legacy {pct(rates.legacyFlat)} flat model would have paid {usd(data.modelComparison.oldModelTotal)} —{' '}
             {(data.modelComparison.delta ?? 0) > 0.005
-              ? ` paid ${usd(data.modelComparison.delta ?? 0)} more.`
-              : ' pays the same base; the bonus is upside for new-customer enrollments.'}
+              ? `the tiered model paid ${usd(data.modelComparison.delta ?? 0)} more.`
+              : (data.modelComparison.delta ?? 0) < -0.005
+                ? `the tiered model paid ${usd(Math.abs(data.modelComparison.delta ?? 0))} less this month because the enrollment quota was missed, reducing the recurring rate.`
+                : 'the tiered model paid about the same this month.'}
           </p>
         )}
       </section>

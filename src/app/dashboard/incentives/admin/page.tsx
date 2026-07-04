@@ -489,10 +489,14 @@ function SettingsSection() {
             <div className="flex flex-wrap gap-3">
               {field('Promo start (YYYY-MM-DD)', 'promoStart')}
               {field('Promo end (YYYY-MM-DD)', 'promoEnd')}
-              {field('Enrollment gate / month', 'enrollmentGate', { type: 'number' })}
-              {field('Base rate (0-1)', 'baseRate', { type: 'number', step: '0.01' })}
-              {field('Bonus rate (0-1)', 'bonusRate', { type: 'number', step: '0.01' })}
-              {field('New-customer window (days)', 'newWindowDays', { type: 'number' })}
+              {field('Enrollment quota / month', 'enrollmentGate', { type: 'number' })}
+              {field('New-business rate (0-1)', 'newRate', { type: 'number', step: '0.01' })}
+              {field('Winback rate (0-1)', 'winbackRate', { type: 'number', step: '0.01' })}
+              {field('Recurring — quota met (0-1)', 'recurringRateFull', { type: 'number', step: '0.01' })}
+              {field('Recurring — 1 enrollment (0-1)', 'recurringRatePartial', { type: 'number', step: '0.01' })}
+              {field('Recurring — 0 enrollments (0-1)', 'recurringRateZero', { type: 'number', step: '0.01' })}
+              {field('Legacy flat rate (comparison)', 'baseRate', { type: 'number', step: '0.01' })}
+              {field('New/winback window (days)', 'newWindowDays', { type: 'number' })}
               {field('Win-back gap (days)', 'winBackGapDays', { type: 'number' })}
             </div>
             <Button size="sm" onClick={save} disabled={busy}>

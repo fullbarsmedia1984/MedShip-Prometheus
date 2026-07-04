@@ -120,9 +120,11 @@ export function ManagerView({ canPreviewReps = false }: { canPreviewReps?: boole
             <h2 className="text-lg font-semibold">Manager View</h2>
             {data && (
               <p className="text-xs text-muted-foreground">
-                Promo {data.settings.promoStart} → {data.settings.promoEnd} · gate {data.settings.enrollmentGate}{' '}
-                enrollments/month · base {(data.settings.baseRate * 100).toFixed(0)}% + bonus{' '}
-                {(data.settings.bonusRate * 100).toFixed(0)}%
+                Promo {data.settings.promoStart} → {data.settings.promoEnd} · quota {data.settings.enrollmentGate}{' '}
+                new enrollments/month · new {(data.settings.newRate * 100).toFixed(0)}% · winback{' '}
+                {(data.settings.winbackRate * 100).toFixed(0)}% · recurring{' '}
+                {(data.settings.recurringRateZero * 100).toFixed(0)}–
+                {(data.settings.recurringRateFull * 100).toFixed(0)}% by quota
               </p>
             )}
           </div>

@@ -39,16 +39,23 @@ function normalizeMonthlyRow(row: Record<string, unknown>): RepIncentiveMonthlyR
     enrollments: toNumber(row.enrollments),
     enrollment_gate: toNumber(row.enrollment_gate),
     qualifies: Boolean(row.qualifies),
+    recurring_rate: toNumber(row.recurring_rate),
     order_count: toNumber(row.order_count),
-    new_window_order_count: toNumber(row.new_window_order_count),
+    new_order_count: toNumber(row.new_order_count),
+    winback_order_count: toNumber(row.winback_order_count),
+    recurring_order_count: toNumber(row.recurring_order_count),
+    new_revenue: toNumber(row.new_revenue),
+    winback_revenue: toNumber(row.winback_revenue),
+    recurring_revenue: toNumber(row.recurring_revenue),
     attributed_revenue: toNumber(row.attributed_revenue),
-    new_customer_revenue_gross: toNumber(row.new_customer_revenue_gross),
-    net_new_customer_revenue: toNumber(row.net_new_customer_revenue),
-    win_back_revenue: toNumber(row.win_back_revenue),
+    credit_amount: toNumber(row.credit_amount),
+    credit_count: toNumber(row.credit_count),
     blocking_unmapped_count: toNumber(row.blocking_unmapped_count),
-    base_commission: toNullableNumber(row.base_commission),
-    bonus_commission: toNullableNumber(row.bonus_commission),
+    new_commission: toNullableNumber(row.new_commission),
+    winback_commission: toNullableNumber(row.winback_commission),
+    recurring_commission: toNullableNumber(row.recurring_commission),
     projected_total: toNullableNumber(row.projected_total),
+    legacy_flat_commission: toNullableNumber(row.legacy_flat_commission),
   }
 }
 
@@ -369,7 +376,7 @@ export async function getPayoutSnapshots(): Promise<PayoutSnapshotRow[]> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('incentive_payout_snapshot')
-    .select('month, rep_key, rep_display_name, enrollments, enrollment_gate, qualifies, net_new_customer_revenue, base_commission, bonus_commission, projected_total, frozen_at, frozen_by')
+    .select('month, rep_key, rep_display_name, enrollments, enrollment_gate, qualifies, recurring_rate, new_revenue, winback_revenue, recurring_revenue, new_commission, winback_commission, recurring_commission, projected_total, legacy_flat_commission, frozen_at, frozen_by')
     .order('month', { ascending: true })
     .order('projected_total', { ascending: false })
     .limit(2000)
@@ -379,10 +386,15 @@ export async function getPayoutSnapshots(): Promise<PayoutSnapshotRow[]> {
     month: String(row.month),
     enrollments: toNumber(row.enrollments),
     enrollment_gate: toNumber(row.enrollment_gate),
-    net_new_customer_revenue: toNumber(row.net_new_customer_revenue),
-    base_commission: toNumber(row.base_commission),
-    bonus_commission: toNumber(row.bonus_commission),
+    recurring_rate: toNumber(row.recurring_rate),
+    new_revenue: toNumber(row.new_revenue),
+    winback_revenue: toNumber(row.winback_revenue),
+    recurring_revenue: toNumber(row.recurring_revenue),
+    new_commission: toNumber(row.new_commission),
+    winback_commission: toNumber(row.winback_commission),
+    recurring_commission: toNumber(row.recurring_commission),
     projected_total: toNumber(row.projected_total),
+    legacy_flat_commission: toNumber(row.legacy_flat_commission),
   })) as PayoutSnapshotRow[]
 }
 
@@ -405,56 +417,32 @@ export async function getPayoutVariance(): Promise<PayoutVarianceRow[]> {
   })) as PayoutVarianceRow[]
 }
 
-export interface RepClassBreakdown {
-  newWindowRevenue: number
-  newWindowOrders: number
-  winBackRevenue: number
-  winBackOrders: number
+export interface RepCohortBreakdown {
+  newRevenue: number
+  newOrders: number
+  winbackRevenue: number
+  winbackOrders: number
   recurringRevenue: number
   recurringOrders: number
-  creditsAmount: number // negative (EXCLUDED_NEGATIVE net amounts)
+  creditsAmount: number // negative; already netted inside the cohort buckets
   creditsOrders: number
 }
 
-/** Per-class revenue for one rep-month, from the classification table. */
-export async function getRepClassBreakdown(repKey: string, month: string): Promise<RepClassBreakdown> {
-  const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('order_incentive_class')
-    .select('class, net_amount')
-    .eq('rep_key', repKey)
-    .eq('order_month', month)
-    .limit(10000)
-  if (error) throw error
-
-  const breakdown: RepClassBreakdown = {
-    newWindowRevenue: 0, newWindowOrders: 0,
-    winBackRevenue: 0, winBackOrders: 0,
-    recurringRevenue: 0, recurringOrders: 0,
-    creditsAmount: 0, creditsOrders: 0,
+/**
+ * Per-cohort figures for one rep-month, straight from the rollup row —
+ * the same buckets commission is computed on (credits are netted in).
+ */
+export function buildCohortBreakdown(row: RepIncentiveMonthlyRow): RepCohortBreakdown {
+  return {
+    newRevenue: row.new_revenue,
+    newOrders: row.new_order_count,
+    winbackRevenue: row.winback_revenue,
+    winbackOrders: row.winback_order_count,
+    recurringRevenue: row.recurring_revenue,
+    recurringOrders: row.recurring_order_count,
+    creditsAmount: row.credit_amount,
+    creditsOrders: row.credit_count,
   }
-  for (const row of data ?? []) {
-    const amount = toNumber(row.net_amount)
-    switch (row.class) {
-      case 'NEW_WINDOW':
-        breakdown.newWindowRevenue += amount
-        breakdown.newWindowOrders++
-        break
-      case 'WIN_BACK':
-        breakdown.winBackRevenue += amount
-        breakdown.winBackOrders++
-        break
-      case 'RECURRING':
-        breakdown.recurringRevenue += amount
-        breakdown.recurringOrders++
-        break
-      case 'EXCLUDED_NEGATIVE':
-        breakdown.creditsAmount += amount
-        breakdown.creditsOrders++
-        break
-    }
-  }
-  return breakdown
 }
 
 /** The rep_key a signed-in user is locked to (profiles.sf_user_id), if any. */

@@ -29,6 +29,11 @@ export async function postSlackMessage(text: string): Promise<{ sent: boolean; e
   }
 }
 
+function pct(rate: number): string {
+  const value = rate * 100
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`
+}
+
 function repSection(
   row: RepIncentiveMonthlyRow,
   accounts: RepNewAccount[],
@@ -36,9 +41,9 @@ function repSection(
 ): string {
   const name = row.rep_display_name ?? row.rep_key
   const gate = row.qualifies
-    ? `✅ ${row.enrollments}/${row.enrollment_gate} enrollments — bonus UNLOCKED`
-    : `${row.enrollments}/${row.enrollment_gate} enrollments — ${row.enrollment_gate - row.enrollments} more unlocks ${(settings.bonusRate * 100).toFixed(0)}% on all new-customer revenue`
-  const lines = [`*${name}* — ${gate} · new-customer revenue ${formatUsd(row.net_new_customer_revenue)}`]
+    ? `✅ ${row.enrollments}/${row.enrollment_gate} enrollments — recurring rate protected at ${pct(settings.recurringRateFull)}`
+    : `${row.enrollments}/${row.enrollment_gate} enrollments — recurring paying ${pct(row.recurring_rate)}; ${row.enrollment_gate - row.enrollments} more restores ${pct(settings.recurringRateFull)}`
+  const lines = [`*${name}* — ${gate} · new-business revenue ${formatUsd(row.new_revenue)} (pays ${pct(settings.newRate)})`]
 
   const closing = accounts
     .filter((account) => account.daysLeft > 0 && account.daysLeft <= EXPIRY_HORIZON_DAYS)
@@ -46,7 +51,7 @@ function repSection(
     .slice(0, 4)
   for (const account of closing) {
     lines.push(
-      `    ⏳ ${account.institution ?? account.canonicalKey} — window closes in ${account.daysLeft}d (${formatUsd(account.revenueInWindow)} so far; sales inside the window earn the bonus)`
+      `    ⏳ ${account.institution ?? account.canonicalKey} — ${pct(settings.newRate)} window closes in ${account.daysLeft}d (${formatUsd(account.revenueInWindow)} so far; sales inside the window earn the premium rate)`
     )
   }
   return lines.join('\n')
@@ -59,7 +64,7 @@ export async function buildWeeklyDigest(): Promise<string> {
   const monthName = new Date(`${month}T00:00:00`).toLocaleDateString('en-US', { month: 'long' })
   const sellingDaysLeft = businessDaysLeftInMonth(chicagoTodayIso())
 
-  const repRows = rows.sort((a, b) => b.enrollments - a.enrollments || b.net_new_customer_revenue - a.net_new_customer_revenue)
+  const repRows = rows.sort((a, b) => b.enrollments - a.enrollments || b.new_revenue - a.new_revenue)
   const sections: string[] = []
   for (const row of repRows) {
     const accounts = await getRepNewAccounts(row.rep_key, settings)
@@ -71,7 +76,7 @@ export async function buildWeeklyDigest(): Promise<string> {
 
   const header = `📊 *Q3 Incentive — Weekly Digest* · ${monthName} · ${sellingDaysLeft} selling days left in the month`
   const footer =
-    `Team pace: ${teamEnrollments} enrollment${teamEnrollments === 1 ? '' : 's'} so far vs ${teamNeeded} needed for everyone to qualify. ` +
+    `Team pace: ${teamEnrollments} enrollment${teamEnrollments === 1 ? '' : 's'} so far vs ${teamNeeded} needed for everyone to hold the full recurring rate. ` +
     `Scorecards: /dashboard/incentives/scorecard`
 
   return [header, ...sections, footer].join('\n\n')

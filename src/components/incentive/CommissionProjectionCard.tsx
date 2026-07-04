@@ -6,8 +6,9 @@ import { PayoutBlockedCard } from './PayoutBlockedCard'
 import { formatUsd } from '@/lib/incentive/calculator'
 
 interface CommissionProjectionCardProps {
-  base: number | null
-  bonus: number | null
+  newCommission: number | null
+  winbackCommission: number | null
+  recurringCommission: number | null
   projected: number | null
   counterfactual: { message: string } | null
   payoutBlocked: boolean
@@ -15,8 +16,9 @@ interface CommissionProjectionCardProps {
 }
 
 export function CommissionProjectionCard({
-  base,
-  bonus,
+  newCommission,
+  winbackCommission,
+  recurringCommission,
   projected,
   counterfactual,
   payoutBlocked,
@@ -33,19 +35,23 @@ export function CommissionProjectionCard({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {payoutBlocked || base === null || projected === null ? (
+        {payoutBlocked || projected === null ? (
           <PayoutBlockedCard blockingUnmappedCount={blockingUnmappedCount} />
         ) : (
           <>
             <span className="text-4xl font-semibold leading-none">{formatUsd(projected)}</span>
             <div className="mt-3 flex gap-6 text-sm">
               <div>
-                <p className="text-muted-foreground">Base</p>
-                <p className="font-medium">{formatUsd(base)}</p>
+                <p className="text-muted-foreground">New</p>
+                <p className="font-medium">{formatUsd(newCommission ?? 0)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">New-customer bonus</p>
-                <p className="font-medium">{formatUsd(bonus ?? 0)}</p>
+                <p className="text-muted-foreground">Winback</p>
+                <p className="font-medium">{formatUsd(winbackCommission ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Recurring</p>
+                <p className="font-medium">{formatUsd(recurringCommission ?? 0)}</p>
               </div>
             </div>
             {counterfactual && (

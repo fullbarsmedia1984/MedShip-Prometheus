@@ -9,9 +9,16 @@ interface ScorecardGateCardProps {
   enrollments: number
   threshold: number
   qualifies: boolean
+  recurringRate?: number
+  fullRate?: number
 }
 
-export function ScorecardGateCard({ enrollments, threshold, qualifies }: ScorecardGateCardProps) {
+function pct(rate: number): string {
+  const value = rate * 100
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`
+}
+
+export function ScorecardGateCard({ enrollments, threshold, qualifies, recurringRate, fullRate }: ScorecardGateCardProps) {
   return (
     <Card className="h-full">
       <CardHeader className="pb-2">
@@ -36,11 +43,15 @@ export function ScorecardGateCard({ enrollments, threshold, qualifies }: Scoreca
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-700'
             )}
           >
-            {qualifies ? 'Qualifying' : 'Not yet qualifying'}
+            {recurringRate !== undefined
+              ? `Recurring at ${pct(recurringRate)}`
+              : qualifies ? 'Qualifying' : 'Not yet qualifying'}
           </Badge>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Enroll {threshold}+ first-ever customers this calendar month to unlock the new-customer bonus.
+          {qualifies
+            ? `Quota met — your recurring business pays the full ${pct(fullRate ?? 0.04)} this month.`
+            : `Enroll ${threshold}+ first-ever customers this calendar month to earn the full ${pct(fullRate ?? 0.04)} on recurring business — fewer enrollments reduce your recurring rate.`}
         </p>
       </CardContent>
     </Card>

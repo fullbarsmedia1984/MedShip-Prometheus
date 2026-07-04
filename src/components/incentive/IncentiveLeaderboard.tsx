@@ -42,10 +42,11 @@ export function IncentiveLeaderboard({ rows, payoutBlocked }: IncentiveLeaderboa
               <TableRow>
                 <TableHead>Rep</TableHead>
                 <TableHead className="text-right">Enrollments</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Recurring rate</TableHead>
                 <TableHead className="text-right">New-customer revenue</TableHead>
-                <TableHead className="text-right">Base</TableHead>
-                <TableHead className="text-right">Bonus</TableHead>
+                <TableHead className="text-right">New</TableHead>
+                <TableHead className="text-right">Winback</TableHead>
+                <TableHead className="text-right">Recurring</TableHead>
                 <TableHead className="text-right">Projected</TableHead>
               </TableRow>
             </TableHeader>
@@ -70,21 +71,24 @@ export function IncentiveLeaderboard({ rows, payoutBlocked }: IncentiveLeaderboa
                       className={cn(
                         row.qualifies
                           ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
-                          : 'border-amber-500/30 bg-amber-500/10 text-amber-700'
+                          : row.enrollments >= 1
+                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-700'
+                            : 'border-red-500/30 bg-red-500/10 text-red-700'
                       )}
                     >
-                      {row.qualifies ? 'Qualifying' : 'Below gate'}
+                      {`${(row.recurring_rate * 100).toFixed(0)}%${row.qualifies ? '' : ' — quota missed'}`}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">{formatUsd(row.net_new_customer_revenue)}</TableCell>
-                  {payoutBlocked || row.base_commission === null ? (
-                    <TableCell colSpan={3} className="text-right">
+                  <TableCell className="text-right">{formatUsd(row.new_revenue)}</TableCell>
+                  {payoutBlocked || row.projected_total === null ? (
+                    <TableCell colSpan={4} className="text-right">
                       <PayoutBlockedCard blockingUnmappedCount={row.blocking_unmapped_count} compact />
                     </TableCell>
                   ) : (
                     <>
-                      <TableCell className="text-right">{formatUsd(row.base_commission)}</TableCell>
-                      <TableCell className="text-right">{formatUsd(row.bonus_commission ?? 0)}</TableCell>
+                      <TableCell className="text-right">{formatUsd(row.new_commission ?? 0)}</TableCell>
+                      <TableCell className="text-right">{formatUsd(row.winback_commission ?? 0)}</TableCell>
+                      <TableCell className="text-right">{formatUsd(row.recurring_commission ?? 0)}</TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatUsd(row.projected_total ?? 0)}
                       </TableCell>
