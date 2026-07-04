@@ -36,8 +36,30 @@ type ScorecardResponse = {
   commission?: { base: number | null; bonus: number | null; projected: number | null }
   counterfactual?: { enrollmentsAway: number; bonusAtStake: number; message: string } | null
   accounts?: RepNewAccount[]
+  breakdown?: {
+    newWindowRevenue: number
+    newWindowOrders: number
+    winBackRevenue: number
+    winBackOrders: number
+    recurringRevenue: number
+    recurringOrders: number
+    creditsAmount: number
+    creditsOrders: number
+  }
+  modelComparison?: { oldModelTotal: number; newModelTotal: number | null; delta: number | null }
+  baseRate?: number
+  bonusRate?: number
   payoutBlocked: boolean
   blockingUnmappedCount: number
+}
+
+type ExplainResponse = {
+  found: boolean
+  explanation?: { text: string; source: 'ai' | 'fallback' }
+}
+
+function usd(value: number): string {
+  return `$${Math.round(value).toLocaleString('en-US')}`
 }
 
 function monthLabel(month: string): string {
@@ -59,6 +81,7 @@ function ScorecardContent({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<ScorecardResponse | null>(null)
+  const [explanation, setExplanation] = useState<string | null>(null)
 
   const load = useCallback(async (rep: string, month: string) => {
     setLoading(true)
@@ -73,6 +96,21 @@ function ScorecardContent({
         `/api/dashboard/incentives/scorecard?${params.toString()}`
       )
       setData(payload)
+
+      // Model-comparison narrative loads after the main payload (it may take
+      // a few seconds on a cold AI call); failures degrade to no section.
+      setExplanation(null)
+      if (payload.found) {
+        const explainParams = new URLSearchParams(params)
+        explainParams.set(previewMode ? 'viewAs' : 'rep', payload.rep)
+        void fetchJson<ExplainResponse>(
+          `/api/dashboard/incentives/scorecard/explain?${explainParams.toString()}`
+        )
+          .then((result) => {
+            if (result.found && result.explanation) setExplanation(result.explanation.text)
+          })
+          .catch(() => {})
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load scorecard')
     } finally {
@@ -200,7 +238,126 @@ function ScorecardContent({
             />
           </div>
 
+          {data.breakdown && data.baseRate !== undefined && data.bonusRate !== undefined && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Commission Breakdown — {monthLabel(data.month)}</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  The {(data.baseRate * 100).toFixed(0)}% base pays on every revenue type; the{' '}
+                  {(data.bonusRate * 100).toFixed(0)}% bonus applies to new-business revenue only, and only
+                  when the enrollment gate is met.
+                </p>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">Revenue type</th>
+                      <th className="px-4 py-2 text-center font-medium">Orders</th>
+                      <th className="px-4 py-2 text-right font-medium">Revenue</th>
+                      <th className="px-4 py-2 text-right font-medium">Base {(data.baseRate * 100).toFixed(0)}%</th>
+                      <th className="px-4 py-2 text-right font-medium">Bonus {(data.bonusRate * 100).toFixed(0)}%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([
+                      ['New business', data.breakdown.newWindowOrders, data.breakdown.newWindowRevenue, true],
+                      ['Winback', data.breakdown.winBackOrders, data.breakdown.winBackRevenue, false],
+                      ['Recurring', data.breakdown.recurringOrders, data.breakdown.recurringRevenue, false],
+                    ] as Array<[string, number, number, boolean]>).map(([label, orders, revenue, bonusEligible]) => (
+                      <tr key={label} className="border-b">
+                        <td className="px-4 py-2 font-medium">{label}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{orders}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{usd(revenue)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{usd(revenue * (data.baseRate ?? 0))}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {bonusEligible
+                            ? data.gate?.qualifies
+                              ? usd(data.commission?.bonus ?? 0)
+                              : <span className="text-muted-foreground">gate not met</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                    {data.breakdown.creditsOrders > 0 && (
+                      <tr className="border-b text-red-600">
+                        <td className="px-4 py-2 font-medium">Credits / adjustments</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{data.breakdown.creditsOrders}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{usd(data.breakdown.creditsAmount)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">—</td>
+                        <td className="px-4 py-2 text-right tabular-nums">—</td>
+                      </tr>
+                    )}
+                    <tr className="font-semibold">
+                      <td className="px-4 py-2">Total</td>
+                      <td className="px-4 py-2" />
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {usd(
+                          data.breakdown.newWindowRevenue +
+                            data.breakdown.winBackRevenue +
+                            data.breakdown.recurringRevenue +
+                            data.breakdown.creditsAmount
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">{data.commission?.base !== null && data.commission?.base !== undefined ? usd(data.commission.base) : '—'}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{data.commission?.bonus !== null && data.commission?.bonus !== undefined ? usd(data.commission.bonus) : '—'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+
           <NewAccountWindowTable accounts={data.accounts ?? []} />
+
+          {data.modelComparison && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">vs. the old 4% flat commission</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Old model (4% flat)</p>
+                    <p className="text-xl font-bold tabular-nums">{usd(data.modelComparison.oldModelTotal)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">New model (base + bonus)</p>
+                    <p className="text-xl font-bold tabular-nums">
+                      {data.modelComparison.newModelTotal === null ? '—' : usd(data.modelComparison.newModelTotal)}
+                    </p>
+                  </div>
+                  <div
+                    className={`rounded-lg border p-3 ${
+                      (data.modelComparison.delta ?? 0) > 0.005
+                        ? 'border-emerald-500/40 bg-emerald-500/5'
+                        : 'bg-muted/30'
+                    }`}
+                  >
+                    <p className="text-xs text-muted-foreground">Your upside this month</p>
+                    <p
+                      className={`text-xl font-bold tabular-nums ${
+                        (data.modelComparison.delta ?? 0) > 0.005 ? 'text-emerald-700' : ''
+                      }`}
+                    >
+                      {data.modelComparison.delta === null
+                        ? '—'
+                        : `${data.modelComparison.delta > 0.005 ? '+' : ''}${usd(data.modelComparison.delta)}`}
+                    </p>
+                  </div>
+                </div>
+                {explanation ? (
+                  <p className="rounded-md border bg-muted/20 px-4 py-3 text-sm leading-relaxed">{explanation}</p>
+                ) : (
+                  <p className="px-1 text-xs text-muted-foreground">Preparing your month summary…</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  The new model never pays less than the old one: the {((data.baseRate ?? 0.04) * 100).toFixed(0)}%
+                  base matches the old flat commission, and the bonus is pure upside for landing new customers.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="pb-2">

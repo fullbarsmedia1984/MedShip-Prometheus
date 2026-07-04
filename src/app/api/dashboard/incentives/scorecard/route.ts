@@ -6,6 +6,7 @@ import { chicagoMonthStart } from '@/lib/incentive/dates'
 import { computeCommission, computeCounterfactual, isPayoutBlocked } from '@/lib/incentive/calculator'
 import {
   INCENTIVE_CACHE_TAG,
+  getRepClassBreakdown,
   getRepIncentiveMonthly,
   getRepKeyForUser,
   getRepNewAccounts,
@@ -65,7 +66,21 @@ const getScorecardPayload = unstable_cache(
     }
 
     const commission = computeCommission(row, settings)
-    const accounts = await getRepNewAccounts(repKey, settings)
+    const [accounts, breakdown] = await Promise.all([
+      getRepNewAccounts(repKey, settings),
+      getRepClassBreakdown(repKey, month),
+    ])
+
+    // Legacy comparison: the deprecated model paid a flat baseRate on all
+    // territory revenue — the same attribution basis as attributed_revenue,
+    // so old = base and the delta vs the old model is exactly the bonus.
+    const oldModelTotal = Math.round(settings.baseRate * row.attributed_revenue * 100) / 100
+    const newModelTotal = commission.projected
+    const modelComparison = {
+      oldModelTotal,
+      newModelTotal,
+      delta: newModelTotal === null ? null : Math.round((newModelTotal - oldModelTotal) * 100) / 100,
+    }
 
     return {
       rep: repKey,
@@ -88,6 +103,10 @@ const getScorecardPayload = unstable_cache(
       },
       counterfactual: computeCounterfactual(row, settings),
       accounts,
+      breakdown,
+      modelComparison,
+      baseRate: settings.baseRate,
+      bonusRate: settings.bonusRate,
       payoutBlocked: blocked.blocked,
       blockingUnmappedCount: blocked.count,
     }

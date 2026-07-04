@@ -405,6 +405,58 @@ export async function getPayoutVariance(): Promise<PayoutVarianceRow[]> {
   })) as PayoutVarianceRow[]
 }
 
+export interface RepClassBreakdown {
+  newWindowRevenue: number
+  newWindowOrders: number
+  winBackRevenue: number
+  winBackOrders: number
+  recurringRevenue: number
+  recurringOrders: number
+  creditsAmount: number // negative (EXCLUDED_NEGATIVE net amounts)
+  creditsOrders: number
+}
+
+/** Per-class revenue for one rep-month, from the classification table. */
+export async function getRepClassBreakdown(repKey: string, month: string): Promise<RepClassBreakdown> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('order_incentive_class')
+    .select('class, net_amount')
+    .eq('rep_key', repKey)
+    .eq('order_month', month)
+    .limit(10000)
+  if (error) throw error
+
+  const breakdown: RepClassBreakdown = {
+    newWindowRevenue: 0, newWindowOrders: 0,
+    winBackRevenue: 0, winBackOrders: 0,
+    recurringRevenue: 0, recurringOrders: 0,
+    creditsAmount: 0, creditsOrders: 0,
+  }
+  for (const row of data ?? []) {
+    const amount = toNumber(row.net_amount)
+    switch (row.class) {
+      case 'NEW_WINDOW':
+        breakdown.newWindowRevenue += amount
+        breakdown.newWindowOrders++
+        break
+      case 'WIN_BACK':
+        breakdown.winBackRevenue += amount
+        breakdown.winBackOrders++
+        break
+      case 'RECURRING':
+        breakdown.recurringRevenue += amount
+        breakdown.recurringOrders++
+        break
+      case 'EXCLUDED_NEGATIVE':
+        breakdown.creditsAmount += amount
+        breakdown.creditsOrders++
+        break
+    }
+  }
+  return breakdown
+}
+
 /** The rep_key a signed-in user is locked to (profiles.sf_user_id), if any. */
 export async function getRepKeyForUser(userId: string): Promise<string | null> {
   const supabase = createAdminClient()
