@@ -111,11 +111,24 @@ export async function GET(request: NextRequest) {
       repKey = ownKey
     }
 
+    // Rep-view preview for admins: ?viewAs=<repKey> returns the exact
+    // payload shape a sales_rep login receives (locked, rep list trimmed),
+    // so the rep experience can be validated before reps are invited.
+    const viewAs = request.nextUrl.searchParams.get('viewAs')?.trim() ?? ''
+    const isAdmin = auth.role === 'superadmin' || auth.role === 'admin'
+    const previewing = !isRep && isAdmin && viewAs !== ''
+    if (previewing) repKey = viewAs
+
     const payload = await getScorecardPayload(repKey, month)
     return NextResponse.json(
-      isRep
-        ? { ...payload, locked: true, reps: payload.reps.filter((rep) => rep.key === repKey) }
-        : { ...payload, locked: false }
+      isRep || previewing
+        ? {
+            ...payload,
+            locked: true,
+            previewing,
+            reps: payload.reps.filter((rep) => rep.key === repKey),
+          }
+        : { ...payload, locked: false, previewing: false }
     )
   } catch (error) {
     return NextResponse.json(

@@ -43,7 +43,13 @@ function monthLabel(month: string): string {
   return new Date(`${month}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-function ScorecardContent({ lockedRepKey }: { lockedRepKey: string | null }) {
+function ScorecardContent({
+  lockedRepKey,
+  previewMode,
+}: {
+  lockedRepKey: string | null
+  previewMode: boolean
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const repParam = lockedRepKey ?? searchParams.get('rep') ?? ''
@@ -58,7 +64,9 @@ function ScorecardContent({ lockedRepKey }: { lockedRepKey: string | null }) {
     try {
       setError(null)
       const params = new URLSearchParams()
-      if (rep) params.set('rep', rep)
+      // Preview requests use viewAs so the API returns the exact locked
+      // payload a sales_rep login receives.
+      if (rep) params.set(previewMode ? 'viewAs' : 'rep', rep)
       if (month) params.set('month', month)
       const payload = await fetchJson<ScorecardResponse>(
         `/api/dashboard/incentives/scorecard?${params.toString()}`
@@ -69,7 +77,7 @@ function ScorecardContent({ lockedRepKey }: { lockedRepKey: string | null }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [previewMode])
 
   useEffect(() => {
     void load(repParam, monthParam)
@@ -77,6 +85,7 @@ function ScorecardContent({ lockedRepKey }: { lockedRepKey: string | null }) {
 
   const navigate = (rep: string | null, month: string | null) => {
     const params = new URLSearchParams()
+    if (lockedRepKey && previewMode) params.set('viewAs', lockedRepKey)
     if (rep && !lockedRepKey) params.set('rep', rep)
     if (month) params.set('month', month)
     router.replace(`/dashboard/incentives/scorecard?${params.toString()}`)
@@ -84,6 +93,22 @@ function ScorecardContent({ lockedRepKey }: { lockedRepKey: string | null }) {
 
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">
+      {previewMode && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-800">
+          <span>
+            <b>Rep preview</b> — this is exactly what{' '}
+            {data?.repDisplayName ?? 'this rep'} will see when they log in (same API scoping;
+            no other reps&apos; data is included).
+          </span>
+          <button
+            type="button"
+            className="font-semibold underline underline-offset-2"
+            onClick={() => router.push('/dashboard/incentives')}
+          >
+            Exit preview
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           {lockedRepKey ? 'My Scorecard' : 'Rep Scorecard'}
@@ -188,12 +213,18 @@ function ScorecardContent({ lockedRepKey }: { lockedRepKey: string | null }) {
   )
 }
 
-export function ScorecardView({ lockedRepKey }: { lockedRepKey: string | null }) {
+export function ScorecardView({
+  lockedRepKey,
+  previewMode = false,
+}: {
+  lockedRepKey: string | null
+  previewMode?: boolean
+}) {
   return (
     <div className="flex flex-col">
       <Header title="Q3 Incentive" />
       <Suspense fallback={<p className="py-12 text-center text-sm text-muted-foreground">Loading…</p>}>
-        <ScorecardContent lockedRepKey={lockedRepKey} />
+        <ScorecardContent lockedRepKey={lockedRepKey} previewMode={previewMode} />
       </Suspense>
     </div>
   )

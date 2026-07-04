@@ -59,7 +59,7 @@ function buildMonthOptions(settings: IncentiveSettings): string[] {
   return options
 }
 
-export function ManagerView() {
+export function ManagerView({ canPreviewReps = false }: { canPreviewReps?: boolean }) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -120,6 +120,27 @@ export function ManagerView() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
+            {canPreviewReps && data && data.leaderboard.length > 0 && (
+              <Select
+                value={undefined}
+                onValueChange={(repKey) =>
+                  repKey && router.push(`/dashboard/incentives/scorecard?viewAs=${encodeURIComponent(repKey)}`)
+                }
+              >
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="Preview rep view…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...data.leaderboard]
+                    .sort((a, b) => (a.rep_display_name ?? a.rep_key).localeCompare(b.rep_display_name ?? b.rep_key))
+                    .map((row) => (
+                      <SelectItem key={row.rep_key} value={row.rep_key}>
+                        {row.rep_display_name ?? row.rep_key}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
             {data && monthOptions.length > 0 && (
               <Select value={data.month} onValueChange={(value) => value && setMonth(value)}>
                 <SelectTrigger className="w-44">

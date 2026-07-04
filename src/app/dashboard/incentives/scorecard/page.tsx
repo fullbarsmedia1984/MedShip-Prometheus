@@ -6,8 +6,19 @@ import { ScorecardView } from './scorecard-view'
 
 // Staff and managers pick any rep; a sales_rep login is locked to their own
 // scorecard via profiles.sf_user_id (the API enforces the same rule).
-export default async function ScorecardPage() {
+// Admins may pass ?viewAs=<repKey> to preview the locked rep experience.
+export default async function ScorecardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ viewAs?: string }>
+}) {
   const auth = await requireDashboardAuth(SALES_API_AUTH_OPTIONS)
+  const { viewAs } = await searchParams
+
+  const isAdmin = auth.role === 'superadmin' || auth.role === 'admin'
+  if (isAdmin && viewAs && viewAs.trim() !== '') {
+    return <ScorecardView lockedRepKey={viewAs.trim()} previewMode />
+  }
 
   let lockedRepKey: string | null = null
   if (auth.role === 'sales_rep') {
