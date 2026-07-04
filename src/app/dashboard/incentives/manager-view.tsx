@@ -148,6 +148,31 @@ export function ManagerView({ canPreviewReps = false }: { canPreviewReps?: boole
                 </SelectContent>
               </Select>
             )}
+            {data && data.leaderboard.length > 0 && (
+              <Select
+                value={undefined}
+                onValueChange={(repKey) =>
+                  repKey &&
+                  window.open(
+                    `/statement?rep=${encodeURIComponent(repKey)}&month=${encodeURIComponent(data.month)}`,
+                    '_blank'
+                  )
+                }
+              >
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="Commission statement…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...data.leaderboard]
+                    .sort((a, b) => (a.rep_display_name ?? a.rep_key).localeCompare(b.rep_display_name ?? b.rep_key))
+                    .map((row) => (
+                      <SelectItem key={row.rep_key} value={row.rep_key}>
+                        {row.rep_display_name ?? row.rep_key}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
             {data && monthOptions.length > 0 && (
               <Select value={data.month} onValueChange={(value) => value && setMonth(value)}>
                 <SelectTrigger className="w-44">

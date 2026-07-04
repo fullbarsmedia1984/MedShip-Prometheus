@@ -602,6 +602,7 @@ function PayoutFreezeSection() {
                 <TableHead className="text-right">Frozen payout</TableHead>
                 <TableHead className="text-right">Live now</TableHead>
                 <TableHead className="text-right">Variance</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -632,6 +633,16 @@ function PayoutFreezeSection() {
                     <TableCell className="text-right tabular-nums">{varianceRow ? formatUsd(varianceRow.live_total) : '—'}</TableCell>
                     <TableCell className={`text-right font-medium tabular-nums ${Math.abs(delta) > 0.005 ? 'text-amber-600' : 'text-muted-foreground'}`}>
                       {Math.abs(delta) > 0.005 ? `${delta > 0 ? '+' : ''}${formatUsd(delta)}` : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <a
+                        className="text-xs font-semibold text-medship-primary underline-offset-2 hover:underline"
+                        href={`/statement?rep=${encodeURIComponent(row.rep_key)}&month=${encodeURIComponent(row.month)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Statement
+                      </a>
                     </TableCell>
                   </TableRow>
                 )

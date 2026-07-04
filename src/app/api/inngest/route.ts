@@ -21,6 +21,8 @@ import {
   incentiveRecompute,
   incentiveRecomputeManual,
   incentivePayoutFreeze,
+  incentiveWeeklyDigest,
+  ceoDailyBriefing,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -67,5 +69,7 @@ export const { GET, POST, PUT } = serve({
     incentiveRecompute,
     incentiveRecomputeManual,
     incentivePayoutFreeze,
+    incentiveWeeklyDigest,
+    ceoDailyBriefing,
   ],
 })

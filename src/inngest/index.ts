@@ -32,6 +32,10 @@ export {
   incentiveRecompute,
   incentiveRecomputeManual,
 } from './functions/incentive-recompute'
+export {
+  ceoDailyBriefing,
+  incentiveWeeklyDigest,
+} from './functions/incentive-comms'
 
 // Re-export client for convenience
 export { inngest } from './client'
