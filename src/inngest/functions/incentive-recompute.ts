@@ -109,6 +109,15 @@ export const incentivePayoutFreeze = inngest.createFunction(
     const target = autoFreezeTargetMonth(new Date(), FREEZE_GRACE_DAYS)
     if (!target) return { skipped: true, reason: 'inside grace period' }
 
+    // Only promo months are payable — never auto-freeze pre/post-promo
+    // months (June would otherwise freeze on July 8 as a dry-run artifact).
+    const settings = await getIncentiveSettings()
+    const promoFirstMonth = `${settings.promoStart.slice(0, 7)}-01`
+    const promoLastMonth = `${settings.promoEnd.slice(0, 7)}-01`
+    if (target < promoFirstMonth || target > promoLastMonth) {
+      return { skipped: true, reason: `month ${target} is outside the promo period` }
+    }
+
     const alreadyFrozen = await step.run('check-existing', async () => {
       const snapshots = await getPayoutSnapshots()
       return snapshots.some((row) => row.month === target)
