@@ -5,7 +5,7 @@ import { KpiCard } from '@/components/dashboard/KpiCard'
 import { CeoBriefingCard } from '@/components/dashboard/CeoBriefingCard'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { SyncStatusCard } from '@/components/dashboard/SyncStatusCard'
-import { SalesLeaderboard } from '@/components/dashboard/SalesLeaderboard'
+import { SalesLeaderboard, type LeaderboardMonth } from '@/components/dashboard/SalesLeaderboard'
 import { SalesActivityFeed } from '@/components/dashboard/SalesActivityFeed'
 import { PipelineSnapshot } from '@/components/dashboard/PipelineSnapshot'
 import { ClientMapPreview } from '@/components/dashboard/ClientMapPreview'
@@ -46,6 +46,7 @@ type DashboardOverviewResponse = {
   inventoryAlerts: Product[]
   integrations: IntegrationStatusData[]
   leaderboard: SeedSalesRep[]
+  leaderboardHistory: LeaderboardMonth[]
   activities: SeedSalesActivity[]
   pipeline: SeedPipelineStage[]
   mapCustomers: Customer[]
@@ -72,6 +73,7 @@ export default function DashboardPage() {
   const [inventoryAlerts, setInventoryAlerts] = useState<Product[]>([])
   const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
   const [leaderboard, setLeaderboard] = useState<SeedSalesRep[]>([])
+  const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardMonth[]>([])
   const [activities, setActivities] = useState<SeedSalesActivity[]>([])
   const [pipeline, setPipeline] = useState<SeedPipelineStage[]>([])
   const [mapCustomers, setMapCustomers] = useState<Customer[]>([])
@@ -91,6 +93,7 @@ export default function DashboardPage() {
         setInventoryAlerts(data.inventoryAlerts)
         setIntegrations(data.integrations)
         setLeaderboard(data.leaderboard)
+        setLeaderboardHistory(data.leaderboardHistory ?? [])
         setActivities(data.activities)
         setPipeline(data.pipeline)
         setMapCustomers(data.mapCustomers)
@@ -178,7 +181,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Row 2 â€” Sales Leaderboard */}
-        <SalesLeaderboard reps={leaderboard} />
+        <SalesLeaderboard reps={leaderboard} history={leaderboardHistory} />
 
         {/* Row 3 â€” Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

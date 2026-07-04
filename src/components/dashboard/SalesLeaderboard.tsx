@@ -1,9 +1,17 @@
 'use client'
 
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -14,8 +22,15 @@ import {
 } from '@/components/ui/table'
 import type { SeedSalesRep } from '@/lib/seed-data'
 
+export interface LeaderboardMonth {
+  key: string
+  label: string
+  reps: SeedSalesRep[]
+}
+
 interface SalesLeaderboardProps {
   reps: SeedSalesRep[]
+  history?: LeaderboardMonth[]
 }
 
 const rankDisplay = (rank: number) => {
@@ -40,14 +55,22 @@ const activityBadge = (score: SeedSalesRep['activityScore']) => {
   )
 }
 
-export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
-  const sorted = [...reps].sort((a, b) => b.revenueMTD - a.revenueMTD)
+const CURRENT_MONTH_VALUE = 'current'
+
+export function SalesLeaderboard({ reps, history = [] }: SalesLeaderboardProps) {
+  const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH_VALUE)
+  const activeEntry = selectedMonth === CURRENT_MONTH_VALUE
+    ? null
+    : history.find((month) => month.key === selectedMonth) ?? null
+  const activeReps = activeEntry?.reps ?? reps
+  const currentMonthLabel = new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' })
+  const sorted = [...activeReps].sort((a, b) => b.revenueMTD - a.revenueMTD)
   const topRevenue = sorted[0]?.revenueMTD || 1
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b border-border/50 bg-gradient-to-r from-medship-primary/[0.03] to-transparent">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2.5">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-primary/10">
               <svg className="h-4 w-4 text-medship-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -57,6 +80,21 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
             Sales Leaderboard
             {sorted.length === 0 && <ComingSoonBadge />}
           </CardTitle>
+          {history.length > 0 && (
+            <Select value={selectedMonth} onValueChange={(value) => setSelectedMonth(value ?? CURRENT_MONTH_VALUE)}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CURRENT_MONTH_VALUE}>{currentMonthLabel} (MTD)</SelectItem>
+                {history.map((month) => (
+                  <SelectItem key={month.key} value={month.key}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -71,7 +109,9 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16 text-center">Rank</TableHead>
               <TableHead>Sales Rep</TableHead>
-              <TableHead className="text-right">Revenue (MTD)</TableHead>
+              <TableHead className="text-right">
+                {activeEntry ? `Revenue (${activeEntry.label})` : 'Revenue (MTD)'}
+              </TableHead>
               <TableHead className="hidden w-[220px] lg:table-cell">Revenue Bar</TableHead>
               <TableHead className="hidden text-center md:table-cell">Deals Closed</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Profile Calls</TableHead>

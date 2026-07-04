@@ -387,12 +387,19 @@ export interface MonthlyBusinessRevenueByRep {
   [key: string]: string | number
 }
 
+export interface LeaderboardMonthEntry {
+  key: string // YYYY-MM
+  label: string // e.g. "Jun 2026"
+  reps: SalesRepPerformance[]
+}
+
 export interface SalesDashboardCore {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
   monthlyBusinessRevenue: MonthlyBusinessRevenue[]
   monthlyBusinessRevenueByRep: MonthlyBusinessRevenueByRep[]
+  leaderboardHistory: LeaderboardMonthEntry[]
   salesHealth: SalesDataHealth
 }
 
@@ -1686,9 +1693,26 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       label: date.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
     }
   })
-  const metricQueryStart = [yearStart, monthlyStart].sort()[0]
+  // Prior full months selectable on the dashboard leaderboard (oldest first).
+  const LEADERBOARD_HISTORY_MONTHS = 6
+  const historyMonths = Array.from({ length: LEADERBOARD_HISTORY_MONTHS }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (LEADERBOARD_HISTORY_MONTHS - index), 1)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    return {
+      key,
+      label: date.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+    }
+  })
+  const historyStart = `${historyMonths[0].key}-01`
+  // One month earlier than the oldest selectable month so its call-volume
+  // change vs the prior month can still be computed.
+  const callsBaselineDate = new Date(now.getFullYear(), now.getMonth() - LEADERBOARD_HISTORY_MONTHS - 1, 1)
+  const callsQueryStart = `${callsBaselineDate.getFullYear()}-${String(callsBaselineDate.getMonth() + 1).padStart(2, '0')}-01`
+  const metricQueryStart = [yearStart, monthlyStart, historyStart].sort()[0]
 
-  const [usersRes, mappings, orderRows, pipelineRes, callActivitiesRes, linkRowsRes] = await Promise.all([
+  type CallActivityRow = { owner_sf_id: string | null; ringdna_connected: boolean | null; activity_date: string | null }
+
+  const [usersRes, mappings, orderRows, pipelineRes, callActivityRows, linkRowsRes] = await Promise.all([
     supabase.from('sf_users').select('sf_id, name, email').eq('is_active', true),
     getFishbowlSalespersonMappings(),
     fetchAllRows<CanonicalSalesOrderRow>(() =>
@@ -1700,13 +1724,21 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
     ),
     supabase.from('sf_opportunities').select('owner_sf_id, amount').eq('is_closed', false),
-    supabase.from('sf_call_activities').select('owner_sf_id, ringdna_connected, activity_date').gte('activity_date', lastMonthStart),
+    fetchAllRows<CallActivityRow>(() =>
+      supabase
+        .from('sf_call_activities')
+        .select('owner_sf_id, ringdna_connected, activity_date')
+        .gte('activity_date', callsQueryStart)
+        .order('activity_date', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CallActivityRow>
+    ).catch((error) => {
+      if (isMissingRelationError(error)) return [] as CallActivityRow[]
+      throw error
+    }),
     supabase.from('opportunity_sales_order_links').select('*', { count: 'estimated', head: true }),
   ])
 
   if (usersRes.error) throw usersRes.error
   if (pipelineRes.error) throw pipelineRes.error
-  if (callActivitiesRes.error && !isMissingRelationError(callActivitiesRes.error)) throw callActivitiesRes.error
   if (linkRowsRes.error && !isMissingRelationError(linkRowsRes.error)) throw linkRowsRes.error
 
   const usersById = new Map(((usersRes.data ?? []) as SfUserRow[]).map((user) => [user.sf_id, user]))
@@ -1735,13 +1767,14 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
   const monthlyBusinessByRepRows = months.map(({ label }) => ({ month: label } as MonthlyBusinessRevenueByRep))
   const pipelineByOwner = new Map<string, number>()
   const callStatsByOwner = new Map<string, { mtd: number; lastMonth: number; connected: number }>()
+  const callMonthlyByOwner = new Map<string, Map<string, { total: number; connected: number }>>()
 
   for (const opp of (pipelineRes.data ?? []) as Array<Pick<SfOpportunityRow, 'owner_sf_id' | 'amount'>>) {
     if (!opp.owner_sf_id) continue
     pipelineByOwner.set(opp.owner_sf_id, (pipelineByOwner.get(opp.owner_sf_id) ?? 0) + toNumber(opp.amount))
   }
 
-  for (const call of (callActivitiesRes.data ?? []) as Array<{ owner_sf_id: string | null; ringdna_connected: boolean | null; activity_date: string | null }>) {
+  for (const call of callActivityRows) {
     if (!call.owner_sf_id || !call.activity_date) continue
     const stats = callStatsByOwner.get(call.owner_sf_id) ?? { mtd: 0, lastMonth: 0, connected: 0 }
     if (call.activity_date >= monthStart) {
@@ -1751,6 +1784,14 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       stats.lastMonth++
     }
     callStatsByOwner.set(call.owner_sf_id, stats)
+
+    const callMonthKey = call.activity_date.slice(0, 7)
+    const ownerMonths = callMonthlyByOwner.get(call.owner_sf_id) ?? new Map<string, { total: number; connected: number }>()
+    const monthBucket = ownerMonths.get(callMonthKey) ?? { total: 0, connected: 0 }
+    monthBucket.total++
+    if (call.ringdna_connected) monthBucket.connected++
+    ownerMonths.set(callMonthKey, monthBucket)
+    callMonthlyByOwner.set(call.owner_sf_id, ownerMonths)
   }
 
   const kpis: SalesKpis = {
@@ -1858,6 +1899,18 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     aliasStats.set(alias, existing)
   }
 
+  type RepMonthAgg = { revenue: number; newRevenue: number; recurringRevenue: number; orders: number; quotes: number }
+  const historyIndexByKey = new Map(historyMonths.map((month, index) => [month.key, index]))
+  const repHistory = new Map<string, RepMonthAgg[]>()
+  function historyAgg(repId: string, monthIndex: number): RepMonthAgg {
+    let buckets = repHistory.get(repId)
+    if (!buckets) {
+      buckets = Array.from({ length: LEADERBOARD_HISTORY_MONTHS }, () => ({ revenue: 0, newRevenue: 0, recurringRevenue: 0, orders: 0, quotes: 0 }))
+      repHistory.set(repId, buckets)
+    }
+    return buckets[monthIndex]
+  }
+
   for (const { row, amount, metricDate } of businessRows) {
     const mapping = mappingsByAlias.get(aliasKey(row.salesperson))
     const isSelectedRosterRow = Boolean(
@@ -1904,8 +1957,17 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
       rep.lastFishbowlActivityAt = metricDate
     }
 
+    const historyIdx = metricDate ? historyIndexByKey.get(metricDate.slice(0, 7)) : undefined
+
     if (row.canonical_state === 'order') {
       const businessClassification = salesOrderBusinessClassification(row)
+      if (historyIdx !== undefined) {
+        const agg = historyAgg(rep.id, historyIdx)
+        agg.revenue += amount
+        agg.orders++
+        if (businessClassification === 'new_business') agg.newRevenue += amount
+        else if (businessClassification === 'recurring_business') agg.recurringRevenue += amount
+      }
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.revenueMTD += amount
         rep.dealsClosed++
@@ -1950,6 +2012,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
         }
       }
     } else if (row.canonical_state === 'quote') {
+      if (historyIdx !== undefined) historyAgg(rep.id, historyIdx).quotes++
       if (isWithinPeriod(metricDate, activeMonth.start, activeMonth.end)) {
         rep.quotesSent++
         rep.quoteValueMTD += amount
@@ -2034,6 +2097,49 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     }
   }
 
+  // Per-month leaderboard snapshots (newest first) so the dashboard can flip
+  // back through prior months. Clones each rep with that month's figures;
+  // QTD/YTD/pipeline fields keep their as-of-now values (not displayed there).
+  const priorMonthKey = (key: string): string => {
+    const [year, month] = key.split('-').map(Number)
+    const date = new Date(year, month - 2, 1)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  }
+  const leaderboardHistory: LeaderboardMonthEntry[] = [...historyMonths].reverse().map((month) => {
+    const monthIndex = historyIndexByKey.get(month.key) as number
+    const monthReps = reps
+      .map((rep) => {
+        const agg = repHistory.get(rep.id)?.[monthIndex] ?? { revenue: 0, newRevenue: 0, recurringRevenue: 0, orders: 0, quotes: 0 }
+        const calls = callMonthlyByOwner.get(rep.id)?.get(month.key)
+        const prevCalls = callMonthlyByOwner.get(rep.id)?.get(priorMonthKey(month.key))
+        const revenue = roundCurrency(agg.revenue)
+        const profileCalls = calls?.total ?? 0
+        const activityScore: SalesRepPerformance['activityScore'] =
+          profileCalls >= 20 || agg.orders >= 10 || revenue >= 100000 ? 'hot'
+            : profileCalls >= 10 || agg.orders >= 5 || revenue >= 50000 ? 'active'
+              : profileCalls >= 5 || agg.orders >= 2 || revenue > 0 ? 'slow'
+                : 'cold'
+        return {
+          ...rep,
+          revenueMTD: revenue,
+          newBusinessRevenueMTD: roundCurrency(agg.newRevenue),
+          recurringBusinessRevenueMTD: roundCurrency(agg.recurringRevenue),
+          dealsClosed: agg.orders,
+          quotesSent: agg.quotes,
+          profileCalls,
+          profileCallsChange: prevCalls && prevCalls.total > 0
+            ? Math.round(((profileCalls - prevCalls.total) / prevCalls.total) * 1000) / 10
+            : 0,
+          connectRate: profileCalls > 0 ? Math.round(((calls?.connected ?? 0) / profileCalls) * 1000) / 10 : 0,
+          avgDealSize: agg.orders > 0 ? Math.round(revenue / agg.orders) : 0,
+          winRate: agg.orders + agg.quotes > 0 ? Math.round((agg.orders / (agg.orders + agg.quotes)) * 1000) / 10 : 0,
+          activityScore,
+        }
+      })
+      .sort((a, b) => b.revenueMTD - a.revenueMTD)
+    return { key: month.key, label: month.label, reps: monthReps }
+  })
+
   const allAliasGaps = Array.from(aliasStats.values())
     .map((gap) => ({ ...gap, revenueYTD: roundCurrency(gap.revenueYTD) }))
     .sort((a, b) => b.revenueYTD - a.revenueYTD)
@@ -2076,6 +2182,7 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
     monthlyRevenue: monthlyRows,
     monthlyBusinessRevenue: monthlyBusinessRows,
     monthlyBusinessRevenueByRep: monthlyBusinessByRepRows,
+    leaderboardHistory,
     salesHealth: {
       revenueSource: 'fishbowl_sales_orders',
       pipelineSource: 'salesforce_opportunities',
@@ -2113,6 +2220,20 @@ export async function getSalesLeaderboard(): Promise<SeedSalesRep[]> {
   void await getDataSourceMode()
   const liveReps = await getOperationalSalesDashboardCore().then((core) => core.reps)
   return liveReps.sort((a, b) => b.revenueMTD - a.revenueMTD)
+}
+
+export interface SalesLeaderboardWithHistory {
+  current: SalesRepPerformance[]
+  history: LeaderboardMonthEntry[]
+}
+
+export async function getSalesLeaderboardWithHistory(): Promise<SalesLeaderboardWithHistory> {
+  void await getDataSourceMode()
+  const core = await getOperationalSalesDashboardCore()
+  return {
+    current: [...core.reps].sort((a, b) => b.revenueMTD - a.revenueMTD),
+    history: core.leaderboardHistory,
+  }
 }
 
 export async function getEnhancedSalesReps(): Promise<SalesRepPerformance[]> {
