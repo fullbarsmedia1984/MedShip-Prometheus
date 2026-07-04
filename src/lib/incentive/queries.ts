@@ -405,6 +405,19 @@ export async function getPayoutVariance(): Promise<PayoutVarianceRow[]> {
   })) as PayoutVarianceRow[]
 }
 
+/** The rep_key a signed-in user is locked to (profiles.sf_user_id), if any. */
+export async function getRepKeyForUser(userId: string): Promise<string | null> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('sf_user_id')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) throw error
+  const key = (data?.sf_user_id as string | null) ?? null
+  return key && key.trim() !== '' ? key : null
+}
+
 export async function getRefreshState(): Promise<IncentiveRefreshState | null> {
   const supabase = createAdminClient()
   const { data, error } = await supabase

@@ -28,6 +28,8 @@ import {
 
 const ADMIN_ROLES: AppRole[] = ['superadmin', 'admin']
 const STAFF_ROLES: AppRole[] = ['superadmin', 'admin', 'staff']
+const MANAGER_ROLES: AppRole[] = ['superadmin', 'admin', 'staff', 'sales_manager']
+const REP_ROLES: AppRole[] = ['sales_rep']
 
 type NavItem = {
   name: string
@@ -41,7 +43,8 @@ type NavItem = {
 const mainNav: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: STAFF_ROLES },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
-  { name: 'Incentives', href: '/dashboard/incentives', icon: Trophy, roles: STAFF_ROLES },
+  { name: 'Incentives', href: '/dashboard/incentives', icon: Trophy, roles: MANAGER_ROLES },
+  { name: 'My Scorecard', href: '/dashboard/incentives/scorecard', icon: Trophy, roles: REP_ROLES },
   { name: 'TAM', href: '/dashboard/tam', icon: GraduationCap, roles: STAFF_ROLES },
   { name: 'Quotes', href: '/dashboard/quotes', icon: FileText },
   { name: 'Pricing', href: '/dashboard/pricing', icon: DollarSign, roles: STAFF_ROLES },

@@ -35,6 +35,17 @@ export const STAFF_API_AUTH_OPTIONS = {
   roles: ['superadmin', 'admin', 'staff'],
 } satisfies ApiAuthOptions
 
+// Staff plus the sales manager — the incentive Manager View audience.
+export const MANAGER_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_manager'],
+} satisfies ApiAuthOptions
+
+// Every signed-in sales role; sales_rep access is additionally row-scoped to
+// their own records at the API layer.
+export const SALES_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep'],
+} satisfies ApiAuthOptions
+
 type AuthContext = {
   user: User | null
   role: AppRole | null
