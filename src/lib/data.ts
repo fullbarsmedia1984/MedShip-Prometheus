@@ -870,25 +870,33 @@ async function getLiveRevenueMetrics(): Promise<RevenueMetrics> {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0]
 
-  // MTD revenue: sum of closed-won amounts this month
-  const { data: mtdOpps } = await supabase
-    .from('sf_opportunities')
-    .select('amount')
-    .eq('is_won', true)
-    .gte('close_date', monthStart)
+  // MTD revenue from Fishbowl issued SOs (issue-date basis — the same
+  // source as the leaderboard and sales page). Salesforce closed-won is
+  // NOT a revenue source: opportunity hygiene lags reality badly
+  // (Steven, 2026-07-04).
+  const revenueRows = await fetchAllRows<CanonicalSalesOrderRow>(() =>
+    supabase
+      .from('fb_sales_orders')
+      .select(SALES_ORDER_METRIC_SELECT)
+      .eq('canonical_state', 'order')
+      .or(`date_issued.gte.${lastMonthStart},date_completed.gte.${lastMonthStart},date_created.gte.${lastMonthStart}`)
+      .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+  ).catch(() => [] as CanonicalSalesOrderRow[])
 
-  const mtdRevenue = (mtdOpps ?? []).reduce((s, o) => s + (Number(o.amount) || 0), 0)
-
-  // Last month revenue
-  const { data: lastMonthOpps } = await supabase
-    .from('sf_opportunities')
-    .select('amount')
-    .eq('is_won', true)
-    .gte('close_date', lastMonthStart)
-    .lt('close_date', monthStart)
-
-  const lastMonthRevenue = (lastMonthOpps ?? []).reduce((s, o) => s + (Number(o.amount) || 0), 0)
+  let mtdRevenue = 0
+  let lastMonthRevenue = 0
+  for (const row of revenueRows) {
+    const amount = salesOrderAmount(row)
+    if (!isBusinessSalesMetric(row, amount)) continue
+    const metricDate = salesOrderMetricDate(row)
+    if (!metricDate) continue
+    if (metricDate >= monthStart && metricDate < nextMonthStart) mtdRevenue += amount
+    else if (metricDate >= lastMonthStart && metricDate < monthStart) lastMonthRevenue += amount
+  }
+  mtdRevenue = roundCurrency(mtdRevenue)
+  lastMonthRevenue = roundCurrency(lastMonthRevenue)
 
   const mtdRevenueChange = lastMonthRevenue > 0
     ? Math.round(((mtdRevenue - lastMonthRevenue) / lastMonthRevenue) * 1000) / 10
@@ -937,26 +945,126 @@ export async function getMonthlyRevenue(): Promise<MonthlyRevenue[]> {
   return getLiveMonthlyRevenue()
 }
 
+export interface YoYRevenueMonth {
+  month: string // 'Jan' … 'Dec'
+  currentYear: number | null // null for months that haven't started yet
+  priorYear: number
+  cumulativeCurrent: number | null
+  cumulativePrior: number
+}
+
+export interface YoYRevenueComparison {
+  currentYearLabel: string
+  priorYearLabel: string
+  months: YoYRevenueMonth[]
+  currentCumulative: number // through the current month
+  priorCumulativeSamePoint: number // prior year through the same month
+  yoyChangePct: number | null
+}
+
+/**
+ * Calendar-year vs prior-year monthly revenue, from Fishbowl issued SOs
+ * (issue-date basis) scoped to the selected sales roster — the same basis
+ * as the sales page's operational KPIs, so the YoY charts tie to them.
+ */
+export async function getYoYRevenueComparison(): Promise<YoYRevenueComparison> {
+  void await getDataSourceMode()
+  const supabase = createAdminClient()
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const priorYear = currentYear - 1
+  const currentMonthIndex = now.getMonth() // 0-based
+  const startKey = `${priorYear}-01-01`
+
+  const [mappings, rows] = await Promise.all([
+    getFishbowlSalespersonMappings(),
+    fetchAllRows<CanonicalSalesOrderRow>(() =>
+      supabase
+        .from('fb_sales_orders')
+        .select(SALES_ORDER_METRIC_SELECT)
+        .eq('canonical_state', 'order')
+        .or(`date_issued.gte.${startKey},date_completed.gte.${startKey},date_created.gte.${startKey}`)
+        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+    ),
+  ])
+
+  const rosterAliases = new Set(
+    mappings
+      .filter((row) => row.show_on_sales_dashboard && !row.is_house_account && !row.is_system_alias)
+      .map((row) => aliasKey(row.fishbowl_salesperson))
+  )
+
+  const currentTotals = Array.from({ length: 12 }, () => 0)
+  const priorTotals = Array.from({ length: 12 }, () => 0)
+
+  for (const row of rows) {
+    const amount = salesOrderAmount(row)
+    if (!isBusinessSalesMetric(row, amount)) continue
+    if (!rosterAliases.has(aliasKey(row.salesperson))) continue
+    const metricDate = salesOrderMetricDate(row)
+    if (!metricDate) continue
+    const year = Number(metricDate.slice(0, 4))
+    const monthIndex = Number(metricDate.slice(5, 7)) - 1
+    if (!Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) continue
+    if (year === currentYear) currentTotals[monthIndex] += amount
+    else if (year === priorYear) priorTotals[monthIndex] += amount
+  }
+
+  let cumulativeCurrent = 0
+  let cumulativePrior = 0
+  const months: YoYRevenueMonth[] = Array.from({ length: 12 }, (_, index) => {
+    const started = index <= currentMonthIndex
+    cumulativePrior += priorTotals[index]
+    if (started) cumulativeCurrent += currentTotals[index]
+    return {
+      month: new Date(currentYear, index, 1).toLocaleString('en-US', { month: 'short' }),
+      currentYear: started ? roundCurrency(currentTotals[index]) : null,
+      priorYear: roundCurrency(priorTotals[index]),
+      cumulativeCurrent: started ? roundCurrency(cumulativeCurrent) : null,
+      cumulativePrior: roundCurrency(cumulativePrior),
+    }
+  })
+
+  const priorCumulativeSamePoint = months[currentMonthIndex]?.cumulativePrior ?? 0
+  const currentCumulative = months[currentMonthIndex]?.cumulativeCurrent ?? 0
+  return {
+    currentYearLabel: String(currentYear),
+    priorYearLabel: String(priorYear),
+    months,
+    currentCumulative,
+    priorCumulativeSamePoint,
+    yoyChangePct: priorCumulativeSamePoint > 0
+      ? Math.round(((currentCumulative - priorCumulativeSamePoint) / priorCumulativeSamePoint) * 1000) / 10
+      : null,
+  }
+}
+
+// Trailing-12-month revenue trend from Fishbowl issued SOs (issue-date
+// basis, company-wide business orders). Replaced the Salesforce
+// closed-won source 2026-07-04 — opportunity hygiene covered only
+// 4-27% of invoiced revenue and zero for recent months.
 async function getLiveMonthlyRevenue(): Promise<MonthlyRevenue[]> {
   const supabase = createAdminClient()
 
   // Get last 12 months including current month
   const now = new Date()
   const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1)
+  const startKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-01`
 
-  const { data: opps, error } = await supabase
-    .from('sf_opportunities')
-    .select('amount, close_date')
-    .eq('is_won', true)
-    .gte('close_date', startDate.toISOString().split('T')[0])
-    .not('amount', 'is', null)
-
-  if (error || !opps) {
+  const rows = await fetchAllRows<CanonicalSalesOrderRow>(() =>
+    supabase
+      .from('fb_sales_orders')
+      .select(SALES_ORDER_METRIC_SELECT)
+      .eq('canonical_state', 'order')
+      .or(`date_issued.gte.${startKey},date_completed.gte.${startKey},date_created.gte.${startKey}`)
+      .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<CanonicalSalesOrderRow>
+  ).catch((error) => {
     console.error('getLiveMonthlyRevenue query failed:', error)
-    return []
-  }
-  if (opps.length === 0) {
-    warnEmptyLiveTable('sf_opportunities', 'monthly revenue')
+    return [] as CanonicalSalesOrderRow[]
+  })
+
+  if (rows.length === 0) {
+    warnEmptyLiveTable('fb_sales_orders', 'monthly revenue')
     return []
   }
 
@@ -968,13 +1076,14 @@ async function getLiveMonthlyRevenue(): Promise<MonthlyRevenue[]> {
     buckets.set(key, { revenue: 0, orderCount: 0 })
   }
 
-  // Sum opportunity amounts into buckets
-  for (const opp of opps) {
-    if (!opp.close_date || !opp.amount) continue
-    const key = opp.close_date.slice(0, 7) // "2026-03"
-    const bucket = buckets.get(key)
+  for (const row of rows) {
+    const amount = salesOrderAmount(row)
+    if (!isBusinessSalesMetric(row, amount)) continue
+    const metricDate = salesOrderMetricDate(row)
+    if (!metricDate) continue
+    const bucket = buckets.get(metricDate.slice(0, 7))
     if (bucket) {
-      bucket.revenue += Number(opp.amount)
+      bucket.revenue += amount
       bucket.orderCount++
     }
   }

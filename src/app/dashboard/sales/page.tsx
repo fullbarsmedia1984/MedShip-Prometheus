@@ -50,7 +50,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
-import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep } from '@/lib/data'
+import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep, YoYRevenueComparison } from '@/lib/data'
 import type { SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
 import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
@@ -59,6 +59,7 @@ import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeader
 import { CallActivitySummaryCard } from '@/components/dashboard/CallActivitySummaryCard'
 import { RingDnaRepActivityCharts } from '@/components/charts/RingDnaRepActivityCharts'
 import { RevenueCohortSection } from '@/components/dashboard/RevenueCohortSection'
+import { YoYRevenueCharts } from '@/components/charts/YoYRevenueCharts'
 import { ReportingMethodologyDialog } from '@/components/dashboard/ReportingMethodologyDialog'
 import type { CohortDashboard } from '@/lib/cohorts'
 
@@ -122,6 +123,7 @@ type SalesDashboardResponse = {
   profileMetrics: ProfileCallMetricsResult
   callActivitySummary: CallActivitySummary
   cohorts: CohortDashboard | null
+  yoyRevenue?: YoYRevenueComparison | null
 }
 
 function formatDate(dateStr: string): string {
@@ -169,6 +171,7 @@ export default function SalesPage() {
   const [profileMetrics, setProfileMetrics] = useState<ProfileCallMetricsResult | null>(null)
   const [callActivitySummary, setCallActivitySummary] = useState<CallActivitySummary | null>(null)
   const [cohorts, setCohorts] = useState<CohortDashboard | null>(null)
+  const [yoyRevenue, setYoyRevenue] = useState<YoYRevenueComparison | null>(null)
   const [selectedRosterAliases, setSelectedRosterAliases] = useState<string[]>([])
   const [rosterExpanded, setRosterExpanded] = useState(false)
   const [savingRoster, setSavingRoster] = useState(false)
@@ -222,6 +225,7 @@ export default function SalesPage() {
       setProfileMetrics(data.profileMetrics)
       setCallActivitySummary(data.callActivitySummary)
       setCohorts(data.cohorts ?? null)
+      setYoyRevenue(data.yoyRevenue ?? null)
     } catch (error) {
       console.error('Failed to load sales data:', error)
     } finally {
@@ -764,6 +768,9 @@ export default function SalesPage() {
         {profileMetrics && (
           <ProfileCallLeaderboard reps={reps} metrics={profileMetrics} />
         )}
+
+        {/* Year-over-year revenue comparison (Fishbowl issue-date basis, selected roster) */}
+        {yoyRevenue && <YoYRevenueCharts data={yoyRevenue} />}
 
         {/* Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
