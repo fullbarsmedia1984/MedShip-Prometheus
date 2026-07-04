@@ -30,7 +30,7 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b border-border/50 bg-gradient-to-r from-medship-success/[0.03] to-transparent">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2.5">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-success/10">
               <Phone className="h-4 w-4 text-medship-success" />
@@ -38,7 +38,7 @@ export function ProfileCallLeaderboard({ reps, metrics }: ProfileCallLeaderboard
             Call Activity Leaderboard
             {sorted.length === 0 && <ComingSoonBadge />}
           </CardTitle>
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
             <div className="text-right">
               <p className="font-semibold text-card-foreground">{metrics.totalMTD}</p>
               <p className="text-[0.65rem] text-muted-foreground">Total MTD</p>

@@ -157,7 +157,7 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-12 z-50 w-64 overflow-hidden rounded-[0.625rem] border border-border bg-popover shadow-lg"
+              className="absolute right-0 top-12 z-50 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[0.625rem] border border-border bg-popover shadow-lg"
             >
               <div className="border-b border-border px-4 py-3">
                 <p className="truncate text-sm font-medium text-popover-foreground">

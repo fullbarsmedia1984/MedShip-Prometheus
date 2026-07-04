@@ -62,7 +62,7 @@ export function TerritoryList({ customers, onCustomerClick, selectedCustomerId }
       </div>
 
       {/* Filter buttons */}
-      <div className="mb-3 flex gap-1">
+      <div className="mb-3 flex flex-wrap gap-1">
         {filterButtons.map((btn) => (
           <button
             key={btn.value}

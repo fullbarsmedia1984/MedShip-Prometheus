@@ -127,17 +127,17 @@ export function ProfileCallTable({ calls, reps, keywordFilter, onClearKeywordFil
         </div>
 
         <div className="mt-3 flex flex-wrap gap-3">
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search rep, disposition, keywords..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-[260px] pl-8 text-sm"
+              className="h-9 w-full pl-8 text-sm sm:w-[260px]"
             />
           </div>
           <Select value={repFilter} onValueChange={(v) => setRepFilter(v ?? 'all')}>
-            <SelectTrigger className="h-9 w-[160px] text-sm">
+            <SelectTrigger className="h-9 w-full text-sm sm:w-[160px]">
               <SelectValue placeholder="All Reps" />
             </SelectTrigger>
             <SelectContent>
@@ -148,7 +148,7 @@ export function ProfileCallTable({ calls, reps, keywordFilter, onClearKeywordFil
             </SelectContent>
           </Select>
           <Select value={outcomeFilter} onValueChange={(v) => setOutcomeFilter(v ?? 'all')}>
-            <SelectTrigger className="h-9 w-[180px] text-sm">
+            <SelectTrigger className="h-9 w-full text-sm sm:w-[180px]">
               <SelectValue placeholder="All Dispositions" />
             </SelectTrigger>
             <SelectContent>
@@ -159,7 +159,7 @@ export function ProfileCallTable({ calls, reps, keywordFilter, onClearKeywordFil
             </SelectContent>
           </Select>
           <Select value={convertedFilter} onValueChange={(v) => setConvertedFilter(v ?? 'all')}>
-            <SelectTrigger className="h-9 w-[140px] text-sm">
+            <SelectTrigger className="h-9 w-full text-sm sm:w-[140px]">
               <SelectValue placeholder="Converted" />
             </SelectTrigger>
             <SelectContent>
@@ -169,7 +169,7 @@ export function ProfileCallTable({ calls, reps, keywordFilter, onClearKeywordFil
             </SelectContent>
           </Select>
           <Select value={activityTypeFilter} onValueChange={(v) => setActivityTypeFilter(v ?? 'all')}>
-            <SelectTrigger className="h-9 w-[140px] text-sm">
+            <SelectTrigger className="h-9 w-full text-sm sm:w-[140px]">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>

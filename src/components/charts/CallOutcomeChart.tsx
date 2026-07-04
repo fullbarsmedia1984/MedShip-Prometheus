@@ -56,7 +56,7 @@ export function CallOutcomeChart({ data }: CallOutcomeChartProps) {
             className="h-[220px]"
           />
         ) : (
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col items-center gap-4 sm:flex-row">
           <div className="h-[220px] w-[220px] shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -80,7 +80,7 @@ export function CallOutcomeChart({ data }: CallOutcomeChartProps) {
             </ResponsiveContainer>
           </div>
 
-          <div className="flex flex-1 flex-col gap-1.5">
+          <div className="flex w-full flex-1 flex-col gap-1.5">
             {data.map((d) => (
               <div key={d.outcome} className="flex items-center gap-2">
                 <span

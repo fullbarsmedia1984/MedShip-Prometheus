@@ -615,7 +615,7 @@ export default function SettingsPage() {
     <div className="flex flex-col">
       <Header title="Settings" />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 md:p-6">
         {loading ? (
           <div className="flex h-64 items-center justify-center">
             <div className="text-muted-foreground">Loading...</div>
@@ -789,7 +789,7 @@ export default function SettingsPage() {
                         </button>
 
                         {syncExpanded && (
-                          <div className="border-t border-border/30">
+                          <div className="overflow-x-auto border-t border-border/30">
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="text-left text-muted-foreground">
@@ -1101,12 +1101,12 @@ export default function SettingsPage() {
                   Reset all sync data. This will clear all sync events, reset automation
                   schedules, and remove cached inventory snapshots. This action cannot be undone.
                 </p>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <Input
                     placeholder='Type "RESET" to confirm'
                     value={resetConfirm}
                     onChange={(e) => setResetConfirm(e.target.value)}
-                    className="w-64"
+                    className="w-full sm:w-64"
                   />
                   <Button
                     variant="destructive"

@@ -268,7 +268,7 @@ export default function SalesPage() {
     <div className="flex flex-col">
       <Header title="Sales" />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 md:p-6">
         {/* KPI Cards */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard

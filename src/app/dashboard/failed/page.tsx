@@ -118,7 +118,7 @@ export default function FailedPage() {
     return (
       <div className="flex flex-col">
         <Header title="Failed Syncs" />
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           <EmptyState
             icon={CheckCircle2}
             title="All Syncs Healthy"
@@ -133,7 +133,7 @@ export default function FailedPage() {
     <div className="flex flex-col">
       <Header title="Failed Syncs" />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 md:p-6">
         {/* Summary bar */}
         <Card className="shadow-sm">
           <CardContent className="flex flex-wrap items-center gap-4 py-3">

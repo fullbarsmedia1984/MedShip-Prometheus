@@ -120,7 +120,7 @@ export default function DashboardPage() {
     <div className="flex flex-col">
       <Header title="Dashboard" />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 md:p-6">
         {/* Row 1 — KPI Cards (6 total: 3x2 grid) */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard

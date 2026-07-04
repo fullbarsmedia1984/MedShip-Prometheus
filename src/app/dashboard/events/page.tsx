@@ -201,7 +201,7 @@ export default function EventsPage() {
     <div className="flex flex-col">
       <Header title="Event Log" />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 md:p-6">
         {/* KPI Stats Bar */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
@@ -239,8 +239,8 @@ export default function EventsPage() {
             lastRefreshed={lastRefreshed}
           />
 
-          <div className="ml-auto flex flex-wrap items-center gap-3">
-            <div className="w-56">
+          <div className="flex w-full flex-wrap items-center gap-3 sm:ml-auto sm:w-auto">
+            <div className="w-full sm:w-56">
               <Select
                 value={automationFilter}
                 onValueChange={(v) => setAutomationFilter(v ?? 'all')}
@@ -259,7 +259,7 @@ export default function EventsPage() {
               </Select>
             </div>
 
-            <div className="w-40">
+            <div className="w-full sm:w-40">
               <Select
                 value={statusFilter}
                 onValueChange={(v) => setStatusFilter(v ?? 'all')}
@@ -279,7 +279,7 @@ export default function EventsPage() {
             </div>
 
             <Input
-              className="w-64 text-xs"
+              className="w-full text-xs sm:w-64"
               placeholder="Search record ID or error..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

@@ -509,7 +509,7 @@ export default function IncentiveAdminPage() {
   return (
     <div className="flex flex-col">
       <Header title="Q3 Incentive — Admin" />
-      <main className="flex-1 space-y-6 p-6">
+      <main className="flex-1 space-y-6 p-4 md:p-6">
         <AliasSection />
         <MergeMapSection />
         <SettingsSection />

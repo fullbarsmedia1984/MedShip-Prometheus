@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Provider, useDispatch } from 'react-redux'
 import { applyMiddleware, combineReducers, createStore } from 'redux'
@@ -452,8 +452,30 @@ function KeplerMapInner({
     router.push(`/dashboard/tam/browser?institutionId=${encodeURIComponent(institution.id)}`)
   }
 
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  // Kepler requires explicit pixel dimensions — measure the container so the
+  // map fills any viewport instead of a hardcoded 1200x760 canvas.
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+
+    const update = () => {
+      setMapSize({ width: element.clientWidth, height: element.clientHeight })
+    }
+    update()
+
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <div className="tam-kepler-map h-[72vh] min-h-[520px] overflow-hidden rounded-lg border border-border">
+    <div
+      ref={containerRef}
+      className="tam-kepler-map h-[60vh] min-h-[360px] overflow-hidden rounded-lg border border-border sm:h-[72vh] sm:min-h-[520px]"
+    >
       <style jsx global>{`
         .tam-kepler-map .map-popover__layer-name {
           display: none;
@@ -518,14 +540,16 @@ function KeplerMapInner({
           overflow-wrap: anywhere;
         }
       `}</style>
-      <KeplerGl
-        id="tam"
-        mapboxApiAccessToken={mapboxToken}
-        width={1200}
-        height={760}
-        readOnly
-        deckGlProps={{ onClick: handlePointClick }}
-      />
+      {mapSize.width > 0 && mapSize.height > 0 && (
+        <KeplerGl
+          id="tam"
+          mapboxApiAccessToken={mapboxToken}
+          width={mapSize.width}
+          height={mapSize.height}
+          readOnly
+          deckGlProps={{ onClick: handlePointClick }}
+        />
+      )}
     </div>
   )
 }

@@ -246,7 +246,7 @@ export default function PricingImportDetailPage({ params }: PageProps) {
                   Supplier cost review only. Approval records a gated review decision; publish and active cost creation remain disabled.
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={load} disabled={loading}>Refresh</Button>
                 <Button variant="outline" size="sm" onClick={loadPreview} disabled={actionLoading !== null}>
                   Preview
@@ -283,7 +283,7 @@ export default function PricingImportDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <Card className="shadow-sm"><CardContent className="p-4"><FileText className="mb-2 h-5 w-5 text-medship-primary" /><p className="text-2xl font-semibold">{batch?.row_count?.toLocaleString() ?? 0}</p><p className="text-xs uppercase text-muted-foreground">Rows</p></CardContent></Card>
           <Card className="shadow-sm"><CardContent className="p-4"><CheckCircle2 className="mb-2 h-5 w-5 text-medship-success" /><p className="text-2xl font-semibold">{batch?.valid_row_count?.toLocaleString() ?? 0}</p><p className="text-xs uppercase text-muted-foreground">Valid</p></CardContent></Card>
           <Card className="shadow-sm"><CardContent className="p-4"><AlertTriangle className="mb-2 h-5 w-5 text-medship-warning" /><p className="text-2xl font-semibold">{batch?.warning_row_count?.toLocaleString() ?? 0}</p><p className="text-xs uppercase text-muted-foreground">Warning</p></CardContent></Card>
@@ -299,7 +299,7 @@ export default function PricingImportDetailPage({ params }: PageProps) {
                 <Button variant="outline" size="sm" onClick={loadPreview} disabled={actionLoading !== null}>Build Preview</Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
                 <div className="rounded-md border p-3"><p className="text-lg font-semibold">{preview.candidatePendingCostLines.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Pending Candidates</p></div>
                 <div className="rounded-md border p-3"><p className="text-lg font-semibold">{preview.openExceptionCount.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Open Exceptions</p></div>
                 <div className="rounded-md border p-3"><p className="text-lg font-semibold">{preview.blockingRowCount.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Blocking Rows</p></div>

@@ -70,12 +70,12 @@ function ScorecardContent() {
   }
 
   return (
-    <main className="flex-1 space-y-6 p-6">
+    <main className="flex-1 space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Rep Scorecard</h2>
         {data && (
           <Select value={data.found ? data.rep : undefined} onValueChange={selectRep}>
-            <SelectTrigger className="w-64">
+            <SelectTrigger className="w-full sm:w-64">
               <SelectValue placeholder="Select a rep…" />
             </SelectTrigger>
             <SelectContent>

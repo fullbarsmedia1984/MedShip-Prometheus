@@ -196,7 +196,7 @@ export function VerifyDimsDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(
               [
                 ['lengthIn', 'Length (in)'],
@@ -273,7 +273,7 @@ export function VerifyDimsDialog({
             </label>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-[0.7rem] font-medium uppercase tracking-wide text-medship-slate dark:text-white/50">
                 Source

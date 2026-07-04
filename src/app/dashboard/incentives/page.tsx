@@ -73,7 +73,7 @@ export default function IncentivesPage() {
   return (
     <div className="flex flex-col">
       <Header title="Q3 Incentive" />
-      <main className="flex-1 space-y-6 p-6">
+      <main className="flex-1 space-y-6 p-4 md:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Manager View</h2>
