@@ -8,16 +8,15 @@
 //
 // Requires HERCULES_API_* and Supabase env vars (see .env.example).
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const jiti = require('jiti')(path.join(process.cwd(), 'scripts/hercules-catalog-ingest-local.mjs'), {
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const jiti = require('jiti')(fileURLToPath(import.meta.url), {
   alias: {
-    '@': path.join(process.cwd(), 'src'),
-    'server-only': path.join(
-      process.cwd(),
-      'node_modules/next/dist/compiled/server-only/empty.js'
-    ),
+    '@': path.join(scriptDir, '../src'),
+    'server-only': require.resolve('next/dist/compiled/server-only/empty.js'),
   },
   interopDefault: true,
 })

@@ -107,16 +107,17 @@ function requestBodyForRun(run: HerculesIngestionRunRecord): HerculesApiRequestB
   }
 
   if (run.runType === 'delta' && run.updatedSince) {
-    body.sortBy = 'updatedAt'
-    body.sortOrder = 'ASC'
     body.filters = [{ field: 'updatedAt', operator: 'gte', value: run.updatedSince }]
-  } else {
-    // Full runs sort by createdAt so the offset cursor stays stable while
-    // records are being updated mid-import; records created during the run
-    // append at the end and are still picked up.
-    body.sortBy = 'createdAt'
-    body.sortOrder = 'ASC'
   }
+
+  // Always page over the unique, immutable _id. Timestamp sorts
+  // (createdAt/updatedAt) carry heavy ties from bulk imports, and the
+  // backend's sort is not stable within ties — offset pagination then
+  // duplicates and silently skips records across pages (observed ~33%
+  // duplication on the real catalog). Delta windowing comes from the
+  // updatedAt filter above, not the sort.
+  body.sortBy = '_id'
+  body.sortOrder = 'ASC'
 
   return body
 }

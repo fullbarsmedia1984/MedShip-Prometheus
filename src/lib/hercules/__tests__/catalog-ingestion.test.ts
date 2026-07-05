@@ -117,8 +117,8 @@ describe('catalog ingestion engine', () => {
     assert.equal(result.totalRemote, 5)
     // 3 pages of 2/2/1; the last page reports hasNext=false.
     assert.equal(calls.length, 3)
-    // Full runs page over a stable createdAt sort.
-    assert.equal(calls[0].body.sortBy, 'createdAt')
+    // Full runs page over the stable, unique _id sort.
+    assert.equal(calls[0].body.sortBy, '_id')
 
     assert.equal(deps.importRepository.catalogItems.size, 5)
     const finished = await deps.ingestionRepository.getRun(run.id)
@@ -267,8 +267,8 @@ describe('catalog ingestion engine', () => {
     const result = await ingestCatalogPages(deps, { runId: run.id, maxPages: 10 })
     assert.equal(result.status, 'completed')
 
-    // Delta requests sort by updatedAt ascending and filter on the watermark.
-    assert.equal(calls[0].body.sortBy, 'updatedAt')
+    // Delta requests filter on the watermark and page over the stable _id sort.
+    assert.equal(calls[0].body.sortBy, '_id')
     assert.deepEqual(calls[0].body.filters, [
       { field: 'updatedAt', operator: 'gte', value: '2026-06-01T00:00:00.000Z' },
     ])
