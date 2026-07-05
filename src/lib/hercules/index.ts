@@ -1,6 +1,7 @@
 export * from './api-client'
 export * from './api-source'
 export * from './catalog-ingestion'
+export * from './api-sync'
 export * from './eligibility'
 export * from './env'
 export * from './fixtures'

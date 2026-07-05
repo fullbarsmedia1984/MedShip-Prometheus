@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { generateEstimate } from '@/lib/estimator/estimate-service'
 import { SalesOrderNotFoundError } from '@/lib/estimator/so-service'
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const body = (await request.json()) as { soNumber?: string }

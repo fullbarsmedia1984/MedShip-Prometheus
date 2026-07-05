@@ -113,7 +113,7 @@ export function TamContactsBrowser() {
           <CardTitle>Mailing Contacts</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <div className="xl:col-span-2">
               <Input
                 value={search}

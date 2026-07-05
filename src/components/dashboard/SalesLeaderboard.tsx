@@ -1,9 +1,25 @@
 'use client'
 
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, HelpCircle } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -14,8 +30,15 @@ import {
 } from '@/components/ui/table'
 import type { SeedSalesRep } from '@/lib/seed-data'
 
+export interface LeaderboardMonth {
+  key: string
+  label: string
+  reps: SeedSalesRep[]
+}
+
 interface SalesLeaderboardProps {
   reps: SeedSalesRep[]
+  history?: LeaderboardMonth[]
 }
 
 const rankDisplay = (rank: number) => {
@@ -40,14 +63,73 @@ const activityBadge = (score: SeedSalesRep['activityScore']) => {
   )
 }
 
-export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
-  const sorted = [...reps].sort((a, b) => b.revenueMTD - a.revenueMTD)
+const CURRENT_MONTH_VALUE = 'current'
+
+function LeaderboardHelpDialog() {
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-muted-foreground"
+            aria-label="How leaderboard revenue is calculated"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
+        }
+      />
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>How leaderboard revenue is calculated</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-[0.82rem] leading-relaxed text-muted-foreground">
+          <p>
+            Revenue comes from <b>Fishbowl issued Sales Orders</b> only — quotes, voided orders,
+            $0 orders, and test records are excluded. Credits (negative orders) are not counted here.
+          </p>
+          <p>
+            An order counts in the month its SO was <b>issued</b>, not when it was created or when
+            it ships. An order created in March that issues June 1 is <b>June revenue</b>, even if
+            it hasn&apos;t shipped yet. When an issue date isn&apos;t recorded, the completion date
+            (then creation date) stands in.
+          </p>
+          <p>
+            Each order credits the salesperson on the SO, resolved through the Fishbowl alias map;
+            only the selected roster appears here (house and system accounts are tracked separately).
+          </p>
+          <p>
+            The current month shows month-to-date figures; prior months in the selector are full
+            calendar months. Profile calls and connect rate come from RingDNA for the same month.
+            Win rate = issued SOs ÷ (issued SOs + quotes) in the month. Data syncs from Fishbowl
+            every 15 minutes.
+          </p>
+          <p className="border-t pt-2 text-xs">
+            The full methodology (including New/Winback/Recurring cohorts) is on the Sales page
+            under <b>Methodology</b>. Commission math is separate — see the Incentives page.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function SalesLeaderboard({ reps, history = [] }: SalesLeaderboardProps) {
+  const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH_VALUE)
+  const activeEntry = selectedMonth === CURRENT_MONTH_VALUE
+    ? null
+    : history.find((month) => month.key === selectedMonth) ?? null
+  const activeReps = activeEntry?.reps ?? reps
+  const currentMonthLabel = new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' })
+  const sorted = [...activeReps].sort((a, b) => b.revenueMTD - a.revenueMTD)
   const topRevenue = sorted[0]?.revenueMTD || 1
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b border-border/50 bg-gradient-to-r from-medship-primary/[0.03] to-transparent">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2.5">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-primary/10">
               <svg className="h-4 w-4 text-medship-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -55,8 +137,24 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
               </svg>
             </span>
             Sales Leaderboard
+            <LeaderboardHelpDialog />
             {sorted.length === 0 && <ComingSoonBadge />}
           </CardTitle>
+          {history.length > 0 && (
+            <Select value={selectedMonth} onValueChange={(value) => setSelectedMonth(value ?? CURRENT_MONTH_VALUE)}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CURRENT_MONTH_VALUE}>{currentMonthLabel} (MTD)</SelectItem>
+                {history.map((month) => (
+                  <SelectItem key={month.key} value={month.key}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -71,7 +169,9 @@ export function SalesLeaderboard({ reps }: SalesLeaderboardProps) {
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16 text-center">Rank</TableHead>
               <TableHead>Sales Rep</TableHead>
-              <TableHead className="text-right">Revenue (MTD)</TableHead>
+              <TableHead className="text-right">
+                {activeEntry ? `Revenue (${activeEntry.label})` : 'Revenue (MTD)'}
+              </TableHead>
               <TableHead className="hidden w-[220px] lg:table-cell">Revenue Bar</TableHead>
               <TableHead className="hidden text-center md:table-cell">Deals Closed</TableHead>
               <TableHead className="hidden text-center lg:table-cell">Profile Calls</TableHead>

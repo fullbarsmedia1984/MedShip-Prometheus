@@ -433,7 +433,7 @@ function RulesTab() {
                 {group.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {group.fields.map((field) => (
                 <label key={field.label} className="space-y-1">
                   <span className="block text-[0.7rem] font-medium text-medship-slate dark:text-white/50">
@@ -450,7 +450,7 @@ function RulesTab() {
                 </label>
               ))}
               {group.title === 'Packing' && (
-                <label className="col-span-2 flex items-center gap-2 pt-1">
+                <label className="flex items-center gap-2 pt-1 sm:col-span-2">
                   <input
                     type="checkbox"
                     checked={rules.segregate_liquids}

@@ -1,0 +1,42 @@
+.leaderboard {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+}
+
+.leaderboard-row {
+    align-items: center;
+    border: 1px solid #d8dde6;
+    border-radius: 0.25rem;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    padding: 0.75rem;
+}
+
+.rank {
+    color: #1f7a8c;
+    font-size: 1rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.name {
+    font-weight: 700;
+}
+
+.meta {
+    color: #54698d;
+    font-size: 0.75rem;
+}
+
+.points {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.empty {
+    color: #54698d;
+    padding: 1rem;
+}
+

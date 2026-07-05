@@ -12,6 +12,7 @@ type Automation =
   | 'P6_LOW_STOCK_CHECK'
   | 'P7_FB_SO_SYNC'
   | 'P10_HERCULES_CATALOG_INGEST'
+  | 'P8_INCENTIVE_RECOMPUTE'
 
 /**
  * Manual sync trigger endpoint
@@ -91,6 +92,10 @@ export async function POST(request: NextRequest) {
           pageSize: params.pageSize,
           triggeredBy: 'manual',
         },
+      },
+      P8_INCENTIVE_RECOMPUTE: {
+        name: 'incentive/recompute',
+        data: { triggeredBy: 'manual' },
       },
     }
 

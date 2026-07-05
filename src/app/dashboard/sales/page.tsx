@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { KpiCard } from '@/components/dashboard/KpiCard'
+import { SummaryCardPicker } from '@/components/dashboard/SummaryCardPicker'
 import { QuoteStatusBadge } from '@/components/dashboard/QuoteStatusBadge'
 import { EmptyState } from '@/components/dashboard/EmptyState'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
@@ -13,6 +14,13 @@ import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -42,7 +50,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
-import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep } from '@/lib/data'
+import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep, YoYRevenueComparison } from '@/lib/data'
 import type { SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
 import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
@@ -50,6 +58,10 @@ import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
 import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
 import { CallActivitySummaryCard } from '@/components/dashboard/CallActivitySummaryCard'
 import { RingDnaRepActivityCharts } from '@/components/charts/RingDnaRepActivityCharts'
+import { RevenueCohortSection } from '@/components/dashboard/RevenueCohortSection'
+import { YoYRevenueCharts } from '@/components/charts/YoYRevenueCharts'
+import { ReportingMethodologyDialog } from '@/components/dashboard/ReportingMethodologyDialog'
+import type { CohortDashboard } from '@/lib/cohorts'
 
 type SortKey =
   | 'revenueMTD'
@@ -65,9 +77,40 @@ type SortKey =
   | 'avgDealSize'
   | 'pipelineValue'
 
+type SummaryCard = {
+  id: string
+  title: string
+  value: string | number
+  icon: React.ElementType
+  iconColor?: string
+  change?: number
+  changeLabel?: string
+}
+
+const SUMMARY_CARD_IDS = [
+  'operational-mtd',
+  'new-business-mtd',
+  'recurring-mtd',
+  'new-business-mix',
+  'operational-qtd',
+  'operational-ytd',
+  'fishbowl-quotes',
+  'issued-sos',
+  'sf-pipeline',
+  'ringdna-calls',
+] as const
+
+// Default to the first 8 registry entries; the rest stay one click away in
+// the Customize picker.
+const DEFAULT_SUMMARY_CARD_IDS: string[] = SUMMARY_CARD_IDS.slice(0, 8)
+const SUMMARY_CARDS_STORAGE_KEY = 'medship.sales.summary-cards.v1'
+
+type LeaderboardHistoryEntry = { key: string; label: string; reps: SalesRepPerformance[] }
+
 type SalesDashboardResponse = {
   kpis: SalesKpis
   reps: SalesRepPerformance[]
+  leaderboardHistory?: LeaderboardHistoryEntry[]
   monthlyRevenue: SeedMonthlyRepRevenue[]
   monthlyBusinessRevenue: MonthlyBusinessRevenue[]
   monthlyBusinessRevenueByRep: MonthlyBusinessRevenueByRep[]
@@ -79,6 +122,8 @@ type SalesDashboardResponse = {
   outcomeBreakdown: Array<{ outcome: string; count: number; percentage: number; color: string }>
   profileMetrics: ProfileCallMetricsResult
   callActivitySummary: CallActivitySummary
+  cohorts: CohortDashboard | null
+  yoyRevenue?: YoYRevenueComparison | null
 }
 
 function formatDate(dateStr: string): string {
@@ -112,6 +157,8 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true)
   const [kpis, setKpis] = useState<SalesKpis | null>(null)
   const [reps, setReps] = useState<SalesRepPerformance[]>([])
+  const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardHistoryEntry[]>([])
+  const [selectedPerfMonth, setSelectedPerfMonth] = useState('current')
   const [monthlyRevenue, setMonthlyRevenue] = useState<SeedMonthlyRepRevenue[]>([])
   const [monthlyBusinessRevenue, setMonthlyBusinessRevenue] = useState<MonthlyBusinessRevenue[]>([])
   const [monthlyBusinessRevenueByRep, setMonthlyBusinessRevenueByRep] = useState<MonthlyBusinessRevenueByRep[]>([])
@@ -123,18 +170,48 @@ export default function SalesPage() {
   const [outcomeBreakdown, setOutcomeBreakdown] = useState<Array<{ outcome: string; count: number; percentage: number; color: string }>>([])
   const [profileMetrics, setProfileMetrics] = useState<ProfileCallMetricsResult | null>(null)
   const [callActivitySummary, setCallActivitySummary] = useState<CallActivitySummary | null>(null)
+  const [cohorts, setCohorts] = useState<CohortDashboard | null>(null)
+  const [yoyRevenue, setYoyRevenue] = useState<YoYRevenueComparison | null>(null)
   const [selectedRosterAliases, setSelectedRosterAliases] = useState<string[]>([])
   const [rosterExpanded, setRosterExpanded] = useState(false)
   const [savingRoster, setSavingRoster] = useState(false)
   const [rosterError, setRosterError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('revenueMTD')
   const [sortAsc, setSortAsc] = useState(false)
+  const [visibleSummaryCards, setVisibleSummaryCards] = useState<string[]>(DEFAULT_SUMMARY_CARD_IDS)
+
+  // Restore the user's card selection after mount (localStorage is
+  // unavailable during SSR/hydration).
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(SUMMARY_CARDS_STORAGE_KEY)
+      if (!stored) return
+      const parsed: unknown = JSON.parse(stored)
+      if (!Array.isArray(parsed)) return
+      const valid = parsed.filter(
+        (id): id is string => typeof id === 'string' && (SUMMARY_CARD_IDS as readonly string[]).includes(id)
+      )
+      if (valid.length > 0) setVisibleSummaryCards(valid)
+    } catch {
+      // Corrupted value — fall back to the default selection.
+    }
+  }, [])
+
+  const updateVisibleSummaryCards = (ids: string[]) => {
+    setVisibleSummaryCards(ids)
+    try {
+      window.localStorage.setItem(SUMMARY_CARDS_STORAGE_KEY, JSON.stringify(ids))
+    } catch {
+      // Private browsing / quota — selection still applies for this session.
+    }
+  }
 
   const loadData = useCallback(async () => {
     try {
       const data = await fetchJson<SalesDashboardResponse>('/api/dashboard/sales')
       setKpis(data.kpis)
       setReps(data.reps)
+      setLeaderboardHistory(data.leaderboardHistory ?? [])
       setMonthlyRevenue(data.monthlyRevenue)
       setMonthlyBusinessRevenue(data.monthlyBusinessRevenue ?? [])
       setMonthlyBusinessRevenueByRep(data.monthlyBusinessRevenueByRep ?? [])
@@ -147,6 +224,8 @@ export default function SalesPage() {
       setOutcomeBreakdown(data.outcomeBreakdown)
       setProfileMetrics(data.profileMetrics)
       setCallActivitySummary(data.callActivitySummary)
+      setCohorts(data.cohorts ?? null)
+      setYoyRevenue(data.yoyRevenue ?? null)
     } catch (error) {
       console.error('Failed to load sales data:', error)
     } finally {
@@ -226,7 +305,14 @@ export default function SalesPage() {
     }
   }
 
-  const sortedReps = [...reps].sort((a, b) => {
+  // The performance table can flip to a prior full month; every other
+  // section (charts, roster, call metrics) stays on the current period.
+  const perfMonthEntry = selectedPerfMonth === 'current'
+    ? null
+    : leaderboardHistory.find((month) => month.key === selectedPerfMonth) ?? null
+  const perfReps = perfMonthEntry?.reps ?? reps
+
+  const sortedReps = [...perfReps].sort((a, b) => {
     const multiplier = sortAsc ? 1 : -1
     return (a[sortKey] - b[sortKey]) * multiplier
   })
@@ -234,6 +320,88 @@ export default function SalesPage() {
   const topPerformerId = sortedReps[0]?.id
   const activeMetricLabel = salesHealth?.activeMetricPeriodLabel ?? 'MTD'
   const shortMetricLabel = salesHealth?.isMetricPeriodFallback ? activeMetricLabel : 'MTD'
+  // Column label for the month-scoped table columns.
+  const tableMetricLabel = perfMonthEntry ? perfMonthEntry.label : shortMetricLabel
+
+  const summaryCards: SummaryCard[] = kpis
+    ? [
+        {
+          id: 'operational-mtd',
+          title: `Operational Revenue ${shortMetricLabel}`,
+          value: `$${kpis.revenueMTD.toLocaleString()}`,
+          icon: DollarSign,
+          iconColor: 'text-medship-primary',
+        },
+        {
+          id: 'new-business-mtd',
+          title: `New Business Revenue ${shortMetricLabel}`,
+          value: `$${kpis.newBusinessRevenueMTD.toLocaleString()}`,
+          icon: Zap,
+          iconColor: 'text-medship-success',
+        },
+        {
+          id: 'recurring-mtd',
+          title: `Recurring Revenue ${shortMetricLabel}`,
+          value: `$${kpis.recurringBusinessRevenueMTD.toLocaleString()}`,
+          icon: Users,
+          iconColor: 'text-medship-info',
+        },
+        {
+          id: 'new-business-mix',
+          title: `New Business Mix ${shortMetricLabel}`,
+          value: `${kpis.newBusinessMixMTD.toFixed(1)}%`,
+          icon: Target,
+          iconColor: 'text-medship-warning',
+        },
+        {
+          id: 'operational-qtd',
+          title: 'Operational Revenue QTD',
+          value: `$${kpis.revenueQTD.toLocaleString()}`,
+          icon: TrendingUp,
+          iconColor: 'text-medship-success',
+        },
+        {
+          id: 'operational-ytd',
+          title: 'Operational Revenue YTD',
+          value: `$${kpis.revenueYTD.toLocaleString()}`,
+          icon: Award,
+          iconColor: 'text-medship-secondary',
+        },
+        {
+          id: 'fishbowl-quotes',
+          title: `Fishbowl Quotes ${shortMetricLabel}`,
+          value: kpis.quotesSentMTD,
+          icon: FileText,
+          iconColor: 'text-medship-info',
+        },
+        {
+          id: 'issued-sos',
+          title: `Issued SOs ${shortMetricLabel}`,
+          value: kpis.dealsClosedMTD,
+          icon: Target,
+          iconColor: 'text-medship-danger',
+        },
+        {
+          id: 'sf-pipeline',
+          title: 'Salesforce Pipeline',
+          value: `$${kpis.pipelineValue.toLocaleString()}`,
+          icon: Database,
+          iconColor: 'text-medship-warning',
+        },
+        {
+          id: 'ringdna-calls',
+          title: 'RingDNA Calls (MTD)',
+          value: profileMetrics?.totalMTD ?? 0,
+          change:
+            profileMetrics && profileMetrics.totalLastMonth > 0
+              ? Math.round(((profileMetrics.totalMTD - profileMetrics.totalLastMonth) / profileMetrics.totalLastMonth) * 1000) / 10
+              : 0,
+          changeLabel: 'vs last month',
+          icon: Phone,
+          iconColor: 'text-medship-success',
+        },
+      ]
+    : []
 
   if (loading || !kpis) {
     return (
@@ -262,73 +430,27 @@ export default function SalesPage() {
     <div className="flex flex-col">
       <Header title="Sales" />
 
-      <div className="space-y-6 p-6">
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard
-            title={`Operational Revenue ${shortMetricLabel}`}
-            value={`$${kpis.revenueMTD.toLocaleString()}`}
-            icon={DollarSign}
-            iconColor="text-medship-primary"
-          />
-          <KpiCard
-            title={`New Business Revenue ${shortMetricLabel}`}
-            value={`$${kpis.newBusinessRevenueMTD.toLocaleString()}`}
-            icon={Zap}
-            iconColor="text-medship-success"
-          />
-          <KpiCard
-            title={`Recurring Revenue ${shortMetricLabel}`}
-            value={`$${kpis.recurringBusinessRevenueMTD.toLocaleString()}`}
-            icon={Users}
-            iconColor="text-medship-info"
-          />
-          <KpiCard
-            title={`New Business Mix ${shortMetricLabel}`}
-            value={`${kpis.newBusinessMixMTD.toFixed(1)}%`}
-            icon={Target}
-            iconColor="text-medship-warning"
-          />
-          <KpiCard
-            title="Operational Revenue QTD"
-            value={`$${kpis.revenueQTD.toLocaleString()}`}
-            icon={TrendingUp}
-            iconColor="text-medship-success"
-          />
-          <KpiCard
-            title="Operational Revenue YTD"
-            value={`$${kpis.revenueYTD.toLocaleString()}`}
-            icon={Award}
-            iconColor="text-medship-secondary"
-          />
-          <KpiCard
-            title={`Fishbowl Quotes ${shortMetricLabel}`}
-            value={kpis.quotesSentMTD}
-            icon={FileText}
-            iconColor="text-medship-info"
-          />
-          <KpiCard
-            title={`Issued SOs ${shortMetricLabel}`}
-            value={kpis.dealsClosedMTD}
-            icon={Target}
-            iconColor="text-medship-danger"
-          />
-          <KpiCard
-            title="Salesforce Pipeline"
-            value={`$${kpis.pipelineValue.toLocaleString()}`}
-            icon={Database}
-            iconColor="text-medship-warning"
-          />
-          <KpiCard
-            title="RingDNA Calls (MTD)"
-            value={profileMetrics?.totalMTD ?? 0}
-            change={profileMetrics && profileMetrics.totalLastMonth > 0
-              ? Math.round(((profileMetrics.totalMTD - profileMetrics.totalLastMonth) / profileMetrics.totalLastMonth) * 1000) / 10
-              : 0}
-            changeLabel="vs last month"
-            icon={Phone}
-            iconColor="text-medship-success"
-          />
+      <div className="space-y-6 p-4 md:p-6">
+        {/* KPI Cards — user-configurable via the Customize picker */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-medium uppercase tracking-[0.05rem] text-muted-foreground">
+              Dashboard Summary
+            </span>
+            <SummaryCardPicker
+              options={summaryCards.map((card) => ({ id: card.id, label: card.title }))}
+              visibleIds={visibleSummaryCards}
+              defaultIds={DEFAULT_SUMMARY_CARD_IDS}
+              onChange={updateVisibleSummaryCards}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            {summaryCards
+              .filter((card) => visibleSummaryCards.includes(card.id))
+              .map(({ id, ...card }) => (
+                <KpiCard key={id} {...card} />
+              ))}
+          </div>
         </div>
 
         {salesHealth && (
@@ -356,13 +478,16 @@ export default function SalesPage() {
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+              <div className="flex flex-col items-start gap-2 md:items-end">
+                <ReportingMethodologyDialog />
+              <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">Mapped aliases: {salesHealth.mappedAliasCount}</Badge>
                 <Badge variant="outline" className={salesHealth.unmappedAliasCount > 0 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700' : ''}>
                   Unmapped: {salesHealth.unmappedAliasCount}
                 </Badge>
                 <Badge variant="outline">SO links: {salesHealth.linkCoverage}%</Badge>
                 <Badge variant="outline">Link rows: {salesHealth.linkRows}</Badge>
+              </div>
               </div>
             </CardContent>
           </Card>
@@ -411,7 +536,7 @@ export default function SalesPage() {
                         />
                         <span className="font-semibold text-card-foreground">{group.displayName}</span>
                       </span>
-                      <span className="mt-2 text-xs text-muted-foreground">
+                      <span className="mt-2 break-words text-xs text-muted-foreground">
                         {group.aliases.join(', ')}
                       </span>
                       <span className="mt-1 text-xs text-muted-foreground">
@@ -439,18 +564,41 @@ export default function SalesPage() {
           </Card>
         )}
 
+        {/* Revenue Cohorts (NEW / WINBACK / RECURRING, migration 028) */}
+        {cohorts && <RevenueCohortSection cohorts={cohorts} />}
+
         {/* Sales Rep Performance Table */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2">
-              Sales Rep Performance
-              <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700">
-                Fishbowl SO revenue
-              </Badge>
-            </CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                Sales Rep Performance
+                <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-700">
+                  Fishbowl SO revenue
+                </Badge>
+              </CardTitle>
+              {leaderboardHistory.length > 0 && (
+                <Select
+                  value={selectedPerfMonth}
+                  onValueChange={(value) => setSelectedPerfMonth(value ?? 'current')}
+                >
+                  <SelectTrigger className="w-[170px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="current">{activeMetricLabel} (current)</SelectItem>
+                    {leaderboardHistory.map((month) => (
+                      <SelectItem key={month.key} value={month.key}>
+                        {month.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
-            {reps.length === 0 ? (
+            {perfReps.length === 0 ? (
               <EmptyState
                 icon={Award}
                 title="No live sales reps found"
@@ -461,13 +609,13 @@ export default function SalesPage() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Rep</TableHead>
-                  <SortHeader label={`Revenue ${shortMetricLabel}`} field="revenueMTD" className="text-right" />
-                  <SortHeader label={`New Biz ${shortMetricLabel}`} field="newBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
-                  <SortHeader label={`Recurring ${shortMetricLabel}`} field="recurringBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label={`Revenue ${tableMetricLabel}`} field="revenueMTD" className="text-right" />
+                  <SortHeader label={`New Biz ${tableMetricLabel}`} field="newBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
+                  <SortHeader label={`Recurring ${tableMetricLabel}`} field="recurringBusinessRevenueMTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="Revenue QTD" field="revenueQTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="Revenue YTD" field="revenueYTD" className="hidden text-right xl:table-cell" />
-                  <SortHeader label={`Issued SOs ${shortMetricLabel}`} field="dealsClosed" className="text-center" />
-                  <SortHeader label={`Quotes ${shortMetricLabel}`} field="quotesSent" className="hidden text-center md:table-cell" />
+                  <SortHeader label={`Issued SOs ${tableMetricLabel}`} field="dealsClosed" className="text-center" />
+                  <SortHeader label={`Quotes ${tableMetricLabel}`} field="quotesSent" className="hidden text-center md:table-cell" />
                   <SortHeader label="Quote Value" field="quoteValueMTD" className="hidden text-right xl:table-cell" />
                   <SortHeader label="SO Conv." field="winRate" className="text-center" />
                   <SortHeader label="Avg SO" field="avgDealSize" className="hidden text-right lg:table-cell" />
@@ -620,6 +768,9 @@ export default function SalesPage() {
         {profileMetrics && (
           <ProfileCallLeaderboard reps={reps} metrics={profileMetrics} />
         )}
+
+        {/* Year-over-year revenue comparison (Fishbowl issue-date basis, company-wide) */}
+        {yoyRevenue && <YoYRevenueCharts data={yoyRevenue} />}
 
         {/* Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

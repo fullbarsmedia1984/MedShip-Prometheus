@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import type { AppRole } from '@/lib/auth'
 import { useSidebar } from './SidebarContext'
 import {
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   GraduationCap,
   MapPin,
   RefreshCw,
+  Trophy,
   List,
   AlertTriangle,
   Map,
@@ -24,27 +26,43 @@ import {
   X,
 } from 'lucide-react'
 
-const mainNav = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+const ADMIN_ROLES: AppRole[] = ['superadmin', 'admin']
+const STAFF_ROLES: AppRole[] = ['superadmin', 'admin', 'staff']
+const MANAGER_ROLES: AppRole[] = ['superadmin', 'admin', 'staff', 'sales_manager']
+const REP_ROLES: AppRole[] = ['sales_rep']
+
+type NavItem = {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  roles?: AppRole[]
+}
+
+// Items without `roles` are visible to every signed-in role (sales reps get
+// the sales experience: Sales, Quotes, Orders).
+const mainNav: NavItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: STAFF_ROLES },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
-  { name: 'TAM', href: '/dashboard/tam', icon: GraduationCap },
+  { name: 'Incentives', href: '/dashboard/incentives', icon: Trophy, roles: MANAGER_ROLES },
+  { name: 'My Scorecard', href: '/dashboard/incentives/scorecard', icon: Trophy, roles: REP_ROLES },
+  { name: 'TAM', href: '/dashboard/tam', icon: GraduationCap, roles: STAFF_ROLES },
   { name: 'Quotes', href: '/dashboard/quotes', icon: FileText },
-  { name: 'Pricing', href: '/dashboard/pricing', icon: DollarSign },
-  { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes },
+  { name: 'Pricing', href: '/dashboard/pricing', icon: DollarSign, roles: STAFF_ROLES },
+  { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes, roles: STAFF_ROLES },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
-  { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
-  { name: 'Territory', href: '/dashboard/territory', icon: MapPin },
+  { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: STAFF_ROLES },
+  { name: 'Territory', href: '/dashboard/territory', icon: MapPin, roles: STAFF_ROLES },
 ]
 
-const opsNav = [
-  { name: 'Integrations', href: '/dashboard/integrations', icon: RefreshCw },
-  { name: 'Event Log', href: '/dashboard/events', icon: List },
-  { name: 'Failed Syncs', href: '/dashboard/failed', icon: AlertTriangle },
+const opsNav: NavItem[] = [
+  { name: 'Integrations', href: '/dashboard/integrations', icon: RefreshCw, roles: STAFF_ROLES },
+  { name: 'Event Log', href: '/dashboard/events', icon: List, roles: STAFF_ROLES },
+  { name: 'Failed Syncs', href: '/dashboard/failed', icon: AlertTriangle, roles: STAFF_ROLES },
 ]
 
-const configNav = [
-  { name: 'Field Mappings', href: '/dashboard/mappings', icon: Map },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+const configNav: NavItem[] = [
+  { name: 'Field Mappings', href: '/dashboard/mappings', icon: Map, roles: STAFF_ROLES },
+  { name: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ADMIN_ROLES },
 ]
 
 function NavSection({
@@ -109,9 +127,15 @@ function NavSection({
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: AppRole | null }) {
   const pathname = usePathname()
   const { isCollapsed, toggleSidebar, isMobileOpen, closeMobile } = useSidebar()
+
+  const canSee = (item: NavItem) =>
+    !item.roles || (role !== null && item.roles.includes(role))
+  const mainItems = mainNav.filter(canSee)
+  const opsItems = opsNav.filter(canSee)
+  const configItems = configNav.filter(canSee)
 
   const sidebarContent = (
     <div
@@ -141,23 +165,27 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-4">
         <NavSection
           label="Business"
-          items={mainNav}
+          items={mainItems}
           pathname={pathname}
           isCollapsed={isCollapsed}
           isFirst
         />
-        <NavSection
-          label="Operations"
-          items={opsNav}
-          pathname={pathname}
-          isCollapsed={isCollapsed}
-        />
-        <NavSection
-          label="Configuration"
-          items={configNav}
-          pathname={pathname}
-          isCollapsed={isCollapsed}
-        />
+        {opsItems.length > 0 && (
+          <NavSection
+            label="Operations"
+            items={opsItems}
+            pathname={pathname}
+            isCollapsed={isCollapsed}
+          />
+        )}
+        {configItems.length > 0 && (
+          <NavSection
+            label="Configuration"
+            items={configItems}
+            pathname={pathname}
+            isCollapsed={isCollapsed}
+          />
+        )}
       </nav>
 
       {/* Collapse toggle */}
@@ -222,26 +250,30 @@ export function Sidebar() {
               <nav className="flex-1 overflow-y-auto py-4">
                 <NavSection
                   label="Business"
-                  items={mainNav}
+                  items={mainItems}
                   pathname={pathname}
                   isCollapsed={false}
                   onNavigate={closeMobile}
                   isFirst
                 />
-                <NavSection
-                  label="Operations"
-                  items={opsNav}
-                  pathname={pathname}
-                  isCollapsed={false}
-                  onNavigate={closeMobile}
-                />
-                <NavSection
-                  label="Configuration"
-                  items={configNav}
-                  pathname={pathname}
-                  isCollapsed={false}
-                  onNavigate={closeMobile}
-                />
+                {opsItems.length > 0 && (
+                  <NavSection
+                    label="Operations"
+                    items={opsItems}
+                    pathname={pathname}
+                    isCollapsed={false}
+                    onNavigate={closeMobile}
+                  />
+                )}
+                {configItems.length > 0 && (
+                  <NavSection
+                    label="Configuration"
+                    items={configItems}
+                    pathname={pathname}
+                    isCollapsed={false}
+                    onNavigate={closeMobile}
+                  />
+                )}
               </nav>
 
               {/* Mobile footer */}

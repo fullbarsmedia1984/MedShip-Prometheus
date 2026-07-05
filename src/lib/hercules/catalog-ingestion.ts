@@ -234,7 +234,7 @@ export async function ingestCatalogPages(
       maxSourceUpdatedAt = maxIso(maxSourceUpdatedAt, isoOrNull(part.updatedAt))
 
       const normalized = normalizeHerculesApiPart(part, {
-        costIsConfirmedContractCost: false,
+        useLegacyCostFallback: false,
       })
 
       if (!normalized) {

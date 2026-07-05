@@ -27,13 +27,15 @@ function hasTestMarker(...values: Array<string | null | undefined>): boolean {
 export function classifySalesOrder(statusValue: unknown): 'quote' | 'order' | 'void' | 'unknown' {
   const status = String(statusValue ?? '').trim().toLowerCase()
   if (!status) return 'unknown'
-  if (['issued', 'in progress', 'partial', 'fulfilled', 'completed', 'closed'].includes(status)) {
+  // 'closed short' is an issued order that shipped short and was closed —
+  // it carries real revenue and must count as an order, not a quote.
+  if (['issued', 'in progress', 'partial', 'fulfilled', 'completed', 'closed', 'closed short'].includes(status)) {
     return 'order'
   }
   if (['void', 'voided', 'cancelled', 'canceled', 'deleted'].includes(status)) {
     return 'void'
   }
-  if (['estimate', 'expired', 'closed short', 'accepted', 'sent', 'viewed', 'rejected'].includes(status)) {
+  if (['estimate', 'expired', 'accepted', 'sent', 'viewed', 'rejected'].includes(status)) {
     return 'quote'
   }
   return 'unknown'

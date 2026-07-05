@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { inngest } from '@/inngest/client'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 
 // POST /api/sync/salesforce — triggers a full sync
 export async function POST() {
@@ -25,7 +25,7 @@ export async function POST() {
 // GET /api/sync/salesforce — returns current sync state
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const supabase = createAdminClient()

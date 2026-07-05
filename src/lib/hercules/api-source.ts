@@ -3,10 +3,8 @@ import {
   HerculesRateLimitExceededError,
   type HerculesApiRequestBody,
 } from './api-client'
-import { parseMoneyAmount } from './price-parser'
 import { parsePerText } from './per-parser'
 import type {
-  HerculesContractPriceStatus,
   HerculesPricingSource,
   HerculesSupplierItemPayload,
   JsonObject,
@@ -16,6 +14,8 @@ type HerculesApiPartUnit = JsonObject & {
   unit?: unknown
   vendorPartNumber?: unknown
   uomTitle?: unknown
+  price?: unknown
+  contractPrice?: unknown
   cost?: unknown
   per?: unknown
   gtin?: unknown
@@ -50,6 +50,7 @@ type HerculesApiPartVendor = JsonObject & {
 export type HerculesApiPart = JsonObject & {
   _id?: unknown
   msId?: unknown
+  updatedAt?: unknown
   description?: unknown
   manufacturerName?: unknown
   manufacturerId?: unknown
@@ -70,15 +71,20 @@ export type HerculesApiPart = JsonObject & {
 export type ApiHerculesPricingSourceOptions = {
   client: HerculesApiClient
   pageSize?: number
+  initialOffset?: number
   updatedSince?: string
-  costIsConfirmedContractCost?: boolean
+  supplierCode?: string
+  useLegacyCostFallback?: boolean
   lowRateLimitRemainingThreshold?: number
   maxRateLimitRetries?: number
   rateLimitFallbackDelayMs?: number
+  maxRateLimitDelayMs?: number
   sleep?: (ms: number) => Promise<void>
 }
 
-const DEFAULT_PAGE_SIZE = 100
+const MAX_PAGE_SIZE = 500
+const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE
+const DEFAULT_MAX_RATE_LIMIT_DELAY_MS = 65 * 60 * 1000
 
 function textOrNull(value: unknown) {
   if (value === null || value === undefined) return null
@@ -104,25 +110,24 @@ function arrayOrEmpty(value: unknown) {
   return Array.isArray(value) ? value : []
 }
 
-function resetDelayMs(reset: string | null, fallbackDelayMs: number) {
-  if (!reset) return fallbackDelayMs
+function resetDelayMs(reset: string | null, fallbackDelayMs: number, maxDelayMs: number) {
+  const cappedFallbackDelayMs = Math.min(fallbackDelayMs, maxDelayMs)
+  if (!reset) return cappedFallbackDelayMs
   const resetMs = Date.parse(reset)
-  if (!Number.isFinite(resetMs)) return fallbackDelayMs
-  return Math.max(0, resetMs - Date.now())
+  if (!Number.isFinite(resetMs)) return cappedFallbackDelayMs
+  return Math.min(Math.max(0, resetMs - Date.now()), maxDelayMs)
 }
 
-function contractStatusForApiCost(
-  cost: unknown,
-  costIsConfirmedContractCost: boolean
-): HerculesContractPriceStatus {
-  if (parseMoneyAmount(cost as string | number | null) === null) return 'not_provided'
-  return costIsConfirmedContractCost ? 'contract_available' : 'unknown'
+function clampPageSize(pageSize: number | undefined) {
+  if (pageSize === undefined) return DEFAULT_PAGE_SIZE
+  if (!Number.isFinite(pageSize) || pageSize <= 0) return DEFAULT_PAGE_SIZE
+  return Math.min(Math.floor(pageSize), MAX_PAGE_SIZE)
 }
 
 export function normalizeHerculesApiPart(
   part: HerculesApiPart,
   options: {
-    costIsConfirmedContractCost: boolean
+    useLegacyCostFallback?: boolean
   }
 ): HerculesSupplierItemPayload | null {
   const supplierItemId = textOrNull(part._id) ?? textOrNull(part.msId)
@@ -168,18 +173,21 @@ export function normalizeHerculesApiPart(
         uoms: arrayOrEmpty(vendor.units).map((unitValue) => {
           const unit = unitValue as HerculesApiPartUnit
           const parsedPer = parsePerText(unit.per)
-          const cost = parseMoneyAmount(unit.cost as string | number | null)
+          const listPrice = 'price' in unit ? unit.price : null
+          const contractPrice =
+            'contractPrice' in unit || !options.useLegacyCostFallback
+              ? 'contractPrice' in unit
+                ? unit.contractPrice
+                : null
+              : unit.cost
 
           return {
             uomCode: textOrNull(unit.unit),
             vendorPartNumber: textOrNull(unit.vendorPartNumber),
             uomTitle: textOrNull(unit.uomTitle),
-            listPrice: null,
-            contractPrice: cost,
-            contractPriceStatus: contractStatusForApiCost(
-              unit.cost,
-              options.costIsConfirmedContractCost
-            ),
+            listPrice: listPrice as string | number | null,
+            contractPrice: contractPrice as string | number | null,
+            contractPriceStatus: null,
             package: textOrNull(unit.packagingType),
             perQuantity: parsedPer.parsedPerQuantity,
             rawPerText: parsedPer.rawPerText,
@@ -210,21 +218,28 @@ export class ApiHerculesPricingSource implements HerculesPricingSource {
   readonly supplierCode?: string
   private readonly client: HerculesApiClient
   private readonly pageSize: number
+  private readonly initialOffset: number
   private readonly updatedSince: string | undefined
-  private readonly costIsConfirmedContractCost: boolean
+  private readonly useLegacyCostFallback: boolean
   private readonly lowRateLimitRemainingThreshold: number
   private readonly maxRateLimitRetries: number
   private readonly rateLimitFallbackDelayMs: number
+  private readonly maxRateLimitDelayMs: number
   private readonly sleep: (ms: number) => Promise<void>
+  latestProcessedUpdatedAt: string | null = null
 
   constructor(options: ApiHerculesPricingSourceOptions) {
     this.client = options.client
-    this.pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE
+    this.pageSize = clampPageSize(options.pageSize)
+    this.initialOffset = Math.max(0, Math.floor(options.initialOffset ?? 0))
     this.updatedSince = options.updatedSince
-    this.costIsConfirmedContractCost = options.costIsConfirmedContractCost ?? false
+    this.supplierCode = textOrNull(options.supplierCode) ?? undefined
+    this.useLegacyCostFallback = options.useLegacyCostFallback ?? false
     this.lowRateLimitRemainingThreshold = options.lowRateLimitRemainingThreshold ?? 10
     this.maxRateLimitRetries = options.maxRateLimitRetries ?? 1
     this.rateLimitFallbackDelayMs = options.rateLimitFallbackDelayMs ?? 5 * 60 * 1000
+    this.maxRateLimitDelayMs =
+      options.maxRateLimitDelayMs ?? DEFAULT_MAX_RATE_LIMIT_DELAY_MS
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
   }
 
@@ -233,35 +248,78 @@ export class ApiHerculesPricingSource implements HerculesPricingSource {
       limit: this.pageSize,
       offset,
     }
+    const filters: NonNullable<HerculesApiRequestBody['filters']> = []
 
     if (this.updatedSince) {
       body.sortBy = 'updatedAt'
       body.sortOrder = 'ASC'
-      body.filters = [
-        {
-          field: 'updatedAt',
-          operator: 'gte',
-          value: this.updatedSince,
-        },
-      ]
+      filters.push({
+        field: 'updatedAt',
+        operator: 'gte',
+        value: this.updatedSince,
+      })
+    }
+
+    if (this.supplierCode) {
+      filters.push({
+        field: 'vendors.supplierCode',
+        operator: 'eq',
+        value: this.supplierCode,
+      })
+    }
+
+    if (filters.length > 0) {
+      body.filters = filters
     }
 
     return body
   }
 
   async *getSupplierItems(): AsyncIterable<HerculesSupplierItemPayload> {
-    let offset = 0
+    for await (const page of this.getSupplierItemPages()) {
+      for (const item of page.items) {
+        yield item
+      }
+    }
+  }
+
+  async *getSupplierItemPages(): AsyncIterable<{
+    offset: number
+    count: number
+    hasNext: boolean
+    nextOffset: number | null
+    items: HerculesSupplierItemPayload[]
+    latestProcessedUpdatedAt: string | null
+  }> {
+    let offset = this.initialOffset
 
     while (true) {
       const { page, rateLimit } = await this.fetchPageWithRateLimitRetry(
         this.buildRequestBody(offset)
       )
 
+      const items: HerculesSupplierItemPayload[] = []
       for (const part of page.data) {
         const normalized = normalizeHerculesApiPart(part as HerculesApiPart, {
-          costIsConfirmedContractCost: this.costIsConfirmedContractCost,
+          useLegacyCostFallback: this.useLegacyCostFallback,
         })
-        if (normalized) yield normalized
+        if (normalized) {
+          this.trackProcessedCursor(part as HerculesApiPart)
+          items.push(normalized)
+        }
+      }
+
+      const nextOffset = page.metadata.hasNext
+        ? page.metadata.offset + page.metadata.count
+        : null
+
+      yield {
+        offset: page.metadata.offset,
+        count: page.metadata.count,
+        hasNext: page.metadata.hasNext,
+        nextOffset,
+        items,
+        latestProcessedUpdatedAt: this.latestProcessedUpdatedAt,
       }
 
       if (!page.metadata.hasNext) break
@@ -270,10 +328,16 @@ export class ApiHerculesPricingSource implements HerculesPricingSource {
         rateLimit.remaining !== null &&
         rateLimit.remaining <= this.lowRateLimitRemainingThreshold
       ) {
-        await this.sleep(resetDelayMs(rateLimit.reset, this.rateLimitFallbackDelayMs))
+        await this.sleep(
+          resetDelayMs(
+            rateLimit.reset,
+            this.rateLimitFallbackDelayMs,
+            this.maxRateLimitDelayMs
+          )
+        )
       }
 
-      offset = page.metadata.offset + page.metadata.count
+      offset = nextOffset ?? 0
     }
   }
 
@@ -293,9 +357,28 @@ export class ApiHerculesPricingSource implements HerculesPricingSource {
 
         attempts += 1
         await this.sleep(
-          resetDelayMs(this.client.lastRateLimit.reset, this.rateLimitFallbackDelayMs)
+          resetDelayMs(
+            this.client.lastRateLimit.reset,
+            this.rateLimitFallbackDelayMs,
+            this.maxRateLimitDelayMs
+          )
         )
       }
+    }
+  }
+
+  private trackProcessedCursor(part: HerculesApiPart) {
+    const updatedAt = textOrNull(part.updatedAt)
+    if (!updatedAt) return
+
+    const updatedAtMs = Date.parse(updatedAt)
+    if (!Number.isFinite(updatedAtMs)) return
+
+    const currentMs = this.latestProcessedUpdatedAt
+      ? Date.parse(this.latestProcessedUpdatedAt)
+      : Number.NEGATIVE_INFINITY
+    if (!Number.isFinite(currentMs) || updatedAtMs > currentMs) {
+      this.latestProcessedUpdatedAt = updatedAt
     }
   }
 }

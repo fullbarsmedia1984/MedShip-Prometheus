@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medicalshipment.local/schemas/workbook_discovery_profile.schema.json",
+  "title": "WorkbookDiscoveryProfile",
+  "type": "object",
+  "required": [
+    "file_name",
+    "file_hash",
+    "file_size",
+    "workbook_extension",
+    "manifest_metadata",
+    "sheet_names",
+    "hidden_sheets",
+    "sheets",
+    "candidate_pricing_sheets",
+    "risk_flags"
+  ],
+  "properties": {
+    "file_name": { "type": "string" },
+    "file_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "file_size": { "type": "integer", "minimum": 0 },
+    "workbook_extension": { "type": "string" },
+    "manifest_metadata": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      ]
+    },
+    "sheet_names": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "hidden_sheets": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "candidate_pricing_sheets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sheet_name", "score", "reasons"],
+        "properties": {
+          "sheet_name": { "type": "string" },
+          "score": { "type": "number" },
+          "reasons": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sheets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sheetProfile" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "columnCandidate": {
+      "type": "object",
+      "required": ["column_index", "column_letter", "header", "confidence", "matched_term"],
+      "properties": {
+        "column_index": { "type": "integer", "minimum": 1 },
+        "column_letter": { "type": "string" },
+        "header": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "matched_term": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "candidateHeaderRow": {
+      "type": "object",
+      "required": [
+        "sheet_name",
+        "row_index",
+        "score",
+        "non_empty_count",
+        "matched_categories",
+        "labels"
+      ],
+      "properties": {
+        "sheet_name": { "type": "string" },
+        "row_index": { "type": "integer", "minimum": 1 },
+        "score": { "type": "number" },
+        "non_empty_count": { "type": "integer", "minimum": 0 },
+        "matched_categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "sheetProfile": {
+      "type": "object",
+      "required": [
+        "name",
+        "state",
+        "dimensions",
+        "used_range",
+        "merged_cell_ranges",
+        "formula_count",
+        "hidden_row_count",
+        "hidden_column_count",
+        "candidate_header_rows",
+        "candidate_pricing_sheet_score",
+        "candidate_pricing_sheet_reasons",
+        "detected_header_labels",
+        "likely_distributor_sku_columns",
+        "likely_manufacturer_part_number_columns",
+        "likely_description_columns",
+        "likely_uom_columns",
+        "likely_price_columns",
+        "likely_effective_date_columns",
+        "likely_expiration_date_columns",
+        "sample_rows",
+        "risk_flags"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "state": { "type": "string" },
+        "dimensions": {
+          "type": "object",
+          "required": ["max_row", "max_column"],
+          "properties": {
+            "max_row": { "type": "integer", "minimum": 0 },
+            "max_column": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "used_range": {
+          "type": "object",
+          "required": ["min_row", "max_row", "min_column", "max_column", "range"],
+          "properties": {
+            "min_row": { "type": ["integer", "null"], "minimum": 1 },
+            "max_row": { "type": ["integer", "null"], "minimum": 1 },
+            "min_column": { "type": ["integer", "null"], "minimum": 1 },
+            "max_column": { "type": ["integer", "null"], "minimum": 1 },
+            "range": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "merged_cell_ranges": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "formula_count": { "type": "integer", "minimum": 0 },
+        "hidden_row_count": { "type": "integer", "minimum": 0 },
+        "hidden_column_count": { "type": "integer", "minimum": 0 },
+        "candidate_header_rows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/candidateHeaderRow" }
+        },
+        "candidate_pricing_sheet_score": { "type": "number" },
+        "candidate_pricing_sheet_reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "detected_header_labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "likely_distributor_sku_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/columnCandidate" }
+        },
+        "likely_manufacturer_part_number_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/columnCandidate" }
+        },
+        "likely_description_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/columnCandidate" }
+        },
+        "likely_uom_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/columnCandidate" }
+        },
+        "likely_price_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/columnCandidate" }
+        },
+        "likely_effective_date_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/columnCandidate" }
+        },
+        "likely_expiration_date_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/columnCandidate" }
+        },
+        "sample_rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["row_index", "values"],
+            "properties": {
+              "row_index": { "type": "integer", "minimum": 1 },
+              "values": { "type": "object" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "risk_flags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+

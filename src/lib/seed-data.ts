@@ -1038,8 +1038,8 @@ export const seedConnectionConfigs: ConnectionConfig[] = [
 // 17. Profile Call Data
 // =============================================================================
 
-export type ProfileCallType = 'Initial Discovery' | 'Follow-Up' | 'Product Demo' | 'Needs Assessment' | 'Budget Discussion' | 'Contract Review'
-export type ProfileCallOutcome = 'Interested - Next Steps' | 'Needs Follow-Up' | 'Not Interested' | 'Scheduled Demo' | 'Quote Requested'
+export type ProfileCallType = 'Initial Discovery' | 'Follow-Up' | 'Product Demo' | 'Needs Assessment' | 'Budget Discussion' | 'Contract Review' | (string & {})
+export type ProfileCallOutcome = 'Interested - Next Steps' | 'Needs Follow-Up' | 'Not Interested' | 'Scheduled Demo' | 'Quote Requested' | (string & {})
 
 export interface SeedProfileCall {
   id: string

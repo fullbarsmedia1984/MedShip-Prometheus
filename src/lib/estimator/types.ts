@@ -22,6 +22,7 @@ export interface SoLineItem {
   description: string
   quantity: number
   uom: string | null
+  productId: number | null
   fishbowlDims: AdvisoryDims
 }
 

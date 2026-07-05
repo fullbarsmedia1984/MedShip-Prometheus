@@ -195,7 +195,7 @@ export function TamMapClient() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-11">
+        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-11">
           <select
             value={scenario}
             onChange={(event) => setScenario(event.target.value as TamScenario)}

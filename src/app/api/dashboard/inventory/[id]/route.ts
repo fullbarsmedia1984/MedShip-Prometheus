@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { getInventoryDetail } from '@/app/dashboard/inventory/[id]/data'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(_request: NextRequest, context: RouteContext<'/api/dashboard/inventory/[id]'>) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params

@@ -42,6 +42,7 @@ MedShip Prometheus is an integration hub for Medical Shipment LLC that automates
 - Error handling: try/catch at the Inngest function level, specific error types from API clients
 - Environment variables: always accessed via a typed config object, never raw `process.env` in business logic
 - Database queries: use Supabase client, never raw SQL in application code (SQL only in migration files)
+- RLS: every new table must ship role-tiered policies using the helpers from migration 026 (`is_admin_up()`, `is_staff_up()`, `can_view_contract_pricing()`). Flat `USING (true)` read policies and client write policies are not allowed — writes go through the service-role client. Verify with `scripts/rls-verify.sql`.
 
 ## File Naming
 - Components: PascalCase (`SyncStatusCard.tsx`)

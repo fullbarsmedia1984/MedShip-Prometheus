@@ -128,9 +128,9 @@ export function CompetitorKeywordCard({ keywords, onKeywordClick }: CompetitorKe
                 </span>
 
                 {/* Keyword + type badge */}
-                <div className="w-[140px] shrink-0">
+                <div className="w-[100px] shrink-0 sm:w-[140px]">
                   <span className={cn(
-                    'text-sm font-semibold text-card-foreground transition-colors',
+                    'block truncate text-sm font-semibold text-card-foreground transition-colors',
                     onKeywordClick && 'group-hover:text-medship-primary'
                   )}>
                     {kw.keyword}

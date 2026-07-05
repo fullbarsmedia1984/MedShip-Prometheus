@@ -9,12 +9,12 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  await requireDashboardAuth()
+  const auth = await requireDashboardAuth()
 
   return (
     <SidebarProvider>
       <div className="flex h-screen">
-        <Sidebar />
+        <Sidebar role={auth.role} />
         <main className="flex-1 overflow-auto bg-background">
           {children}
         </main>

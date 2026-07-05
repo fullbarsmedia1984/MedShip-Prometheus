@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/auth'
+import { getRepAliases } from '@/lib/reps'
 import { getOrders, getSalesReps } from '@/lib/data'
 import type { OrderFilters } from '@/lib/data'
 import type { Order } from '@/lib/seed-data'
@@ -49,9 +50,15 @@ export async function GET(request: NextRequest) {
     if (!auth.authorized) return auth.response
 
     const params = request.nextUrl.searchParams
+    // Reps only ever see their own orders, regardless of requested filters.
+    const repScope =
+      auth.role === 'sales_rep' && auth.user
+        ? await getRepAliases(auth.user.id)
+        : undefined
     const filters: OrderFilters = {
       status: params.get('status') ?? 'all',
       salesRepId: params.get('salesRepId') ?? 'all',
+      salespersonIn: repScope,
       search: params.get('search') ?? '',
       scope: params.get('scope') === 'all' ? 'all' : 'business',
     }

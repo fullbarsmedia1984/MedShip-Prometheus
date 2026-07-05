@@ -13,7 +13,10 @@ const jiti = require('jiti')(path.join(process.cwd(), 'scripts/hercules-api-smok
   interopDefault: true,
 })
 
-const { HerculesApiClient } = jiti('../src/lib/hercules/api-client.ts')
+const {
+  HerculesApiClient,
+  HerculesMissingCredentialsError,
+} = jiti('../src/lib/hercules/api-client.ts')
 const { ApiHerculesPricingSource } = jiti('../src/lib/hercules/api-source.ts')
 const { importHerculesPricing } = jiti('../src/lib/hercules/importer.ts')
 const {
@@ -22,18 +25,14 @@ const {
 
 function requireEnv(name) {
   const value = process.env[name]
-  if (!value) throw new Error(`${name} is required`)
+  if (!value) throw new HerculesMissingCredentialsError(`${name} is required`)
   return value
-}
-
-function booleanEnv(name) {
-  return process.env[name]?.toLowerCase() === 'true'
 }
 
 async function main() {
   const pageSize = Number(process.env.HERCULES_API_SMOKE_LIMIT ?? '1')
   const client = new HerculesApiClient({
-    baseUrl: process.env.HERCULES_API_BASE_URL,
+    baseUrl: requireEnv('HERCULES_API_BASE_URL'),
     appId: requireEnv('HERCULES_API_APP_ID'),
     accessToken: requireEnv('HERCULES_API_ACCESS_TOKEN'),
     timeoutMs: Number(process.env.HERCULES_API_TIMEOUT_MS ?? '30000'),
@@ -42,7 +41,6 @@ async function main() {
   const source = new ApiHerculesPricingSource({
     client,
     pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 1,
-    costIsConfirmedContractCost: booleanEnv('HERCULES_API_COST_IS_CONTRACT_COST'),
   })
 
   const result = await importHerculesPricing(
@@ -66,6 +64,19 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error)
+  if (error instanceof Error) {
+    console.error(
+      JSON.stringify(
+        {
+          name: error.name,
+          message: error.message,
+        },
+        null,
+        2
+      )
+    )
+  } else {
+    console.error('Unknown Hercules API smoke script error')
+  }
   process.exitCode = 1
 })

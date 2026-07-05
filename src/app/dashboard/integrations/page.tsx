@@ -402,7 +402,7 @@ export default function IntegrationsPage() {
     <div className="flex flex-col">
       <Header title="Integrations" />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 md:p-6">
         {/* ---- Integration Cards ---- */}
         {integrations.length === 0 ? (
           <ComingSoonPanel

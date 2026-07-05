@@ -1,5 +1,7 @@
 import type {
   HerculesAdminPricingResult,
+  HerculesApiSyncStateInput,
+  HerculesApiSyncStateRecord,
   HerculesCatalogItemRecord,
   HerculesImportJobCounters,
   HerculesImportJobRecord,
@@ -50,6 +52,7 @@ export class InMemoryHerculesImportRepository implements HerculesImportRepositor
   readonly catalogItems = new Map<string, HerculesCatalogItemRecord>()
   readonly vendorOffers = new Map<string, HerculesVendorOfferRecord>()
   readonly offerUoms = new Map<string, HerculesOfferUomRecord>()
+  readonly apiSyncStates = new Map<string, HerculesApiSyncStateRecord>()
   readonly mappings: MappingRecord[] = []
 
   async createImportJob(input: {
@@ -155,6 +158,20 @@ export class InMemoryHerculesImportRepository implements HerculesImportRepositor
     const record = { id: nextId('uom'), ...input }
     this.offerUoms.set(record.id, record)
     return { record, created: true }
+  }
+
+  async getApiSyncState(sourceKey: string) {
+    return this.apiSyncStates.get(sourceKey) ?? null
+  }
+
+  async upsertApiSyncState(input: HerculesApiSyncStateInput) {
+    const existing = this.apiSyncStates.get(input.sourceKey)
+    const record: HerculesApiSyncStateRecord = {
+      id: existing?.id ?? nextId('api-sync-state'),
+      ...input,
+    }
+    this.apiSyncStates.set(record.sourceKey, record)
+    return record
   }
 
   approveMapping(input: { zeusProductId: string; herculesOfferUomId: string }) {

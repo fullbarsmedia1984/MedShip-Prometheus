@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { searchVerifiedDims, upsertVerifiedDims } from '@/lib/estimator/repositories'
 
 const upsertSchema = z.object({
@@ -18,7 +18,7 @@ const upsertSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const search = request.nextUrl.searchParams.get('search') ?? undefined
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const parsed = upsertSchema.safeParse(await request.json())

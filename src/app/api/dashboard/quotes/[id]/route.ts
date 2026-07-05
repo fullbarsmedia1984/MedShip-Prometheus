@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/auth'
+import { getRepAliases } from '@/lib/reps'
 import { getQuotes } from '@/lib/data'
 
 type QuoteDetailContext = {
@@ -13,7 +14,18 @@ export async function GET(_request: NextRequest, context: QuoteDetailContext) {
 
     const { id } = await context.params
     const decodedId = decodeURIComponent(id)
-    const result = await getQuotes({ search: decodedId, scope: 'all', pageSize: 1000 })
+    // Reps may only open their own quotes (404, not 403, to avoid confirming
+    // that a given quote number exists).
+    const repScope =
+      auth.role === 'sales_rep' && auth.user
+        ? await getRepAliases(auth.user.id)
+        : undefined
+    const result = await getQuotes({
+      search: decodedId,
+      scope: 'all',
+      salespersonIn: repScope,
+      pageSize: 1000,
+    })
     const quote = result.data.find((item) => item.id === decodedId)
 
     if (!quote) {

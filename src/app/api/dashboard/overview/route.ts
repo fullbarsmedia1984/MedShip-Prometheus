@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import {
   getRevenueMetrics,
   getSalesKpis,
@@ -8,14 +8,16 @@ import {
   getRecentOrders,
   getInventoryAlerts,
   getIntegrationStatus,
-  getSalesLeaderboard,
+  getSalesLeaderboardWithHistory,
   getSalesActivity,
   getPipelineSnapshot,
   getCustomersWithLocations,
   getRegionSummaries,
   getProfileCallMetrics,
 } from '@/lib/data'
-import type { ProfileCallMetricsResult, RevenueMetrics, SalesKpis } from '@/lib/data'
+import type { ProfileCallMetricsResult, RevenueMetrics, SalesKpis, SalesLeaderboardWithHistory } from '@/lib/data'
+
+const EMPTY_LEADERBOARD: SalesLeaderboardWithHistory = { current: [], history: [] }
 
 const DEFAULT_METRICS: RevenueMetrics = {
   mtdRevenue: 0,
@@ -69,7 +71,7 @@ async function safeLoad<T>(label: string, load: () => Promise<T>, fallback: T): 
 
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const [
@@ -80,7 +82,7 @@ export async function GET() {
       recentOrders,
       inventoryAlerts,
       integrations,
-      leaderboard,
+      leaderboardData,
       activities,
       pipeline,
       mapCustomers,
@@ -94,7 +96,7 @@ export async function GET() {
       safeLoad('recent orders', () => getRecentOrders(10), []),
       safeLoad('inventory alerts', () => getInventoryAlerts(5), []),
       safeLoad('integration status', getIntegrationStatus, []),
-      safeLoad('sales leaderboard', getSalesLeaderboard, []),
+      safeLoad('sales leaderboard', getSalesLeaderboardWithHistory, EMPTY_LEADERBOARD),
       safeLoad('sales activity', () => getSalesActivity(10), []),
       safeLoad('pipeline snapshot', getPipelineSnapshot, []),
       safeLoad('map customers', getCustomersWithLocations, []),
@@ -110,7 +112,8 @@ export async function GET() {
       recentOrders,
       inventoryAlerts,
       integrations,
-      leaderboard,
+      leaderboard: leaderboardData.current,
+      leaderboardHistory: leaderboardData.history,
       activities,
       pipeline,
       mapCustomers,

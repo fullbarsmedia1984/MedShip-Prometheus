@@ -70,7 +70,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
         {data.length === 0 ? (
           <ComingSoonPanel
             title="Revenue trend"
-            description="Live Salesforce closed-won opportunity revenue is not available yet."
+            description="Live Fishbowl sales order revenue is not available yet."
             className="h-[300px]"
           />
         ) : (

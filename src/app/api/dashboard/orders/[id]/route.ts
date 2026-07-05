@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/auth'
+import { getRepAliases } from '@/lib/reps'
 import { getOrderById } from '@/lib/data'
 
 type OrderDetailContext = {
@@ -16,6 +17,15 @@ export async function GET(_request: NextRequest, context: OrderDetailContext) {
 
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    // Reps may only open their own orders (404, not 403, to avoid confirming
+    // that a given order number exists).
+    if (auth.role === 'sales_rep' && auth.user) {
+      const aliases = await getRepAliases(auth.user.id)
+      if (!aliases.includes(order.salesRepId)) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      }
     }
 
     return NextResponse.json({ order })

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>Rep whose points are rolled up on this score row.</description>
+    <label>User</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>MedShip Rep Scores</relationshipLabel>
+    <relationshipName>Medship_Rep_Scores</relationshipName>
+    <required>true</required>
+    <type>Lookup</type>
+</CustomField>
+

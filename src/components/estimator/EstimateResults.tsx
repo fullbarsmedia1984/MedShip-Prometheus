@@ -92,7 +92,7 @@ export function EstimateResults({
       )}
 
       {/* Routing verdict */}
-      <div className={cn('flex items-start gap-4 rounded-lg border p-5', routing.className)}>
+      <div className={cn('flex flex-wrap items-start gap-4 rounded-lg border p-4 sm:p-5', routing.className)}>
         <div className="rounded-lg bg-white/60 p-2.5 dark:bg-white/10">
           <RoutingIcon className="h-7 w-7" />
         </div>
@@ -107,7 +107,7 @@ export function EstimateResults({
             ))}
           </ul>
         </div>
-        <div className="hidden text-right sm:block">
+        <div className="w-full text-left sm:w-auto sm:text-right">
           <ConfidenceMeter confidence={estimate.confidenceScore} threshold={confidenceThreshold} compact />
           <div className="mt-1 font-mono text-[0.65rem] text-medship-slate/70 dark:text-white/40">
             {estimate.engineVersion}
@@ -222,7 +222,7 @@ export function EstimateResults({
                 </div>
               ))}
             </div>
-            <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-medship-border pt-4 text-sm dark:border-white/10">
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-medship-border pt-4 text-sm sm:gap-x-8 dark:border-white/10">
               <div>
                 <span className="text-medship-slate dark:text-white/50">Total weight </span>
                 <span className="font-semibold tabular-nums text-medship-heading dark:text-white">
