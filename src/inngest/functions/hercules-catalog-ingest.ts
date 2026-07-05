@@ -73,6 +73,34 @@ export const herculesCatalogIngest = inngest.createFunction(
         status: 'failed',
         errorMessage: `Ingestion run paused after exhausting retries: ${error.message}. Send another P10 ingest event to resume from the checkpoint.`,
       })
+
+      // Self-heal transient outages: re-send the ingest event so the
+      // active run resumes from its checkpoint. Guard against a crash
+      // loop by giving up when failures pile up within the hour — at
+      // that point it stays down until someone investigates.
+      const active = await new SupabaseHerculesIngestionRepository().getActiveRun('parts')
+      if (!active) return
+
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const { count } = await createAdminClient()
+        .from('sync_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('automation', AUTOMATION)
+        .eq('status', 'failed')
+        .gte('created_at', oneHourAgo)
+
+      if ((count ?? 0) > 4) {
+        logger.log('error', AUTOMATION, 'Too many failures in the last hour; not auto-resuming', {
+          runId: active.id,
+          failuresLastHour: count,
+        })
+        return
+      }
+
+      await inngest.send({
+        name: 'hercules/catalog.ingest',
+        data: { runType: active.runType, triggeredBy: 'auto-resume-after-failure' },
+      })
     },
   },
   async ({ event, step }) => {

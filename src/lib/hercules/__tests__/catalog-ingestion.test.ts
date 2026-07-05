@@ -147,7 +147,7 @@ describe('catalog ingestion engine', () => {
     })
 
     await assert.rejects(
-      () => ingestCatalogPages(deps, { runId: run.id, maxPages: 10 }),
+      () => ingestCatalogPages(deps, { runId: run.id, maxPages: 10, transientRetries: 0 }),
       /Simulated network crash/
     )
 
@@ -170,6 +170,34 @@ describe('catalog ingestion engine', () => {
     const offsets = calls.map((call) => call.offset)
     assert.deepEqual(offsets, [0, 2, 4, 4])
     assert.equal(deps.importRepository.catalogItems.size, 6)
+  })
+
+  it('retries transient network failures in-process without losing the page', async () => {
+    const parts = Array.from({ length: 4 }, (_, index) => partAt(index))
+    // The 2nd fetch dies at the network level; the in-process retry
+    // should re-issue it and finish the run in one invocation.
+    const { fetchImpl, calls } = pagedCatalogFetch(parts, { failOnCall: 2 })
+    const deps = buildDeps(fetchImpl)
+    const sleeps: number[] = []
+
+    const { run } = await startOrResumeCatalogIngestion(deps, {
+      runType: 'full',
+      pageSize: 2,
+    })
+
+    const result = await ingestCatalogPages(deps, {
+      runId: run.id,
+      maxPages: 10,
+      sleep: async (ms) => {
+        sleeps.push(ms)
+      },
+    })
+
+    assert.equal(result.status, 'completed')
+    assert.equal(result.counters.rowsSeen, 4)
+    assert.deepEqual(sleeps, [5000])
+    // Offsets: page 0, failed fetch at 2, retried 2.
+    assert.deepEqual(calls.map((call) => call.offset), [0, 2, 2])
   })
 
   it('stops mid-run when the page budget is spent and reports in_progress', async () => {

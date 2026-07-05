@@ -1,4 +1,6 @@
 import {
+  HerculesApiError,
+  HerculesEnvelopeValidationError,
   HerculesRateLimitExceededError,
   type HerculesApiClient,
   type HerculesApiRequestBody,
@@ -64,6 +66,13 @@ export type IngestCatalogPagesOptions = {
   maxPages: number
   /** Pause when the remaining rate-limit budget drops to this value. */
   lowRateLimitThreshold?: number
+  /**
+   * In-process retries for network-level fetch failures (DNS, connect
+   * timeout, reset). Errors the API actually responded with are never
+   * retried here — the caller's retry machinery owns those.
+   */
+  transientRetries?: number
+  sleep?: (ms: number) => Promise<void>
 }
 
 export const HERCULES_MAX_PAGE_SIZE = 500
@@ -215,18 +224,35 @@ export async function ingestCatalogPages(
     resumeAt,
   })
 
+  const transientRetries = options.transientRetries ?? 3
+  const sleep =
+    options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)))
+
   while (pagesProcessed < options.maxPages) {
     let page
     let rateLimit
-    try {
-      ;({ page, rateLimit } = await client.listParts<HerculesApiPart>(
-        requestBodyForRun({ ...run, nextOffset })
-      ))
-    } catch (error) {
-      if (error instanceof HerculesRateLimitExceededError) {
-        return result('rate_limited', rateLimitResumeAt(client.lastRateLimit))
+    let fetchAttempt = 0
+    while (true) {
+      try {
+        ;({ page, rateLimit } = await client.listParts<HerculesApiPart>(
+          requestBodyForRun({ ...run, nextOffset })
+        ))
+        break
+      } catch (error) {
+        if (error instanceof HerculesRateLimitExceededError) {
+          return result('rate_limited', rateLimitResumeAt(client.lastRateLimit))
+        }
+
+        // API-level errors (auth, validation, malformed envelope) are not
+        // transient; only network-level failures get retried in-process.
+        const isTransient =
+          !(error instanceof HerculesApiError) &&
+          !(error instanceof HerculesEnvelopeValidationError)
+        if (!isTransient || fetchAttempt >= transientRetries) throw error
+
+        fetchAttempt += 1
+        await sleep(Math.min(5_000 * fetchAttempt, 30_000))
       }
-      throw error
     }
 
     for (const [recordIndex, rawPart] of page.data.entries()) {
