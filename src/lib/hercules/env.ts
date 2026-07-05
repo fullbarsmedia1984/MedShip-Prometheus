@@ -62,8 +62,12 @@ export function getHerculesApiConfig(): HerculesApiEnvConfig {
 export function getHerculesIngestionConfig(): HerculesIngestionEnvConfig {
   return {
     pageSize: intFromEnv('HERCULES_INGEST_PAGE_SIZE', HERCULES_MAX_PAGE_SIZE, 1, HERCULES_MAX_PAGE_SIZE),
-    pagesPerStep: intFromEnv('HERCULES_INGEST_PAGES_PER_STEP', 5, 1, 50),
-    maxStepsPerRun: intFromEnv('HERCULES_INGEST_MAX_STEPS_PER_RUN', 40, 1, 500),
+    pagesPerStep: intFromEnv('HERCULES_INGEST_PAGES_PER_STEP', 2, 1, 50),
+    // Keep each Inngest run comfortably under ~15 minutes: observed
+    // infrastructure kills runs at ~22.5 minutes ("upstream error"), so
+    // long budgets must come from continuation-event chaining, not from
+    // more steps per run. At ~100s/page, 6 steps x 2 pages ≈ 20 min max.
+    maxStepsPerRun: intFromEnv('HERCULES_INGEST_MAX_STEPS_PER_RUN', 4, 1, 500),
     lowRateLimitThreshold: intFromEnv('HERCULES_INGEST_LOW_RATE_LIMIT_THRESHOLD', 10, 0, 100),
   }
 }
