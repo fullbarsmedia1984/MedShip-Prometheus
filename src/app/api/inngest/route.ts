@@ -18,6 +18,8 @@ import {
   fishbowlSalesOrdersDetailHydrate,
   sfFullSync,
   sfIncrementalSync,
+  herculesCatalogIngest,
+  herculesCatalogDeltaCron,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -59,5 +61,9 @@ export const { GET, POST, PUT } = serve({
     // SF → Supabase cache sync
     sfFullSync,
     sfIncrementalSync,
+
+    // P10: Hercules supplier catalog ingestion
+    herculesCatalogIngest,
+    herculesCatalogDeltaCron,
   ],
 })

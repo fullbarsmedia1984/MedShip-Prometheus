@@ -10,8 +10,9 @@ export type Automation =
   | 'P5_QUOTE_PDF'
   | 'P6_LOW_STOCK_CHECK'
   | 'P7_FB_SO_SYNC'
+  | 'P10_HERCULES_CATALOG_INGEST'
 
-export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'prometheus' | 'inngest'
+export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'prometheus' | 'inngest' | 'hercules'
 
 export interface SyncEvent {
   id?: string

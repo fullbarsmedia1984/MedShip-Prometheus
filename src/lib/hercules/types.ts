@@ -226,6 +226,82 @@ export type UpsertResult<T> = {
   created: boolean
 }
 
+export type HerculesIngestionResource = 'parts' | 'suppliers' | 'products'
+
+export type HerculesIngestionRunType = 'full' | 'delta'
+
+export type HerculesIngestionRunStatus = 'running' | 'completed' | 'failed' | 'cancelled'
+
+export type HerculesIngestionRunRecord = {
+  id: string
+  resource: HerculesIngestionResource
+  runType: HerculesIngestionRunType
+  status: HerculesIngestionRunStatus
+  pageSize: number
+  nextOffset: number
+  pagesFetched: number
+  totalRemote: number | null
+  itemsSeen: number
+  itemsInserted: number
+  itemsUpdated: number
+  itemsRejected: number
+  counters: HerculesImportJobCounters
+  updatedSince: string | null
+  maxSourceUpdatedAt: string | null
+  importJobId: string | null
+  lastError: string | null
+  rateLimitSnapshot: JsonObject | null
+  triggeredBy: string | null
+  startedAt: string
+  completedAt: string | null
+}
+
+export type HerculesIngestionCheckpoint = {
+  nextOffset: number
+  pagesFetched: number
+  totalRemote: number | null
+  counters: HerculesImportJobCounters
+  maxSourceUpdatedAt: string | null
+  rateLimitSnapshot: JsonObject | null
+}
+
+export type HerculesIngestionReject = {
+  runId: string
+  pageOffset: number
+  recordIndex: number
+  herculesItemId: string | null
+  errorMessage: string
+  rawPayload: JsonObject
+}
+
+export type HerculesIngestionRepository = {
+  createRun(input: {
+    resource: HerculesIngestionResource
+    runType: HerculesIngestionRunType
+    pageSize: number
+    updatedSince: string | null
+    importJobId: string | null
+    triggeredBy: string | null
+  }): Promise<HerculesIngestionRunRecord>
+  getRun(id: string): Promise<HerculesIngestionRunRecord | null>
+  getActiveRun(resource: HerculesIngestionResource): Promise<HerculesIngestionRunRecord | null>
+  checkpointRun(id: string, checkpoint: HerculesIngestionCheckpoint): Promise<void>
+  completeRun(
+    id: string,
+    input: {
+      status: Exclude<HerculesIngestionRunStatus, 'running'>
+      lastError?: string | null
+    }
+  ): Promise<void>
+  recordReject(reject: HerculesIngestionReject): Promise<void>
+  getSyncWatermark(resource: HerculesIngestionResource): Promise<string | null>
+  setSyncWatermark(
+    resource: HerculesIngestionResource,
+    watermark: string,
+    lastCompletedRunId: string
+  ): Promise<void>
+}
+
 export type HerculesImportRepository = {
   createImportJob(input: {
     sourceMode: HerculesImportSourceMode

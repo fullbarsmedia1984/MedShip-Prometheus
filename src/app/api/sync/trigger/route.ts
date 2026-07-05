@@ -11,6 +11,7 @@ type Automation =
   | 'P5_QUOTE_PDF'
   | 'P6_LOW_STOCK_CHECK'
   | 'P7_FB_SO_SYNC'
+  | 'P10_HERCULES_CATALOG_INGEST'
 
 /**
  * Manual sync trigger endpoint
@@ -80,6 +81,14 @@ export async function POST(request: NextRequest) {
         data: {
           fullSync: params.fullSync ?? true,
           action: params.action ?? (params.fullSync === false ? 'incremental' : 'backfill.start'),
+          triggeredBy: 'manual',
+        },
+      },
+      P10_HERCULES_CATALOG_INGEST: {
+        name: 'hercules/catalog.ingest',
+        data: {
+          runType: params.runType === 'delta' ? 'delta' : 'full',
+          pageSize: params.pageSize,
           triggeredBy: 'manual',
         },
       },

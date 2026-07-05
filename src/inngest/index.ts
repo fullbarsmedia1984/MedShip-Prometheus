@@ -27,6 +27,10 @@ export {
 } from './functions/fishbowl-sales-orders-sync'
 export { sfFullSync } from './functions/sf-full-sync'
 export { sfIncrementalSync } from './functions/sf-incremental-sync'
+export {
+  herculesCatalogIngest,
+  herculesCatalogDeltaCron,
+} from './functions/hercules-catalog-ingest'
 
 // Re-export client for convenience
 export { inngest } from './client'
