@@ -1,6 +1,8 @@
 import type { JsonObject } from './types'
 
-export const DEFAULT_HERCULES_API_BASE_URL = 'https://hercules-dev.medicalshipment.com'
+// The partner API is served by the Hercules backend service, not the
+// frontend host (hercules-dev.medicalshipment.com serves only the UI).
+export const DEFAULT_HERCULES_API_BASE_URL = 'https://hercules-sv-dev.medicalshipment.com'
 
 export type HerculesRateLimit = {
   limit: number | null
