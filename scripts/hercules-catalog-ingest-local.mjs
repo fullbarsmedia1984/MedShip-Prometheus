@@ -60,12 +60,36 @@ async function main() {
     })
   )
 
+  // Unlike the Inngest pipeline (which gets step retries from the
+  // platform), this script must survive transient network errors itself.
+  const MAX_CONSECUTIVE_FAILURES = 10
+  let consecutiveFailures = 0
+
   for (let processed = 0; processed < maxPages; processed += pagesPerBatch) {
     const startedAt = Date.now()
-    const result = await ingestCatalogPages(deps, {
-      runId: run.id,
-      maxPages: pagesPerBatch,
-    })
+    let result
+    try {
+      result = await ingestCatalogPages(deps, {
+        runId: run.id,
+        maxPages: pagesPerBatch,
+      })
+      consecutiveFailures = 0
+    } catch (error) {
+      consecutiveFailures += 1
+      const waitMs = Math.min(30_000 * consecutiveFailures, 5 * 60_000)
+      console.log(
+        JSON.stringify({
+          status: 'transient_error',
+          attempt: consecutiveFailures,
+          retryInMs: waitMs,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      )
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) throw error
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+      processed -= pagesPerBatch
+      continue
+    }
     console.log(
       JSON.stringify({
         status: result.status,
