@@ -36,6 +36,7 @@ async function main() {
   const batchSize = Number(argValue('--batch-size', '200'))
   const concurrency = Number(argValue('--concurrency', '12'))
   const limit = Number(argValue('--limit', String(Number.MAX_SAFE_INTEGER)))
+  const startCursor = argValue('--start-cursor', '')
 
   const supabase = createAdminClient()
   const repository = new SupabaseHerculesPricingRepository()
@@ -43,7 +44,7 @@ async function main() {
   const job = await repository.createImportJob({ sourceMode: 'direct_db', supplierCode: null })
   console.log(JSON.stringify({ reprocessJobId: job.id, batchSize }))
 
-  let cursor = ''
+  let cursor = startCursor
   let processed = 0
   let failed = 0
   const startedAt = Date.now()

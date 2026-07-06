@@ -256,19 +256,24 @@ export async function importHerculesSupplierItemsBatch(
         supplierCode: offer.supplierCode,
         vendorName: offer.vendorName,
       })
-      await repository.upsertSupplier({
-        sourceKey: hashParts('hercules_supplier', [identity]),
-        sourcePayloadHash: hashPayload(supplierRawPayload),
-        herculesSupplierId: cleanText(offer.supplierId),
-        supplierCode: cleanText(offer.supplierCode),
-        supplierName: offer.vendorName,
-        isVendor: true,
-        isManufacturer: false,
-        isDirect: false,
-        status: supplierStatusForFixture(),
-        rawPayload: supplierRawPayload,
-        lastSeenImportJobId: jobId,
-      })
+      try {
+        await repository.upsertSupplier({
+          sourceKey: hashParts('hercules_supplier', [identity]),
+          sourcePayloadHash: hashPayload(supplierRawPayload),
+          herculesSupplierId: cleanText(offer.supplierId),
+          supplierCode: cleanText(offer.supplierCode),
+          supplierName: offer.vendorName,
+          isVendor: true,
+          isManufacturer: false,
+          isDirect: false,
+          status: supplierStatusForFixture(),
+          rawPayload: supplierRawPayload,
+          lastSeenImportJobId: jobId,
+        })
+      } catch {
+        // Pre-warming is an optimization; a failure here surfaces (and is
+        // recorded) per item below instead of killing the whole batch.
+      }
     }
   }
 

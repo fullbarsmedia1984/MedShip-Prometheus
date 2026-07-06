@@ -381,6 +381,28 @@ export class SupabaseHerculesPricingRepository implements HerculesImportReposito
       .select('*')
       .single()
 
+    // Supplier identity is looser than source_key: payload variants carry
+    // the same supplier_code (or hercules_supplier_id) under different
+    // identities. When the insert trips one of those unique columns, the
+    // row holding it IS this supplier — reuse it rather than failing the
+    // whole item. Full identity unification belongs to the mapping phase.
+    if (error && String((error as { code?: unknown }).code) === '23505') {
+      for (const [column, value] of [
+        ['supplier_code', input.supplierCode],
+        ['hercules_supplier_id', input.herculesSupplierId],
+      ] as const) {
+        if (!value) continue
+        const { data: collided } = await this.supabase
+          .from('hercules_suppliers')
+          .select('*')
+          .eq(column, value)
+          .maybeSingle()
+        if (collided) {
+          return { record: toSupplier(collided as DbRow), created: false }
+        }
+      }
+    }
+
     assertNoError(error)
     return { record: toSupplier(data as DbRow), created: !rowId(existing) }
   }
