@@ -24,7 +24,16 @@ export async function GET(request: NextRequest) {
       pageSize: Number(params.get('pageSize') ?? '25') || 25,
     })
 
-    const facets = params.get('facets') === '1' ? await getCatalogFacets() : null
+    // Facets are additive UI sugar — never let a slow aggregate under
+    // ingestion load take the whole page down.
+    let facets = null
+    if (params.get('facets') === '1') {
+      try {
+        facets = await getCatalogFacets()
+      } catch {
+        facets = null
+      }
+    }
 
     return NextResponse.json({ result, facets })
   } catch (error) {

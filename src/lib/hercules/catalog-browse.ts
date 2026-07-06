@@ -140,11 +140,15 @@ export async function listCatalogItems(
   const pageSize = Math.min(Math.max(params.pageSize, 1), 100)
   const from = (page - 1) * pageSize
 
+  // Estimated count: an exact count(*) over the ~750k-row table takes
+  // >10s during ingestion churn and trips PostgREST's statement timeout,
+  // which cancels the whole request. Planner estimates are instant and
+  // easily good enough for pagination.
   let query = supabase
     .from('hercules_catalog_items')
     .select(
       'id, hercules_item_id, ms_id, description, brand, manufacturer_name, manufacturer_part_number, category, subcategory, status, updated_at, hercules_vendor_offers(count)',
-      { count: 'exact' }
+      { count: 'estimated' }
     )
 
   const q = params.q ? sanitizeSearchTerm(params.q) : ''
