@@ -220,6 +220,87 @@ export async function importHerculesSupplierItem(
   }
 }
 
+export type BatchItemResult = {
+  item: HerculesSupplierItemPayload
+  error: Error | null
+}
+
+/**
+ * Import many normalized items with bounded concurrency. Suppliers shared
+ * across the batch are upserted once up front so concurrent items take the
+ * conflict-free update path instead of racing inserts. Per-item failures
+ * are returned, not thrown, so callers can record rejects and continue.
+ */
+export async function importHerculesSupplierItemsBatch(
+  items: HerculesSupplierItemPayload[],
+  context: {
+    repository: HerculesImportRepository
+    jobId: string
+    counters: HerculesImportJobCounters
+    concurrency?: number
+  }
+): Promise<BatchItemResult[]> {
+  const { repository, jobId, counters } = context
+  const concurrency = Math.max(1, context.concurrency ?? 8)
+
+  const seenSuppliers = new Set<string>()
+  for (const item of items) {
+    for (const offer of item.vendorOffers) {
+      const identity = offer.supplierId ?? offer.supplierCode ?? offer.vendorName
+      const key = String(identity).toUpperCase()
+      if (seenSuppliers.has(key)) continue
+      seenSuppliers.add(key)
+
+      const supplierRawPayload = asRawPayload({
+        supplierId: offer.supplierId,
+        supplierCode: offer.supplierCode,
+        vendorName: offer.vendorName,
+      })
+      await repository.upsertSupplier({
+        sourceKey: hashParts('hercules_supplier', [identity]),
+        sourcePayloadHash: hashPayload(supplierRawPayload),
+        herculesSupplierId: cleanText(offer.supplierId),
+        supplierCode: cleanText(offer.supplierCode),
+        supplierName: offer.vendorName,
+        isVendor: true,
+        isManufacturer: false,
+        isDirect: false,
+        status: supplierStatusForFixture(),
+        rawPayload: supplierRawPayload,
+        lastSeenImportJobId: jobId,
+      })
+    }
+  }
+
+  const results: BatchItemResult[] = new Array(items.length)
+  let nextIndex = 0
+
+  async function worker() {
+    while (true) {
+      const index = nextIndex++
+      if (index >= items.length) return
+      const item = items[index]
+      counters.rowsSeen += 1
+      try {
+        await importHerculesSupplierItem(item, { repository, jobId, counters })
+        results[index] = { item, error: null }
+      } catch (error) {
+        counters.rowsRejected += 1
+        results[index] = {
+          item,
+          error: error instanceof Error ? error : new Error(String(error)),
+        }
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+  )
+
+  return results
+}
+
 export async function importHerculesPricing(
   source: HerculesPricingSource,
   repository: HerculesImportRepository

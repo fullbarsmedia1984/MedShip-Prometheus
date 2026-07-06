@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { inngest } from '@/inngest'
-import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import {
+  ADMIN_API_AUTH_OPTIONS,
+  STAFF_API_AUTH_OPTIONS,
+  requireApiAuth,
+} from '@/lib/auth'
 import { cancelCatalogIngestion } from '@/lib/hercules/catalog-ingestion'
 import { isHerculesApiConfigured } from '@/lib/hercules/env'
 import { SupabaseHerculesIngestionRepository } from '@/lib/hercules/ingestion-repository'
@@ -19,7 +23,9 @@ import { logSyncEvent } from '@/lib/utils/logger'
  */
 export async function GET() {
   try {
-    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
+    // Staff can read run status (it powers the Integrations ops card);
+    // starting/cancelling runs below stays admin-only.
+    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const repository = new SupabaseHerculesIngestionRepository()

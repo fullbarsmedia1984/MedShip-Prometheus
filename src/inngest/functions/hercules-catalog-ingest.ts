@@ -145,6 +145,7 @@ export const herculesCatalogIngest = inngest.createFunction(
           runId: start.runId,
           maxPages: config.pagesPerStep,
           lowRateLimitThreshold: config.lowRateLimitThreshold,
+          writeConcurrency: config.writeConcurrency,
         })
       )
 

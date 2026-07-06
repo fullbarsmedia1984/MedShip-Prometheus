@@ -8,9 +8,11 @@ import {
   startOrResumeCatalogIngestion,
   type CatalogIngestionDeps,
 } from '../catalog-ingestion'
+import { normalizeHerculesApiPart } from '../api-source'
 import {
   apiPartWithMultipleVendors,
   apiPartWithNumericCost,
+  apiPartWithPopulatedReferences,
   herculesApiEnvelope,
   herculesApiPartsPage,
 } from '../api-fixtures'
@@ -315,6 +317,33 @@ describe('catalog ingestion engine', () => {
     const { run } = await startOrResumeCatalogIngestion(deps, { runType: 'delta' })
     assert.equal(run.runType, 'full')
     assert.equal(run.updatedSince, null)
+  })
+
+  it('normalizes real egress payloads with populated references', () => {
+    const normalized = normalizeHerculesApiPart(apiPartWithPopulatedReferences, {
+      useLegacyCostFallback: false,
+    })
+
+    assert.ok(normalized)
+    assert.equal(normalized.manufacturer.name, 'EDWARDS GARMENT CO')
+    assert.equal(normalized.manufacturer.id, '69ce2fe986f57d4ec14a9a55')
+    assert.equal(normalized.status, 'Active')
+    assert.deepEqual(normalized.images, ['https://img.example.com/pants.jpg'])
+
+    // The vendor arrives as a populated vendorId reference and must not
+    // be dropped — this exact miss silently discarded every real vendor
+    // offer in the first live import.
+    assert.equal(normalized.vendorOffers.length, 1)
+    const offer = normalized.vendorOffers[0]
+    assert.equal(offer.vendorName, 'Medline')
+    assert.equal(offer.supplierId, '69ce2fb086f57d4ec14a99df')
+
+    // Unit `cost` (catalog price) is captured as list price; the null
+    // contractPrice stays null so cost eligibility is not asserted.
+    assert.equal(offer.uoms[0].listPrice, 179.47)
+    assert.equal(offer.uoms[0].contractPrice, null)
+    assert.equal(offer.uoms[0].vendorPartNumber, '2525NV48XU')
+    assert.equal(offer.uoms[0].weight, 0.31)
   })
 
   it('marks a run and its import job failed', async () => {

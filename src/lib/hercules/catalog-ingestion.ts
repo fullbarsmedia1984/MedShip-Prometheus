@@ -7,7 +7,10 @@ import {
   type HerculesRateLimit,
 } from './api-client'
 import { normalizeHerculesApiPart, type HerculesApiPart } from './api-source'
-import { emptyImportCounters, importHerculesSupplierItem } from './importer'
+import {
+  emptyImportCounters,
+  importHerculesSupplierItemsBatch,
+} from './importer'
 import type {
   HerculesImportJobCounters,
   HerculesImportRepository,
@@ -73,6 +76,8 @@ export type IngestCatalogPagesOptions = {
    */
   transientRetries?: number
   sleep?: (ms: number) => Promise<void>
+  /** Concurrent item writes per page (DB round-trips dominate page time). */
+  writeConcurrency?: number
 }
 
 export const HERCULES_MAX_PAGE_SIZE = 500
@@ -255,8 +260,13 @@ export async function ingestCatalogPages(
       }
     }
 
+    const pageEntries: Array<{
+      recordIndex: number
+      part: HerculesApiPart
+      normalized: NonNullable<ReturnType<typeof normalizeHerculesApiPart>>
+    }> = []
+
     for (const [recordIndex, rawPart] of page.data.entries()) {
-      counters.rowsSeen += 1
       const part = rawPart as HerculesApiPart
       maxSourceUpdatedAt = maxIso(maxSourceUpdatedAt, isoOrNull(part.updatedAt))
 
@@ -265,6 +275,7 @@ export async function ingestCatalogPages(
       })
 
       if (!normalized) {
+        counters.rowsSeen += 1
         counters.rowsRejected += 1
         await ingestionRepository.recordReject({
           runId: run.id,
@@ -277,24 +288,30 @@ export async function ingestCatalogPages(
         continue
       }
 
-      try {
-        await importHerculesSupplierItem(normalized, {
-          repository: importRepository,
-          jobId: run.importJobId,
-          counters,
-        })
-      } catch (error) {
-        counters.rowsRejected += 1
-        await ingestionRepository.recordReject({
-          runId: run.id,
-          pageOffset: nextOffset,
-          recordIndex,
-          herculesItemId: normalized.supplierItemId,
-          errorMessage:
-            error instanceof Error ? error.message : 'Unknown Hercules ingestion error',
-          rawPayload: part,
-        })
+      pageEntries.push({ recordIndex, part, normalized })
+    }
+
+    const writeResults = await importHerculesSupplierItemsBatch(
+      pageEntries.map((entry) => entry.normalized),
+      {
+        repository: importRepository,
+        jobId: run.importJobId,
+        counters,
+        concurrency: options.writeConcurrency,
       }
+    )
+
+    for (const [entryIndex, writeResult] of writeResults.entries()) {
+      if (!writeResult.error) continue
+      const entry = pageEntries[entryIndex]
+      await ingestionRepository.recordReject({
+        runId: run.id,
+        pageOffset: nextOffset,
+        recordIndex: entry.recordIndex,
+        herculesItemId: entry.normalized.supplierItemId,
+        errorMessage: writeResult.error.message,
+        rawPayload: entry.part,
+      })
     }
 
     nextOffset = page.metadata.offset + page.metadata.count
