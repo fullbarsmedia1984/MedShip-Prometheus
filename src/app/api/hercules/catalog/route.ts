@@ -8,7 +8,9 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-const PRICE_ROLES = new Set(['superadmin', 'admin', 'staff'])
+// Owner decision 2026-07-08: every signed-in role (sales reps,
+// purchasing/quotes staff, admins) may see supplier cost.
+const PRICE_ROLES = new Set(['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep'])
 
 /**
  * Supplier Catalog search endpoint. All signed-in roles may browse
