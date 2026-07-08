@@ -55,6 +55,7 @@ export default function CatalogItemDetailPage({
 }) {
   const { id } = use(params)
   const [detail, setDetail] = useState<CatalogItemDetail | null>(null)
+  const [canSeePrices, setCanSeePrices] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showRaw, setShowRaw] = useState(false)
@@ -63,10 +64,11 @@ export default function CatalogItemDetailPage({
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchJson<{ detail: CatalogItemDetail }>(
+      const data = await fetchJson<{ detail: CatalogItemDetail; canSeePrices: boolean }>(
         `/api/hercules/catalog/${encodeURIComponent(id)}`
       )
       setDetail(data.detail)
+      setCanSeePrices(data.canSeePrices)
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Unknown error')
     } finally {
@@ -249,8 +251,12 @@ export default function CatalogItemDetailPage({
                             <TableHead>Unit</TableHead>
                             <TableHead>Vendor Part #</TableHead>
                             <TableHead>Pack</TableHead>
-                            <TableHead className="text-right">Catalog Price</TableHead>
-                            <TableHead className="text-right">Contract Price</TableHead>
+                            {canSeePrices && (
+                              <>
+                                <TableHead className="text-right">Catalog Price</TableHead>
+                                <TableHead className="text-right">Contract Price</TableHead>
+                              </>
+                            )}
                             <TableHead>GTIN</TableHead>
                             <TableHead>HCPCS</TableHead>
                             <TableHead className="text-right">Weight</TableHead>
@@ -274,20 +280,24 @@ export default function CatalogItemDetailPage({
                               <TableCell className="text-sm">
                                 {uom.package ?? uom.perQuantity ?? '—'}
                               </TableCell>
-                              <TableCell className="text-right text-sm tabular-nums">
-                                {money(uom.listPriceAmount, uom.currency)}
-                              </TableCell>
-                              <TableCell className="text-right text-sm tabular-nums">
-                                {uom.contractPriceAmount !== null ? (
-                                  money(uom.contractPriceAmount, uom.currency)
-                                ) : (
-                                  <span className="text-muted-foreground">
-                                    {uom.contractPriceStatus === 'not_provided'
-                                      ? '—'
-                                      : uom.contractPriceStatus ?? '—'}
-                                  </span>
-                                )}
-                              </TableCell>
+                              {canSeePrices && (
+                                <>
+                                  <TableCell className="text-right text-sm tabular-nums">
+                                    {money(uom.listPriceAmount, uom.currency)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm tabular-nums">
+                                    {uom.contractPriceAmount !== null ? (
+                                      money(uom.contractPriceAmount, uom.currency)
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        {uom.contractPriceStatus === 'not_provided'
+                                          ? '—'
+                                          : uom.contractPriceStatus ?? '—'}
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                </>
+                              )}
                               <TableCell className="font-mono text-xs">
                                 {uom.gtin ?? '—'}
                               </TableCell>
@@ -310,6 +320,7 @@ export default function CatalogItemDetailPage({
               )}
             </div>
 
+            {canSeePrices && (
             <Card>
               <CardHeader className="pb-2">
                 <button
@@ -332,6 +343,7 @@ export default function CatalogItemDetailPage({
                 </CardContent>
               )}
             </Card>
+            )}
           </>
         )}
       </main>

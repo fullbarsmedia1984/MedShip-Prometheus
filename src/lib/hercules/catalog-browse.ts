@@ -4,20 +4,25 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { JsonObject } from './types'
 
 /**
- * Read models for the Supplier Catalog browser. Hercules staging data is
- * Class P (admin-only); every consumer of these queries must sit behind
- * ADMIN_API_AUTH_OPTIONS.
+ * Read models for the Supplier Catalog browser.
+ *
+ * Access model (product decision 2026-07-08): every signed-in role may
+ * browse catalog attributes so reps can find products; supplier BUY
+ * prices (list/contract) remain staff-and-above and are stripped
+ * server-side for sales reps. Direct-DB RLS stays admin-only (Class P);
+ * these queries run through the service role behind role-checked routes.
  */
 
-export type CatalogListParams = {
+export type CatalogSearchParams = {
   q?: string
   manufacturer?: string
   category?: string
+  vendor?: string
   page: number
   pageSize: number
 }
 
-export type CatalogListItem = {
+export type CatalogSearchItem = {
   id: string
   herculesItemId: string
   msId: string | null
@@ -28,20 +33,27 @@ export type CatalogListItem = {
   category: string | null
   subcategory: string | null
   status: string | null
-  vendorOfferCount: number
+  imageUrl: string | null
   updatedAt: string | null
+  vendors: string[]
+  offerCount: number
+  priceMin: number | null
+  priceMax: number | null
 }
 
-export type CatalogListResult = {
-  data: CatalogListItem[]
+export type CatalogSearchResult = {
+  items: CatalogSearchItem[]
+  hasMore: boolean
+  /** Planner estimate; only present for the unfiltered browse view. */
+  estimatedTotal: number | null
   page: number
   pageSize: number
-  total: number
 }
 
 export type CatalogFacets = {
   manufacturers: Array<{ name: string; count: number }>
   categories: Array<{ name: string; count: number }>
+  vendors: Array<{ name: string; count: number }>
   itemsWithOffers: number
   vendorOffers: number
   suppliers: number
@@ -126,65 +138,74 @@ function numberOrNull(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-// PostgREST .or() filter values cannot contain these unescaped; strip them
-// rather than escape so a search never turns into a filter-syntax error.
-function sanitizeSearchTerm(term: string) {
-  return term.replace(/[,()."\\]/g, ' ').trim()
-}
-
-export async function listCatalogItems(
-  params: CatalogListParams
-): Promise<CatalogListResult> {
+export async function searchCatalogItems(
+  params: CatalogSearchParams
+): Promise<CatalogSearchResult> {
   const supabase = createAdminClient()
   const page = Math.max(1, params.page)
   const pageSize = Math.min(Math.max(params.pageSize, 1), 100)
-  const from = (page - 1) * pageSize
 
-  // Estimated count: an exact count(*) over the ~750k-row table takes
-  // >10s during ingestion churn and trips PostgREST's statement timeout,
-  // which cancels the whole request. Planner estimates are instant and
-  // easily good enough for pagination.
-  let query = supabase
-    .from('hercules_catalog_items')
-    .select(
-      'id, hercules_item_id, ms_id, description, brand, manufacturer_name, manufacturer_part_number, category, subcategory, status, updated_at, hercules_vendor_offers(count)',
-      { count: 'estimated' }
-    )
-
-  const q = params.q ? sanitizeSearchTerm(params.q) : ''
-  if (q) {
-    query = query.or(
-      `description.ilike.%${q}%,manufacturer_part_number.ilike.%${q}%,manufacturer_name.ilike.%${q}%`
-    )
-  }
-  if (params.manufacturer) query = query.eq('manufacturer_name', params.manufacturer)
-  if (params.category) query = query.eq('category', params.category)
-
-  const { data, error, count } = await query
-    .order('updated_at', { ascending: false })
-    .range(from, from + pageSize - 1)
-
+  const { data, error } = await supabase.rpc('hercules_catalog_search', {
+    q: params.q ?? '',
+    p_manufacturer: params.manufacturer ?? null,
+    p_category: params.category ?? null,
+    p_vendor: params.vendor ?? null,
+    p_limit: pageSize,
+    p_offset: (page - 1) * pageSize,
+  })
   assertNoError(error)
+
+  const raw = (data ?? {}) as {
+    items?: Array<Record<string, unknown>>
+    hasMore?: boolean
+    estimatedTotal?: number | null
+  }
 
   return {
     page,
     pageSize,
-    total: count ?? 0,
-    data: ((data ?? []) as DbRow[]).map((row) => ({
+    hasMore: Boolean(raw.hasMore),
+    estimatedTotal: numberOrNull(raw.estimatedTotal),
+    items: (raw.items ?? []).map((row) => ({
       id: String(row.id),
-      herculesItemId: String(row.hercules_item_id),
-      msId: textOrNull(row.ms_id),
+      herculesItemId: String(row.herculesItemId),
+      msId: textOrNull(row.msId),
       description: textOrNull(row.description),
       brand: textOrNull(row.brand),
-      manufacturerName: textOrNull(row.manufacturer_name),
-      manufacturerPartNumber: textOrNull(row.manufacturer_part_number),
+      manufacturerName: textOrNull(row.manufacturerName),
+      manufacturerPartNumber: textOrNull(row.manufacturerPartNumber),
       category: textOrNull(row.category),
       subcategory: textOrNull(row.subcategory),
       status: textOrNull(row.status),
-      vendorOfferCount: numberOrNull(
-        (row.hercules_vendor_offers as Array<{ count?: unknown }> | null)?.[0]?.count
-      ) ?? 0,
-      updatedAt: textOrNull(row.updated_at),
+      imageUrl: textOrNull(row.imageUrl),
+      updatedAt: textOrNull(row.updatedAt),
+      vendors: Array.isArray(row.vendors) ? (row.vendors as string[]) : [],
+      offerCount: numberOrNull(row.offerCount) ?? 0,
+      priceMin: numberOrNull(row.priceMin),
+      priceMax: numberOrNull(row.priceMax),
+    })),
+  }
+}
+
+/** Strip buy-side prices for roles below staff. */
+export function stripSearchPrices(result: CatalogSearchResult): CatalogSearchResult {
+  return {
+    ...result,
+    items: result.items.map((item) => ({ ...item, priceMin: null, priceMax: null })),
+  }
+}
+
+export function stripDetailPrices(detail: CatalogItemDetail): CatalogItemDetail {
+  return {
+    ...detail,
+    offers: detail.offers.map((offer) => ({
+      ...offer,
+      uoms: offer.uoms.map((uom) => ({
+        ...uom,
+        listPriceAmount: null,
+        contractPriceAmount: null,
+        contractPriceStatus: null,
+      })),
     })),
   }
 }
@@ -194,17 +215,12 @@ export async function getCatalogFacets(): Promise<CatalogFacets> {
   const { data, error } = await supabase.rpc('hercules_catalog_facets')
   assertNoError(error)
 
-  const raw = (data ?? {}) as {
-    manufacturers?: Array<{ name: string; count: number }>
-    categories?: Array<{ name: string; count: number }>
-    itemsWithOffers?: number
-    vendorOffers?: number
-    suppliers?: number
-  }
+  const raw = (data ?? {}) as Partial<CatalogFacets>
 
   return {
     manufacturers: raw.manufacturers ?? [],
     categories: raw.categories ?? [],
+    vendors: raw.vendors ?? [],
     itemsWithOffers: raw.itemsWithOffers ?? 0,
     vendorOffers: raw.vendorOffers ?? 0,
     suppliers: raw.suppliers ?? 0,

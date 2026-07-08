@@ -52,7 +52,7 @@ const mainNav: NavItem[] = [
   { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes, roles: STAFF_ROLES },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: STAFF_ROLES },
-  { name: 'Supplier Catalog', href: '/dashboard/catalog', icon: BookOpen, roles: ADMIN_ROLES },
+  { name: 'Supplier Catalog', href: '/dashboard/catalog', icon: BookOpen },
   { name: 'Territory', href: '/dashboard/territory', icon: MapPin, roles: STAFF_ROLES },
 ]
 

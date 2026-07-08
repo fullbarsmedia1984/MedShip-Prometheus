@@ -1,28 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
-import { getCatalogFacets, listCatalogItems } from '@/lib/hercules/catalog-browse'
+import { SALES_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import {
+  getCatalogFacets,
+  searchCatalogItems,
+  stripSearchPrices,
+} from '@/lib/hercules/catalog-browse'
 
 export const dynamic = 'force-dynamic'
 
+const PRICE_ROLES = new Set(['superadmin', 'admin', 'staff'])
+
 /**
- * Supplier Catalog browse endpoint (Class P data — admin only).
+ * Supplier Catalog search endpoint. All signed-in roles may browse
+ * catalog attributes; supplier buy prices are stripped for sales roles.
  *
- * GET /api/hercules/catalog?q=&manufacturer=&category=&page=&pageSize=
- * Add &facets=1 to include facet aggregates (fetched once per page load).
+ * GET /api/hercules/catalog?q=&manufacturer=&category=&vendor=&page=&pageSize=[&facets=1]
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
+    const auth = await requireApiAuth(SALES_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
+    const canSeePrices = auth.role !== null && PRICE_ROLES.has(auth.role)
     const params = request.nextUrl.searchParams
-    const result = await listCatalogItems({
+
+    let result = await searchCatalogItems({
       q: params.get('q') ?? undefined,
       manufacturer: params.get('manufacturer') ?? undefined,
       category: params.get('category') ?? undefined,
+      vendor: params.get('vendor') ?? undefined,
       page: Number(params.get('page') ?? '1') || 1,
       pageSize: Number(params.get('pageSize') ?? '25') || 25,
     })
+    if (!canSeePrices) result = stripSearchPrices(result)
 
     // Facets are additive UI sugar — never let a slow aggregate under
     // ingestion load take the whole page down.
@@ -35,7 +45,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ result, facets })
+    return NextResponse.json({ result, facets, canSeePrices })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
