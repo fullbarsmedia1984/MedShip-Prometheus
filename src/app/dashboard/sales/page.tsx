@@ -50,7 +50,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
-import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep, YoYRevenueComparison } from '@/lib/data'
+import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep, TerritoryQoQPayload, YoYRevenueComparison } from '@/lib/data'
 import type { SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
 import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
 import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
@@ -60,6 +60,7 @@ import { CallActivitySummaryCard } from '@/components/dashboard/CallActivitySumm
 import { RingDnaRepActivityCharts } from '@/components/charts/RingDnaRepActivityCharts'
 import { RevenueCohortSection } from '@/components/dashboard/RevenueCohortSection'
 import { YoYRevenueCharts } from '@/components/charts/YoYRevenueCharts'
+import { TerritoryQoQCharts } from '@/components/charts/TerritoryQoQCharts'
 import { ReportingMethodologyDialog } from '@/components/dashboard/ReportingMethodologyDialog'
 import type { CohortDashboard } from '@/lib/cohorts'
 
@@ -124,6 +125,7 @@ type SalesDashboardResponse = {
   callActivitySummary: CallActivitySummary
   cohorts: CohortDashboard | null
   yoyRevenue?: YoYRevenueComparison | null
+  territoryQoQ?: TerritoryQoQPayload | null
 }
 
 function formatDate(dateStr: string): string {
@@ -172,6 +174,7 @@ export default function SalesPage() {
   const [callActivitySummary, setCallActivitySummary] = useState<CallActivitySummary | null>(null)
   const [cohorts, setCohorts] = useState<CohortDashboard | null>(null)
   const [yoyRevenue, setYoyRevenue] = useState<YoYRevenueComparison | null>(null)
+  const [territoryQoQ, setTerritoryQoQ] = useState<TerritoryQoQPayload | null>(null)
   const [selectedRosterAliases, setSelectedRosterAliases] = useState<string[]>([])
   const [rosterExpanded, setRosterExpanded] = useState(false)
   const [savingRoster, setSavingRoster] = useState(false)
@@ -226,6 +229,7 @@ export default function SalesPage() {
       setCallActivitySummary(data.callActivitySummary)
       setCohorts(data.cohorts ?? null)
       setYoyRevenue(data.yoyRevenue ?? null)
+      setTerritoryQoQ(data.territoryQoQ ?? null)
     } catch (error) {
       console.error('Failed to load sales data:', error)
     } finally {
@@ -771,6 +775,9 @@ export default function SalesPage() {
 
         {/* Year-over-year revenue comparison (Fishbowl issue-date basis, company-wide) */}
         {yoyRevenue && <YoYRevenueCharts data={yoyRevenue} />}
+
+        {/* Quarter vs prior-year quarter, company-wide + per territory (ship-to state) */}
+        {territoryQoQ && <TerritoryQoQCharts data={territoryQoQ} />}
 
         {/* Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

@@ -936,6 +936,138 @@ async function getLiveRevenueMetrics(): Promise<RevenueMetrics> {
   }
 }
 
+export interface TerritoryQuarterEntry {
+  key: string
+  name: string
+  repName: string | null
+  current: number
+  prior: number
+  growthPct: number | null
+}
+
+export interface QuarterGrowth {
+  quarter: string // e.g. "Q2 2026"
+  isPartial: boolean // current quarter compares QTD vs prior-year same point
+  company: { current: number; prior: number; growthPct: number | null }
+  territories: TerritoryQuarterEntry[]
+}
+
+export interface TerritoryQoQPayload {
+  quarters: QuarterGrowth[] // oldest first, last 4 including current
+  territories: Array<{ key: string; name: string; repName: string | null }>
+}
+
+/**
+ * Quarter vs prior-year quarter revenue growth — company-wide and per
+ * territory (geographic attribution by ship_to_state via sales_territories,
+ * migration 035). Fishbowl issued SOs, issue-date basis, company-wide
+ * business orders. The in-progress quarter compares QTD against the
+ * prior-year quarter through the same day offset (apples to apples).
+ */
+export async function getTerritoryQoQGrowth(): Promise<TerritoryQoQPayload> {
+  void await getDataSourceMode()
+  const supabase = createAdminClient()
+  const now = new Date()
+  const dateKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+  // Last 4 quarters, oldest first; each with its prior-year window.
+  const currentQStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
+  const windows = [3, 2, 1, 0].map((back) => {
+    const start = new Date(currentQStart.getFullYear(), currentQStart.getMonth() - 3 * back, 1)
+    const end = new Date(start.getFullYear(), start.getMonth() + 3, 1)
+    const priorStart = new Date(start.getFullYear() - 1, start.getMonth(), 1)
+    const isPartial = back === 0
+    // Partial quarter: cut both windows at the same day offset.
+    const cutoff = isPartial ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) : end
+    const elapsedDays = Math.round((cutoff.getTime() - start.getTime()) / 86_400_000)
+    const priorEnd = isPartial
+      ? new Date(priorStart.getFullYear(), priorStart.getMonth(), priorStart.getDate() + elapsedDays)
+      : new Date(priorStart.getFullYear(), priorStart.getMonth() + 3, 1)
+    return {
+      label: `Q${Math.floor(start.getMonth() / 3) + 1} ${start.getFullYear()}`,
+      isPartial,
+      start: dateKeyOf(start),
+      end: dateKeyOf(cutoff),
+      priorStart: dateKeyOf(priorStart),
+      priorEnd: dateKeyOf(priorEnd),
+    }
+  })
+  const fetchStart = windows[0].priorStart
+
+  type TerritoryOrderRow = CanonicalSalesOrderRow & { ship_to_state: string | null }
+  const [territoriesRes, statesRes, rows] = await Promise.all([
+    supabase.from('sales_territories').select('territory_key, territory_name, rep_display_name, sort_order').order('sort_order'),
+    supabase.from('sales_territory_states').select('state, territory_key'),
+    fetchAllRows<TerritoryOrderRow>(() =>
+      supabase
+        .from('fb_sales_orders')
+        .select(`${SALES_ORDER_METRIC_SELECT}, ship_to_state`)
+        .eq('canonical_state', 'order')
+        .or(`date_issued.gte.${fetchStart},date_completed.gte.${fetchStart},date_created.gte.${fetchStart}`)
+        .order('date_created', { ascending: false, nullsFirst: false }) as unknown as SupabaseRangeQuery<TerritoryOrderRow>
+    ),
+  ])
+  if (territoriesRes.error) throw territoriesRes.error
+  if (statesRes.error) throw statesRes.error
+
+  const territories = (territoriesRes.data ?? []).map((row) => ({
+    key: String(row.territory_key),
+    name: String(row.territory_name),
+    repName: (row.rep_display_name as string | null) ?? null,
+  }))
+  const territoryByState = new Map(
+    (statesRes.data ?? []).map((row) => [String(row.state).toUpperCase(), String(row.territory_key)])
+  )
+
+  const company = windows.map(() => ({ current: 0, prior: 0 }))
+  const perTerritory = new Map(
+    territories.map((territory) => [territory.key, windows.map(() => ({ current: 0, prior: 0 }))])
+  )
+
+  for (const row of rows) {
+    const amount = salesOrderAmount(row)
+    if (!isBusinessSalesMetric(row, amount)) continue
+    const metricDate = salesOrderMetricDate(row)
+    if (!metricDate) continue
+    const territoryKey = territoryByState.get((row.ship_to_state ?? '').trim().toUpperCase())
+    const territoryBuckets = territoryKey ? perTerritory.get(territoryKey) : undefined
+    windows.forEach((window, index) => {
+      if (metricDate >= window.start && metricDate < window.end) {
+        company[index].current += amount
+        if (territoryBuckets) territoryBuckets[index].current += amount
+      }
+      if (metricDate >= window.priorStart && metricDate < window.priorEnd) {
+        company[index].prior += amount
+        if (territoryBuckets) territoryBuckets[index].prior += amount
+      }
+    })
+  }
+
+  const growth = (current: number, prior: number): number | null =>
+    prior > 0 ? Math.round(((current - prior) / prior) * 1000) / 10 : null
+
+  const quarters: QuarterGrowth[] = windows.map((window, index) => ({
+    quarter: window.label,
+    isPartial: window.isPartial,
+    company: {
+      current: roundCurrency(company[index].current),
+      prior: roundCurrency(company[index].prior),
+      growthPct: growth(company[index].current, company[index].prior),
+    },
+    territories: territories.map((territory) => {
+      const bucket = perTerritory.get(territory.key)![index]
+      return {
+        ...territory,
+        current: roundCurrency(bucket.current),
+        prior: roundCurrency(bucket.prior),
+        growthPct: growth(bucket.current, bucket.prior),
+      }
+    }),
+  }))
+
+  return { quarters, territories }
+}
+
 // ---------------------------------------------------------------------------
 // Monthly Revenue
 // ---------------------------------------------------------------------------
