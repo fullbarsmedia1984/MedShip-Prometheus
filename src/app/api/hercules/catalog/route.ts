@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SALES_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import {
   getCatalogFacets,
+  isSemanticSearchEnabled,
   searchCatalogItems,
   stripSearchPrices,
 } from '@/lib/hercules/catalog-browse'
+import { embedQuery } from '@/lib/hercules/embeddings'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,14 +28,21 @@ export async function GET(request: NextRequest) {
     const canSeePrices = auth.role !== null && PRICE_ROLES.has(auth.role)
     const params = request.nextUrl.searchParams
 
+    // Hybrid search: embed the query when semantic search is switched on
+    // (app_settings). embedQuery degrades to null — lexical-only — on any
+    // provider failure, so search never breaks on OpenAI hiccups.
+    const q = params.get('q') ?? undefined
+    const queryEmbedding =
+      q && (await isSemanticSearchEnabled()) ? await embedQuery(q) : null
+
     let result = await searchCatalogItems({
-      q: params.get('q') ?? undefined,
+      q,
       manufacturer: params.get('manufacturer') ?? undefined,
       category: params.get('category') ?? undefined,
       vendor: params.get('vendor') ?? undefined,
       page: Number(params.get('page') ?? '1') || 1,
       pageSize: Number(params.get('pageSize') ?? '25') || 25,
-    })
+    }, queryEmbedding)
     if (!canSeePrices) result = stripSearchPrices(result)
 
     // Facets are additive UI sugar — never let a slow aggregate under

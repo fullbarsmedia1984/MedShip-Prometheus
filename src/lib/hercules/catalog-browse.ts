@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { toVectorLiteral } from './embeddings'
 import type { JsonObject } from './types'
 
 /**
@@ -139,7 +140,8 @@ function numberOrNull(value: unknown) {
 }
 
 export async function searchCatalogItems(
-  params: CatalogSearchParams
+  params: CatalogSearchParams,
+  queryEmbedding?: number[] | null
 ): Promise<CatalogSearchResult> {
   const supabase = createAdminClient()
   const page = Math.max(1, params.page)
@@ -152,6 +154,7 @@ export async function searchCatalogItems(
     p_vendor: params.vendor ?? null,
     p_limit: pageSize,
     p_offset: (page - 1) * pageSize,
+    p_qvec: queryEmbedding ? toVectorLiteral(queryEmbedding) : null,
   })
   assertNoError(error)
 
@@ -314,5 +317,27 @@ export async function getCatalogItemDetail(
         })),
       }
     }),
+  }
+}
+
+// Semantic search stays dark until the embedding backfill + ANN index are
+// in place; the switch is the app_settings row so no redeploy is needed.
+let semanticFlagCache: { value: boolean; expires: number } | null = null
+
+export async function isSemanticSearchEnabled(): Promise<boolean> {
+  if (semanticFlagCache && semanticFlagCache.expires > Date.now()) {
+    return semanticFlagCache.value
+  }
+  try {
+    const { data } = await createAdminClient()
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'hercules_semantic_search')
+      .maybeSingle()
+    const value = String(data?.value ?? '').replace(/"/g, '') === 'on'
+    semanticFlagCache = { value, expires: Date.now() + 60_000 }
+    return value
+  } catch {
+    return false
   }
 }
