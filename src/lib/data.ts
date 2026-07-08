@@ -970,9 +970,13 @@ export async function getTerritoryQoQGrowth(): Promise<TerritoryQoQPayload> {
   const now = new Date()
   const dateKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-  // Last 4 quarters, oldest first; each with its prior-year window.
+  // Last 4 COMPLETE quarters plus the in-progress one, oldest first; each
+  // with its prior-year window. Growth percentages are only meaningful for
+  // complete quarters — the partial quarter is included for dollar display
+  // (QTD vs prior year through the same day) but early-quarter percentages
+  // on a days-old base are noise (a 210,000% bar shipped before this guard).
   const currentQStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
-  const windows = [3, 2, 1, 0].map((back) => {
+  const windows = [4, 3, 2, 1, 0].map((back) => {
     const start = new Date(currentQStart.getFullYear(), currentQStart.getMonth() - 3 * back, 1)
     const end = new Date(start.getFullYear(), start.getMonth() + 3, 1)
     const priorStart = new Date(start.getFullYear() - 1, start.getMonth(), 1)
@@ -1043,8 +1047,12 @@ export async function getTerritoryQoQGrowth(): Promise<TerritoryQoQPayload> {
     })
   }
 
+  // Growth needs a real base: a prior-year window under $10k (early-QTD
+  // slivers, dormant territories) yields meaningless four/five-digit
+  // percentages, so those report null instead.
+  const MIN_GROWTH_BASE = 10_000
   const growth = (current: number, prior: number): number | null =>
-    prior > 0 ? Math.round(((current - prior) / prior) * 1000) / 10 : null
+    prior >= MIN_GROWTH_BASE ? Math.round(((current - prior) / prior) * 1000) / 10 : null
 
   const quarters: QuarterGrowth[] = windows.map((window, index) => ({
     quarter: window.label,
