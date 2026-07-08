@@ -1,11 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
+  ArrowUpDown,
   Building2,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
   ImageOff,
   Search,
   SlidersHorizontal,
@@ -43,6 +46,7 @@ interface Filters {
   manufacturer: string
   category: string
   vendor: string
+  sort: string
   page: number
 }
 
@@ -52,8 +56,16 @@ const DEFAULT_FILTERS: Filters = {
   manufacturer: 'all',
   category: 'all',
   vendor: 'all',
+  sort: 'relevance',
   page: 1,
 }
+
+const SORT_OPTIONS = [
+  { value: 'relevance', label: 'Best match' },
+  { value: 'newest', label: 'Recently updated' },
+  { value: 'price_asc', label: 'Price: low to high' },
+  { value: 'price_desc', label: 'Price: high to low' },
+] as const
 
 function priceRange(item: CatalogSearchItem) {
   if (item.priceMin === null) return null
@@ -84,12 +96,39 @@ function Thumb({ item }: { item: CatalogSearchItem }) {
   )
 }
 
+function CopyChip({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        navigator.clipboard.writeText(value).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1200)
+        })
+      }}
+      title={`Copy ${value}`}
+      className="group/copy inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[0.7rem] text-foreground/80 transition-colors hover:bg-medship-primary/10 hover:text-medship-primary"
+    >
+      {label} {value}
+      {copied ? (
+        <Check className="h-2.5 w-2.5 text-medship-success" />
+      ) : (
+        <Copy className="h-2.5 w-2.5 opacity-0 transition-opacity group-hover/copy:opacity-60" />
+      )}
+    </button>
+  )
+}
+
 function ResultRow({
   item,
   canSeePrices,
+  disambiguate,
 }: {
   item: CatalogSearchItem
   canSeePrices: boolean
+  disambiguate: boolean
 }) {
   const price = canSeePrices ? priceRange(item) : null
 
@@ -103,6 +142,11 @@ function ResultRow({
       <div className="min-w-0 flex-1">
         <p className="line-clamp-1 text-sm font-medium leading-snug text-foreground group-hover:text-medship-primary">
           {item.brand ?? item.description ?? item.herculesItemId}
+          {disambiguate && item.manufacturerPartNumber && (
+            <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
+              · {item.manufacturerPartNumber}
+            </span>
+          )}
         </p>
         {item.brand && item.description && (
           <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
@@ -116,9 +160,7 @@ function ResultRow({
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {item.manufacturerPartNumber && (
-            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.7rem] text-foreground/80">
-              MPN {item.manufacturerPartNumber}
-            </span>
+            <CopyChip label="MPN" value={item.manufacturerPartNumber} />
           )}
           {item.vendors.slice(0, 3).map((vendor) => (
             <Badge
@@ -170,6 +212,23 @@ export default function SupplierCatalogPage() {
   const [facets, setFacets] = useState<CatalogFacets | null>(null)
   const [canSeePrices, setCanSeePrices] = useState(false)
   const [loading, setLoading] = useState(true)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const typing =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      if (event.key === '/' && !typing) {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(filters.search.trim()), 300)
@@ -187,6 +246,7 @@ export default function SupplierCatalogPage() {
       if (filters.manufacturer !== 'all') params.set('manufacturer', filters.manufacturer)
       if (filters.category !== 'all') params.set('category', filters.category)
       if (filters.vendor !== 'all') params.set('vendor', filters.vendor)
+      if (filters.sort !== 'relevance') params.set('sort', filters.sort)
       if (!facets) params.set('facets', '1')
 
       const data = await fetchJson<CatalogResponse>(`/api/hercules/catalog?${params}`)
@@ -197,7 +257,7 @@ export default function SupplierCatalogPage() {
       setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.page, filters.manufacturer, filters.category, filters.vendor, debouncedSearch])
+  }, [filters.page, filters.manufacturer, filters.category, filters.vendor, filters.sort, debouncedSearch])
 
   useEffect(() => {
     fetchCatalog()
@@ -205,7 +265,7 @@ export default function SupplierCatalogPage() {
 
   useEffect(() => {
     setFilters((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }))
-  }, [filters.manufacturer, filters.category, filters.vendor, debouncedSearch])
+  }, [filters.manufacturer, filters.category, filters.vendor, filters.sort, debouncedSearch])
 
   const hasFilters =
     debouncedSearch !== '' ||
@@ -255,8 +315,9 @@ export default function SupplierCatalogPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={searchInputRef}
                 autoFocus
-                placeholder="Search by product description, manufacturer part #, or vendor part # (e.g. ENT151623)…"
+                placeholder="Search by name, description, or part number — press / to focus (e.g. ENT151623)…"
                 value={filters.search}
                 onChange={(event) =>
                   setFilters((prev) => ({ ...prev, search: event.target.value }))
@@ -331,6 +392,27 @@ export default function SupplierCatalogPage() {
                 </SelectContent>
               </Select>
 
+              <div className="ml-auto flex items-center gap-1.5">
+                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <Select
+                  value={filters.sort}
+                  onValueChange={(value) =>
+                    setFilters((prev) => ({ ...prev, sort: value ?? 'relevance' }))
+                  }
+                >
+                  <SelectTrigger className="h-8 w-44 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SORT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {activeChips.map((chip) => (
                 <Badge
                   key={chip.label}
@@ -381,9 +463,24 @@ export default function SupplierCatalogPage() {
                 ))}
               </>
             ) : result && result.items.length > 0 ? (
-              result.items.map((item) => (
-                <ResultRow key={item.id} item={item} canSeePrices={canSeePrices} />
-              ))
+              (() => {
+                const titleCounts = new Map<string, number>()
+                for (const item of result.items) {
+                  const title = item.brand ?? item.description ?? item.herculesItemId
+                  titleCounts.set(title, (titleCounts.get(title) ?? 0) + 1)
+                }
+                return result.items.map((item) => {
+                  const title = item.brand ?? item.description ?? item.herculesItemId
+                  return (
+                    <ResultRow
+                      key={item.id}
+                      item={item}
+                      canSeePrices={canSeePrices}
+                      disambiguate={(titleCounts.get(title) ?? 0) > 1}
+                    />
+                  )
+                })
+              })()
             ) : (
               <div className="px-6 py-14 text-center">
                 <Search className="mx-auto h-8 w-8 text-muted-foreground/30" />

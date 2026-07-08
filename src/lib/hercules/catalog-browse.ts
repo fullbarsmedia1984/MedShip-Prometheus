@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toVectorLiteral } from './embeddings'
+import { expandSearchQuery } from './search-expansion'
 import type { JsonObject } from './types'
 
 /**
@@ -14,11 +15,14 @@ import type { JsonObject } from './types'
  * these queries run through the service role behind role-checked routes.
  */
 
+export type CatalogSortOption = 'relevance' | 'newest' | 'price_asc' | 'price_desc'
+
 export type CatalogSearchParams = {
   q?: string
   manufacturer?: string
   category?: string
   vendor?: string
+  sort?: CatalogSortOption
   page: number
   pageSize: number
 }
@@ -155,6 +159,9 @@ export async function searchCatalogItems(
     p_limit: pageSize,
     p_offset: (page - 1) * pageSize,
     p_qvec: queryEmbedding ? toVectorLiteral(queryEmbedding) : null,
+    p_qexp: params.q ? expandSearchQuery(params.q) : null,
+    p_sort: params.sort ?? 'relevance',
+    p_facets: false,
   })
   assertNoError(error)
 
@@ -340,4 +347,37 @@ export async function isSemanticSearchEnabled(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/**
+ * Fire-and-forget search telemetry: what reps search, what returns
+ * nothing (feeds the synonym dictionary), and how slow it was.
+ */
+export function logCatalogSearch(entry: {
+  q: string
+  manufacturer?: string | null
+  category?: string | null
+  vendor?: string | null
+  sort?: string | null
+  resultCount: number
+  hasMore: boolean
+  tookMs: number
+  role?: string | null
+}): void {
+  void createAdminClient()
+    .from('hercules_search_log')
+    .insert({
+      q: entry.q,
+      manufacturer: entry.manufacturer ?? null,
+      category: entry.category ?? null,
+      vendor: entry.vendor ?? null,
+      sort: entry.sort ?? null,
+      result_count: entry.resultCount,
+      has_more: entry.hasMore,
+      took_ms: entry.tookMs,
+      role: entry.role ?? null,
+    })
+    .then(({ error }) => {
+      if (error) console.error('search log insert failed:', error.message)
+    })
 }

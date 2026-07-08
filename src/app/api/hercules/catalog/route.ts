@@ -3,8 +3,10 @@ import { SALES_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import {
   getCatalogFacets,
   isSemanticSearchEnabled,
+  logCatalogSearch,
   searchCatalogItems,
   stripSearchPrices,
+  type CatalogSortOption,
 } from '@/lib/hercules/catalog-browse'
 import { embedQuery } from '@/lib/hercules/embeddings'
 
@@ -35,14 +37,40 @@ export async function GET(request: NextRequest) {
     const queryEmbedding =
       q && (await isSemanticSearchEnabled()) ? await embedQuery(q) : null
 
+    const sortParam = params.get('sort')
+    const sort: CatalogSortOption = ['relevance', 'newest', 'price_asc', 'price_desc'].includes(
+      sortParam ?? ''
+    )
+      ? (sortParam as CatalogSortOption)
+      : 'relevance'
+
+    const startedAt = Date.now()
     let result = await searchCatalogItems({
       q,
       manufacturer: params.get('manufacturer') ?? undefined,
       category: params.get('category') ?? undefined,
       vendor: params.get('vendor') ?? undefined,
+      sort,
       page: Number(params.get('page') ?? '1') || 1,
       pageSize: Number(params.get('pageSize') ?? '25') || 25,
     }, queryEmbedding)
+
+    // Telemetry on real searches (not default browsing); zero-result
+    // queries feed the synonym dictionary.
+    if (q && result.page === 1) {
+      logCatalogSearch({
+        q,
+        manufacturer: params.get('manufacturer'),
+        category: params.get('category'),
+        vendor: params.get('vendor'),
+        sort,
+        resultCount: result.items.length,
+        hasMore: result.hasMore,
+        tookMs: Date.now() - startedAt,
+        role: auth.role,
+      })
+    }
+
     if (!canSeePrices) result = stripSearchPrices(result)
 
     // Facets are additive UI sugar — never let a slow aggregate under
