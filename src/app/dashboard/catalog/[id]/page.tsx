@@ -120,11 +120,15 @@ export default function CatalogItemDetailPage({
                       </Badge>
                     )}
                   </div>
+                  {/* Hercules `description` is long marketing copy; the short
+                      product name arrives in `brand`. */}
                   <CardTitle className="text-xl leading-snug">
-                    {detail.description ?? detail.brand ?? detail.herculesItemId}
+                    {detail.brand ?? detail.description ?? detail.herculesItemId}
                   </CardTitle>
                   {detail.brand && detail.description && (
-                    <p className="text-sm text-muted-foreground">{detail.brand}</p>
+                    <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                      {detail.description}
+                    </p>
                   )}
                 </CardHeader>
                 <CardContent>

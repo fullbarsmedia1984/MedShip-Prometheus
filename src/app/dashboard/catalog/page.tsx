@@ -101,10 +101,15 @@ function ResultRow({
       <Thumb item={item} />
 
       <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground group-hover:text-medship-primary">
-          {item.description ?? item.brand ?? item.herculesItemId}
+        <p className="line-clamp-1 text-sm font-medium leading-snug text-foreground group-hover:text-medship-primary">
+          {item.brand ?? item.description ?? item.herculesItemId}
         </p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+        {item.brand && item.description && (
+          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+            {item.description}
+          </p>
+        )}
+        <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
           {[item.manufacturerName, item.category, item.subcategory]
             .filter(Boolean)
             .join(' · ') || '—'}
