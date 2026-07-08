@@ -124,18 +124,19 @@ export function TerritoryQoQCharts({ data }: { data: TerritoryQoQPayload }) {
       territory.repName ? `${territory.name} (${territory.repName.split(' ').pop()})` : `${territory.name} (unassigned)`,
     ])
   )
-  const territoryRows: TerritoryRow[] = data.quarters.map((quarter) => {
-    const row: TerritoryRow = {
-      quarter: quarter.isPartial ? `${quarter.quarter} (QTD)` : quarter.quarter,
-      isPartial: quarter.isPartial,
-    }
-    for (const territory of quarter.territories) {
-      row[territory.key] = territory.growthPct
-      row[`${territory.key}_current`] = territory.current
-      row[`${territory.key}_prior`] = territory.prior
-    }
-    return row
-  })
+  // Growth percentages only render for COMPLETE quarters: days into a new
+  // quarter, the prior-year base is a sliver and the ratio is noise.
+  const territoryRows: TerritoryRow[] = data.quarters
+    .filter((quarter) => !quarter.isPartial)
+    .map((quarter) => {
+      const row: TerritoryRow = { quarter: quarter.quarter, isPartial: false }
+      for (const territory of quarter.territories) {
+        row[territory.key] = territory.growthPct
+        row[`${territory.key}_current`] = territory.current
+        row[`${territory.key}_prior`] = territory.prior
+      }
+      return row
+    })
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -177,7 +178,8 @@ export function TerritoryQoQCharts({ data }: { data: TerritoryQoQPayload }) {
           </CardTitle>
           <p className="text-xs text-muted-foreground">
             Revenue is attributed to the territory of the order&apos;s ship-to state, regardless of
-            selling rep. Hover for dollar figures.
+            selling rep. Complete quarters only — the in-progress quarter&apos;s prior-year base is
+            too small for meaningful percentages (see the dollar chart for QTD). Hover for dollar figures.
           </p>
         </CardHeader>
         <CardContent>
