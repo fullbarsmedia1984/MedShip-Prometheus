@@ -47,11 +47,20 @@ purchase orders:
 | `PARTIAL · ON ORDER` (amber) | Some lines on hand, the rest on order |
 | `N SHORT · NO PO` (red, pulsing) | Short lines with **no open PO** — purchasing needs to act. Also feeds the ticker and the "No PO short" KPI. |
 
-Open-PO data lives in `fb_open_po_lines` (migration 040), refreshed straight
-from Fishbowl's data-query API (`po`/`poitem`, statuses Issued/Partial) by
-`src/lib/warehouse-board/po-sync.ts`. The refresh runs *after* each page
-render via `next/server`'s `after()` when the cache is >15 min old, so the
-board never blocks on Fishbowl and tolerates it being down (stale cache).
+PO data is owned by the **P11 purchase-orders sync** (Inngest cron,
+`TZ=America/Chicago 0 8,10,12,14,16 * * 1-5`), which maintains:
+
+- `fb_purchase_orders` / `fb_purchase_order_items` (migration 041) — durable
+  full PO cache (headers + lines + raw JSON), incremental by
+  `po.dateLastModified` with a 1-hour overlap; foundation for future Zeus
+  purchasing features. Class P (supplier costs) — admin-read RLS.
+- `fb_open_po_lines` (migration 040) — the wallboard's fast open-lines cache.
+
+Manual trigger: `POST /api/sync/purchase-orders` (admin) fires the Inngest
+event; `{"inline": true}` runs it in-request (initial backfill). `GET` on the
+same route reports counts + last sync. Inventory (P2) runs
+`TZ=America/Chicago 0 8,12,16 * * 1-5`. The board renders purely from the
+caches and never blocks on Fishbowl.
 
 ## Behavior
 

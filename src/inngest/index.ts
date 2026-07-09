@@ -40,6 +40,10 @@ export {
   ceoDailyBriefing,
   incentiveWeeklyDigest,
 } from './functions/incentive-comms'
+export {
+  purchaseOrdersSync,
+  purchaseOrdersSyncManual,
+} from './functions/purchase-orders-sync'
 
 // Re-export client for convenience
 export { inngest } from './client'

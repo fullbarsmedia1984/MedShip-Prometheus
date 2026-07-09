@@ -1,10 +1,8 @@
-import { after } from 'next/server'
 import {
   hasWarehouseGateAccess,
   isWarehouseBoardConfigured,
 } from '@/lib/warehouse-board/gate'
 import { getWallboardData } from '@/lib/warehouse-board/data'
-import { ensureFreshPoLines } from '@/lib/warehouse-board/po-sync'
 import { WallboardClient } from '@/components/warehouse-board/WallboardClient'
 import { WallboardGate } from '@/components/warehouse-board/WallboardGate'
 
@@ -29,10 +27,8 @@ export default async function WarehouseBoardPage() {
     return <WallboardGate />
   }
 
-  // Refresh the open-PO cache after responding, so the board never blocks
-  // on Fishbowl; the next 60s auto-refresh picks up the new data.
-  after(() => ensureFreshPoLines())
-
+  // PO + inventory freshness is owned by the P11/P2 Inngest crons
+  // (business-hours schedule); the board renders from the caches.
   const data = await getWallboardData()
   return <WallboardClient data={data} />
 }

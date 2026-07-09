@@ -25,6 +25,8 @@ import {
   incentivePayoutFreeze,
   incentiveWeeklyDigest,
   ceoDailyBriefing,
+  purchaseOrdersSync,
+  purchaseOrdersSyncManual,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -76,5 +78,9 @@ export const { GET, POST, PUT } = serve({
     incentivePayoutFreeze,
     incentiveWeeklyDigest,
     ceoDailyBriefing,
+
+    // P11: Fishbowl Purchase Orders -> Supabase (wallboard + future purchasing)
+    purchaseOrdersSync,
+    purchaseOrdersSyncManual,
   ],
 })

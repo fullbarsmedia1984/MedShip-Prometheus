@@ -176,14 +176,14 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
  * P2: Fishbowl Inventory -> Salesforce Products
  *
  * Scheduled job that syncs inventory levels from Fishbowl to Salesforce.
- * Runs every 15 minutes.
+ * Runs 8am, 12pm, and 4pm Monday-Friday (America/Chicago) per ops.
  */
 export const inventorySync = inngest.createFunction(
   {
     id: 'inventory-sync',
     name: 'P2: Inventory Sync (FB -> SF)',
     retries: 2,
-    triggers: [{ cron: '*/15 * * * *' }],
+    triggers: [{ cron: 'TZ=America/Chicago 0 8,12,16 * * 1-5' }],
   },
   async ({ step }) => {
     return step.run('run-inventory-sync', () => runInventorySync('schedule'))

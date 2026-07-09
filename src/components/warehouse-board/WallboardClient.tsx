@@ -361,7 +361,7 @@ function Lane({
       <div
         className={`flex min-h-0 flex-1 flex-col gap-2 rounded-xl border p-2 transition-colors ${
           expanded
-            ? 'overflow-y-auto border-white/15 bg-white/[0.04]'
+            ? 'overflow-y-auto border-white/15 bg-white/[0.04] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
             : 'overflow-hidden border-white/5 bg-white/[0.02]'
         }`}
         data-testid={`lane-body-${variant}`}
