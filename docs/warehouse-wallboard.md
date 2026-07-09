@@ -8,6 +8,11 @@ password invalidates every screen.
 
 ## What it shows (all derived from synced Fishbowl data)
 
+**Drop-ship exclusion**: SOs whose only product lines are `Drop Ship` never
+enter the warehouse and are excluded from every lane, KPI, alert, and the
+rails. Mixed orders stay, and their line/unit counts and pick-progress bars
+count only warehouse-fulfillable lines (Sale/Kit).
+
 Lanes map to Fishbowl sales-order statuses:
 
 | Lane | Source | Notes |

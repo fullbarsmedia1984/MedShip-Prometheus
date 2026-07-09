@@ -86,7 +86,16 @@ type SoRow = {
   last_synced_at: string | null
 }
 
-type ItemAgg = { lines: number; qty: number; fulfilled: number; partial: number }
+// Aggregates count warehouse-fulfillable lines only (Sale/Kit); Drop Ship
+// lines ship from the vendor and never touch the floor. `dropShip` tallies
+// them so pure drop-ship SOs can be excluded from the board entirely.
+type ItemAgg = {
+  lines: number
+  qty: number
+  fulfilled: number
+  partial: number
+  dropShip: number
+}
 
 // PostgREST caps a response at 1,000 rows — page through anything that can
 // exceed that (line items are ~16 rows per SO).
@@ -211,18 +220,25 @@ export async function getWallboardData(): Promise<WallboardData> {
     )
     for (const row of data) {
       const key = row.sales_order_number as string
-      const agg = aggs.get(key) ?? { lines: 0, qty: 0, fulfilled: 0, partial: 0 }
+      const lineType = (row as { line_type?: string | null }).line_type ?? null
+      const agg =
+        aggs.get(key) ??
+        { lines: 0, qty: 0, fulfilled: 0, partial: 0, dropShip: 0 }
       const q = Number(row.quantity ?? 0)
       const f = Number(row.quantity_fulfilled ?? 0)
-      agg.lines += 1
-      agg.qty += q
-      agg.fulfilled += f
-      if (f > 0 && f < q) agg.partial += 1
+      if (lineType === 'Drop Ship') {
+        agg.dropShip += 1
+      } else if (lineType === 'Sale' || lineType === 'Kit') {
+        agg.lines += 1
+        agg.qty += q
+        agg.fulfilled += f
+        if (f > 0 && f < q) agg.partial += 1
+      }
       aggs.set(key, agg)
 
       if (
         issuedSos.has(key) &&
-        (row as { line_type?: string | null }).line_type === 'Sale' &&
+        lineType === 'Sale' &&
         q - f > 0 &&
         row.part_number
       ) {
@@ -308,14 +324,24 @@ export async function getWallboardData(): Promise<WallboardData> {
     }
   }
 
+  // Pure drop-ship SOs (vendor ships everything; no warehouse lines) never
+  // enter the building — drop them from every lane and KPI.
+  const isDropShipSo = (soNumber: string): boolean => {
+    const agg = aggs.get(soNumber)
+    return Boolean(agg && agg.dropShip > 0 && agg.lines === 0)
+  }
+  const openWh = open.filter((r) => !isDropShipSo(r.so_number))
+  const shippedWh = shipped.filter((r) => !isDropShipSo(r.so_number))
+  const closedShortWh = closedShort.filter((r) => !isDropShipSo(r.so_number))
+
   const toO = (r: SoRow) => toOrder(r, aggs.get(r.so_number), now)
 
-  const ready = open
+  const ready = openWh
     .filter((r) => r.status === 'Issued')
     .map((r) => ({ ...toO(r), stock: stockFor(r.so_number) }))
-  const picking = open.filter((r) => r.status === 'In Progress').map(toO)
-  const shippedO = shipped.map(toO)
-  const shortO = closedShort.map(toO)
+  const picking = openWh.filter((r) => r.status === 'In Progress').map(toO)
+  const shippedO = shippedWh.map(toO)
+  const shortO = closedShortWh.map(toO)
 
   // Oldest first = most critical at the top of each lane.
   ready.sort((a, b) => b.ageDays - a.ageDays)
