@@ -78,7 +78,9 @@ that matching phase is the next body of work, not part of this delivery.
   (**all 748,106 items embedded**, ~$0.40 total). Query-time embedding is
   gated by app_settings key `hercules_semantic_search` = `'on'` (60s cache,
   no redeploy) and degrades to lexical-only on any OpenAI failure.
-  **Outstanding**: the ANN index (see §5).
+  **LIVE 2026-07-09**: IVFFlat ANN index built (lists=1000, probes=10,
+  839 MB), flag on — hybrid lexical + semantic search is in production
+  (see §5.1 for the build saga).
 
 ### Performance work (measured against production, cold, under churn)
 - Part-number search ~100–500 ms; phrase/full-text 0.2–2 s; fuzzy ~1–3 s.
@@ -158,20 +160,20 @@ that matching phase is the next body of work, not part of this delivery.
 
 ## 5. Outstanding items
 
-1. **ANN index for semantic search (the one unfinished step).** HNSW hit the
-   `maintenance_work_mem` cliff at 82% (~2.5 h, then stalled); plan switched
-   to **IVFFlat `lists = 1000`** + `ALTER DATABASE postgres SET
-   ivfflat.probes = 10`. The first IVFFlat attempt died
-   ("canceling statement due to user request" — likely lock contention with
-   the orphaned HNSW backend). Recovery: terminate any orphaned
-   `CREATE INDEX` backend in `pg_stat_activity`, drop the invalid remnant,
-   rebuild, verify `indisvalid`, set probes, flip
-   `hercules_semantic_search='on'`, then verify a natural-language query
-   ("something to hang feed bags on a crib" → FreeArm holders).
-   Until then semantic stays dark and search is lexical-only (fully
-   functional). Upgrade to HNSW later only on a bigger compute tier.
+1. ~~**ANN index for semantic search**~~ — **DONE 2026-07-09.** HNSW hit the
+   `maintenance_work_mem` cliff at 82%; two orphaned HNSW build backends
+   (18 h of IO thrash) were blocking the IVFFlat retry via lock contention.
+   Recovery executed: terminated both backends, dropped the invalid 757 MB
+   remnant, rebuilt as **IVFFlat `lists = 1000`** (30 min, 839 MB,
+   `indisvalid = true`), `ivfflat.probes = 10` at database level, `ANALYZE`
+   to fix stale planner stats (a 61 s query dropped to 250 ms), flag
+   `hercules_semantic_search = 'on'`. Verified: natural-language queries
+   ("protective covering for mattress leaks" → waterproof mattress
+   protectors) return relevant results in 80–350 ms. Upgrade to HNSW later
+   only on a bigger compute tier.
 2. **Scoped facet counts** — shelved (8–17 s cold under churn; `p_facets`
-   reserved in the RPC). Revisit after `VACUUM ANALYZE` on the settled table.
+   reserved in the RPC). `ANALYZE` has run post-settle; re-benchmark, plus
+   `VACUUM` for bloat.
 3. **Salman follow-ups**: extend token lifetime; confirm egress `cost`
    semantics; his docs/email cite the wrong base URL; sample responses
    (FHEI18770, numeric-contract-price, list-only) still pending — validate
