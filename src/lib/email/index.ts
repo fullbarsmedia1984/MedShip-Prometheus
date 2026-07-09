@@ -4,6 +4,7 @@ import {
   inviteEmail,
   twoFactorCodeEmail,
   roleChangedEmail,
+  passwordResetEmail,
 } from './templates'
 import type { AppRole } from '@/lib/auth'
 
@@ -43,6 +44,18 @@ export async function sendTwoFactorCodeEmail(params: {
 }): Promise<EmailResult> {
   const { subject, html, text } = twoFactorCodeEmail({
     code: params.code,
+    minutes: params.minutes,
+  })
+  return sendEmail({ to: params.to, subject, html, text })
+}
+
+export async function sendPasswordResetEmail(params: {
+  to: string
+  resetUrl: string
+  minutes: number
+}): Promise<EmailResult> {
+  const { subject, html, text } = passwordResetEmail({
+    resetUrl: params.resetUrl,
     minutes: params.minutes,
   })
   return sendEmail({ to: params.to, subject, html, text })

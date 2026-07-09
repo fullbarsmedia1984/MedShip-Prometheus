@@ -68,6 +68,24 @@ export function twoFactorCodeEmail(params: { code: string; minutes: number }): R
   }
 }
 
+export function passwordResetEmail(params: { resetUrl: string; minutes: number }): RenderedEmail {
+  const { resetUrl, minutes } = params
+  return {
+    subject: 'Reset your Prometheus password',
+    html: layout(
+      'Reset your password',
+      `<p style="font-size:14px;line-height:1.6;color:${SLATE};">
+         Someone (hopefully you) asked to reset the password for this account.
+         Click below to choose a new one. The link expires in ${minutes} minutes
+         and works once.
+       </p>
+       <p style="margin:24px 0;">${button(resetUrl, 'Choose a new password')}</p>
+       <p style="font-size:12px;color:${SLATE};">If you didn't ask for this, you can ignore this email — your password is unchanged.</p>`
+    ),
+    text: `Reset your Medical Shipment Prometheus password (link expires in ${minutes} minutes, single use): ${resetUrl}`,
+  }
+}
+
 export function roleChangedEmail(params: { roleLabel: string }): RenderedEmail {
   const { roleLabel } = params
   return {
