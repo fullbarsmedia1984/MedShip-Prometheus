@@ -46,6 +46,14 @@ export const SALES_API_AUTH_OPTIONS = {
   roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep'],
 } satisfies ApiAuthOptions
 
+// Packaging estimator tool: open to the sales tier as well — reps and the
+// quotes team estimate their own orders. No row-scoping (estimates are
+// per-SO, not per-rep). Estimator CONFIG (boxes, rules, dims browser/queue)
+// stays staff-tier.
+export const ESTIMATOR_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_rep', 'sales_manager'],
+} satisfies ApiAuthOptions
+
 type AuthContext = {
   user: User | null
   role: AppRole | null

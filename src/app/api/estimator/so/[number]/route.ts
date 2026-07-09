@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { ESTIMATOR_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { getSalesOrderSummary } from '@/lib/estimator/estimate-service'
 import { SalesOrderNotFoundError } from '@/lib/estimator/so-service'
 
@@ -9,7 +9,7 @@ type SoContext = {
 
 export async function GET(_request: NextRequest, context: SoContext) {
   try {
-    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
+    const auth = await requireApiAuth(ESTIMATOR_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const { number } = await context.params

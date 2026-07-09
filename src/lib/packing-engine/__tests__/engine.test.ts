@@ -277,4 +277,18 @@ describe('confidence score', () => {
     assert.equal(computeConfidence([]), 0)
     assert.equal(computeConfidence([item('V', 2, 5, 5, 5, 1)]), 1)
   })
+
+  it('counts catalog dims at a 0.8 discount', () => {
+    assert.equal(
+      computeConfidence([item('C', 1, 10, 10, 10, 5, {}, { dimsSource: 'catalog' })]),
+      0.8
+    )
+    const mixed = [
+      item('V', 1, 10, 10, 10, 5), // 1000 in³ verified
+      item('C', 1, 10, 10, 10, 5, {}, { dimsSource: 'catalog' }), // 1000 in³ catalog
+      item('D', 1, 10, 10, 20, 5, {}, { dimsSource: 'default' }), // 2000 in³ placeholder
+    ]
+    // (1000 + 800) / 4000
+    assert.equal(computeConfidence(mixed), 0.45)
+  })
 })
