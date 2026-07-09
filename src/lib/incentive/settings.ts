@@ -10,9 +10,14 @@ export const DEFAULT_INCENTIVE_SETTINGS: IncentiveSettings = {
   promoStart: '2026-07-01',
   promoEnd: '2026-09-30',
   enrollmentGate: 2,
-  baseRate: 0.04,
-  bonusRate: 0.02,
-  newWindowDays: 90,
+  baseRate: 0.04, // legacy flat model (comparison display only)
+  bonusRate: 0.02, // legacy bonus (retired from payout)
+  newRate: 0.06,
+  winbackRate: 0.05,
+  recurringRateFull: 0.04,
+  recurringRatePartial: 0.03,
+  recurringRateZero: 0.02,
+  newWindowDays: 365,
   winBackGapDays: 365,
 }
 
@@ -47,6 +52,11 @@ export function parseIncentiveSettings(raw: unknown): IncentiveSettings {
     enrollmentGate: toFiniteNumber(obj.enrollment_gate) ?? DEFAULT_INCENTIVE_SETTINGS.enrollmentGate,
     baseRate: toFiniteNumber(obj.base_rate) ?? DEFAULT_INCENTIVE_SETTINGS.baseRate,
     bonusRate: toFiniteNumber(obj.bonus_rate) ?? DEFAULT_INCENTIVE_SETTINGS.bonusRate,
+    newRate: toFiniteNumber(obj.new_rate) ?? DEFAULT_INCENTIVE_SETTINGS.newRate,
+    winbackRate: toFiniteNumber(obj.winback_rate) ?? DEFAULT_INCENTIVE_SETTINGS.winbackRate,
+    recurringRateFull: toFiniteNumber(obj.recurring_rate_full) ?? DEFAULT_INCENTIVE_SETTINGS.recurringRateFull,
+    recurringRatePartial: toFiniteNumber(obj.recurring_rate_partial) ?? DEFAULT_INCENTIVE_SETTINGS.recurringRatePartial,
+    recurringRateZero: toFiniteNumber(obj.recurring_rate_zero) ?? DEFAULT_INCENTIVE_SETTINGS.recurringRateZero,
     newWindowDays: toFiniteNumber(obj.new_window_days) ?? DEFAULT_INCENTIVE_SETTINGS.newWindowDays,
     winBackGapDays: toFiniteNumber(obj.win_back_gap_days) ?? DEFAULT_INCENTIVE_SETTINGS.winBackGapDays,
   }
@@ -72,6 +82,14 @@ export function validateIncentiveSettings(settings: IncentiveSettings): string[]
   }
   if (!(settings.baseRate > 0 && settings.baseRate < 1)) errors.push('baseRate must be between 0 and 1 (exclusive)')
   if (!(settings.bonusRate > 0 && settings.bonusRate < 1)) errors.push('bonusRate must be between 0 and 1 (exclusive)')
+  if (!(settings.newRate > 0 && settings.newRate < 1)) errors.push('newRate must be between 0 and 1 (exclusive)')
+  if (!(settings.winbackRate > 0 && settings.winbackRate < 1)) errors.push('winbackRate must be between 0 and 1 (exclusive)')
+  for (const key of ['recurringRateFull', 'recurringRatePartial', 'recurringRateZero'] as const) {
+    if (!(settings[key] > 0 && settings[key] < 1)) errors.push(`${key} must be between 0 and 1 (exclusive)`)
+  }
+  if (!(settings.recurringRateZero <= settings.recurringRatePartial && settings.recurringRatePartial <= settings.recurringRateFull)) {
+    errors.push('recurring rates must be ordered: zero <= partial <= full')
+  }
   if (!Number.isInteger(settings.newWindowDays) || settings.newWindowDays < 1) {
     errors.push('newWindowDays must be an integer >= 1')
   }
@@ -88,6 +106,11 @@ function toStorageShape(settings: IncentiveSettings): Record<string, unknown> {
     enrollment_gate: settings.enrollmentGate,
     base_rate: settings.baseRate,
     bonus_rate: settings.bonusRate,
+    new_rate: settings.newRate,
+    winback_rate: settings.winbackRate,
+    recurring_rate_full: settings.recurringRateFull,
+    recurring_rate_partial: settings.recurringRatePartial,
+    recurring_rate_zero: settings.recurringRateZero,
     new_window_days: settings.newWindowDays,
     win_back_gap_days: settings.winBackGapDays,
   }

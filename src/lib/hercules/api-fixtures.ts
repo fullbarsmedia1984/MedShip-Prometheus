@@ -83,6 +83,53 @@ export const apiPartWithNumericContractPrice: HerculesApiPart = {
 
 export const apiPartWithNumericCost = apiPartWithNumericContractPrice
 
+// Mirrors the real /api/v1/parts/list egress shape: manufacturer and
+// vendor arrive as populated {_id, name} references, images as imageURLs,
+// status as a string, and units carry `cost` (catalog price) with a null
+// contractPrice.
+export const apiPartWithPopulatedReferences: HerculesApiPart = {
+  _id: '69ce302086f57d4ec14a9c9d',
+  msId: 'MS-mnh8tyjl-g7hf95',
+  title: 'PANT,FLAT FRONT,MENS,NAVY,48XU',
+  brand: "Men's Synergy Flat-Front Dress Pants",
+  status: 'Active',
+  description: 'Lightweight, home-wash dress pants',
+  category: 'Apparel',
+  subCategory: 'Pants',
+  manufacturerId: { _id: '69ce2fe986f57d4ec14a9a55', name: 'EDWARDS GARMENT CO' },
+  manufacturerPartNumber: '2525 010 38 32',
+  imageURLs: ['https://img.example.com/pants.jpg'],
+  updatedAt: '2026-05-19T11:42:24.320Z',
+  vendors: [
+    {
+      title: 'PANT,FLAT FRONT,MENS,NAVY,48XU',
+      vendorId: { _id: '69ce2fb086f57d4ec14a99df', name: 'Medline' },
+      isPrimary: true,
+      leadTime: null,
+      minimumOrderQuantity: 1,
+      units: [
+        {
+          per: null,
+          cost: 179.47,
+          gtin: null,
+          unit: 'EA',
+          width: 5,
+          height: 0.5,
+          length: 10,
+          weight: 0.31,
+          uomTitle: 'PANT,FLAT FRONT,MENS,NAVY,48XU',
+          isDefault: true,
+          volumeUOM: 'EA',
+          weightUOM: 'LB',
+          contractPrice: null,
+          packagingType: null,
+          vendorPartNumber: '2525NV48XU',
+        },
+      ],
+    },
+  ],
+}
+
 export const apiPartWithNullContractPrice: HerculesApiPart = {
   _id: 'api-part-null-contract-price',
   msId: 'MS-api-missing',

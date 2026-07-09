@@ -76,6 +76,17 @@ export type InngestEvents = {
     }
   }
 
+  // P10: Hercules parts catalog -> Prometheus supplier catalog staging.
+  // Starts a new ingestion run, or resumes the active one from its
+  // checkpoint (also used as the continuation event between executions).
+  'hercules/catalog.ingest': {
+    data: {
+      runType?: 'full' | 'delta'
+      pageSize?: number
+      triggeredBy?: string
+    }
+  }
+
   // P8: Q3 incentive classification recompute (full deterministic rebuild)
   'incentive/recompute': {
     data: {

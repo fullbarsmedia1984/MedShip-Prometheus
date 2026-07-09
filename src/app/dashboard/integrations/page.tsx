@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { SparklineChart } from '@/components/dashboard/SparklineChart'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
+import { HerculesIngestionCard } from '@/components/dashboard/HerculesIngestionCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, Play, Eye, Clock, Zap, RefreshCw, Link as LinkIcon, PackageSearch, Database } from 'lucide-react'
@@ -716,6 +717,9 @@ export default function IntegrationsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* ---- Hercules Supplier Catalog Ingestion (P10) ---- */}
+        <HerculesIngestionCard />
 
         {/* ---- Canonical Relationship Health ---- */}
         <Card className="shadow-sm">

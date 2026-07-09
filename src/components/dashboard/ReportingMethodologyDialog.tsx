@@ -104,10 +104,11 @@ export function ReportingMethodologyDialog() {
 
           <Section title="Commissions are separate">
             <p>
-              Incentive payouts (see the Incentives page) use their own engine with the Q3 program
-              rules — 90-day new-customer bonus windows, enrollment gates, and eligibility
-              exclusions. Changing how revenue displays here never changes commission math, and
-              vice versa.
+              Incentive payouts (see the Incentives page) use their own engine built on the cohorts
+              above: New-cohort revenue pays 6% and Winback 5% for 365 days, while the Recurring
+              rate rides on each rep&apos;s monthly new-customer enrollment quota (4% at quota, 3% at
+              one, 2% at zero), with eligibility exclusions. Changing how revenue displays here
+              never changes commission math, and vice versa.
             </p>
           </Section>
 

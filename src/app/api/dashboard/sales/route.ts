@@ -4,6 +4,8 @@ import { requireApiAuth } from '@/lib/auth'
 import {
   SALES_DASHBOARD_CACHE_TAG,
   getSalesDashboardCore,
+  getYoYRevenueComparison,
+  getTerritoryQoQGrowth,
   getPipelineByRep,
   getQuotes,
   getProfileCalls,
@@ -13,7 +15,7 @@ import {
   getCallActivitySummary,
 } from '@/lib/data'
 import { getCohortDashboard, type CohortDashboard } from '@/lib/cohorts'
-import type { CallActivitySummary, ProfileCallMetricsResult } from '@/lib/data'
+import type { CallActivitySummary, ProfileCallMetricsResult, TerritoryQoQPayload, YoYRevenueComparison } from '@/lib/data'
 import type { SeedPipelineByRep, SeedProfileCall, SeedQuote, SeedWeeklyCallVolume } from '@/lib/seed-data'
 
 function errorMessage(error: unknown): string {
@@ -68,6 +70,8 @@ const getSalesDashboardPayload = unstable_cache(
       profileMetrics,
       callActivitySummary,
       cohorts,
+      yoyRevenue,
+      territoryQoQ,
     ] = await Promise.all([
       optionalPart<SeedPipelineByRep[]>('pipeline by rep', () => getPipelineByRep(), []),
       optionalPart('quote activity', () => getQuotes({ pageSize: 40 }), { data: [] as SeedQuote[], total: 0, page: 1, pageSize: 40, totalPages: 0 }),
@@ -77,11 +81,14 @@ const getSalesDashboardPayload = unstable_cache(
       optionalPart<ProfileCallMetricsResult>('profile metrics', () => getProfileCallMetrics(), EMPTY_PROFILE_METRICS),
       optionalPart<CallActivitySummary>('call activity summary', () => getCallActivitySummary(), EMPTY_CALL_ACTIVITY_SUMMARY),
       optionalPart<CohortDashboard | null>('revenue cohorts', () => getCohortDashboard(), null),
+      optionalPart<YoYRevenueComparison | null>('yoy revenue', () => getYoYRevenueComparison(), null),
+      optionalPart<TerritoryQoQPayload | null>('territory qoq', () => getTerritoryQoQGrowth(), null),
     ])
 
     return {
       kpis: salesCore.kpis,
       reps: salesCore.reps,
+      leaderboardHistory: salesCore.leaderboardHistory,
       monthlyRevenue: salesCore.monthlyRevenue,
       monthlyBusinessRevenue: salesCore.monthlyBusinessRevenue,
       monthlyBusinessRevenueByRep: salesCore.monthlyBusinessRevenueByRep,
@@ -94,6 +101,8 @@ const getSalesDashboardPayload = unstable_cache(
       profileMetrics,
       callActivitySummary,
       cohorts,
+      yoyRevenue,
+      territoryQoQ,
     }
   },
   ['sales-dashboard-payload'],

@@ -18,8 +18,13 @@ import {
   fishbowlSalesOrdersDetailHydrate,
   sfFullSync,
   sfIncrementalSync,
+  herculesCatalogIngest,
+  herculesCatalogDeltaCron,
   incentiveRecompute,
   incentiveRecomputeManual,
+  incentivePayoutFreeze,
+  incentiveWeeklyDigest,
+  ceoDailyBriefing,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -62,8 +67,14 @@ export const { GET, POST, PUT } = serve({
     sfFullSync,
     sfIncrementalSync,
 
+    // P10: Hercules supplier catalog ingestion
+    herculesCatalogIngest,
+    herculesCatalogDeltaCron,
     // P8: Q3 incentive classification recompute + new-account bell
     incentiveRecompute,
     incentiveRecomputeManual,
+    incentivePayoutFreeze,
+    incentiveWeeklyDigest,
+    ceoDailyBriefing,
   ],
 })

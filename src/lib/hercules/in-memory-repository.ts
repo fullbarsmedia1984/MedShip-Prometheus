@@ -7,6 +7,13 @@ import type {
   HerculesImportJobRecord,
   HerculesImportJobStatus,
   HerculesImportRepository,
+  HerculesIngestionCheckpoint,
+  HerculesIngestionReject,
+  HerculesIngestionRepository,
+  HerculesIngestionResource,
+  HerculesIngestionRunRecord,
+  HerculesIngestionRunStatus,
+  HerculesIngestionRunType,
   HerculesOfferUomRecord,
   HerculesSupplierRecord,
   HerculesVendorOfferRecord,
@@ -216,6 +223,10 @@ export class InMemoryHerculesImportRepository implements HerculesImportRepositor
       })
   }
 
+  getImportJob(id: string) {
+    return this.importJobs.get(id) ?? null
+  }
+
   getAdminPricingForHerculesItem(herculesItemId: string): HerculesAdminPricingResult {
     const item = [...this.catalogItems.values()].find(
       (candidate) => candidate.herculesItemId === herculesItemId
@@ -253,5 +264,112 @@ export class InMemoryHerculesImportRepository implements HerculesImportRepositor
           }))
       ),
     }
+  }
+}
+
+export class InMemoryHerculesIngestionRepository implements HerculesIngestionRepository {
+  readonly runs = new Map<string, HerculesIngestionRunRecord>()
+  readonly rejects: HerculesIngestionReject[] = []
+  readonly watermarks = new Map<
+    HerculesIngestionResource,
+    { watermark: string; lastCompletedRunId: string }
+  >()
+
+  async createRun(input: {
+    resource: HerculesIngestionResource
+    runType: HerculesIngestionRunType
+    pageSize: number
+    updatedSince: string | null
+    importJobId: string | null
+    triggeredBy: string | null
+  }) {
+    const run: HerculesIngestionRunRecord = {
+      id: nextId('run'),
+      resource: input.resource,
+      runType: input.runType,
+      status: 'running',
+      pageSize: input.pageSize,
+      nextOffset: 0,
+      pagesFetched: 0,
+      totalRemote: null,
+      itemsSeen: 0,
+      itemsInserted: 0,
+      itemsUpdated: 0,
+      itemsRejected: 0,
+      counters: zeroCounters(),
+      updatedSince: input.updatedSince,
+      maxSourceUpdatedAt: null,
+      importJobId: input.importJobId,
+      lastError: null,
+      rateLimitSnapshot: null,
+      triggeredBy: input.triggeredBy,
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    }
+    this.runs.set(run.id, run)
+    return run
+  }
+
+  async getRun(id: string) {
+    return this.runs.get(id) ?? null
+  }
+
+  async getActiveRun(resource: HerculesIngestionResource) {
+    return (
+      [...this.runs.values()].find(
+        (run) => run.resource === resource && run.status === 'running'
+      ) ?? null
+    )
+  }
+
+  async checkpointRun(id: string, checkpoint: HerculesIngestionCheckpoint) {
+    const run = this.runs.get(id)
+    if (!run) throw new Error(`Ingestion run not found: ${id}`)
+    this.runs.set(id, {
+      ...run,
+      nextOffset: checkpoint.nextOffset,
+      pagesFetched: checkpoint.pagesFetched,
+      totalRemote: checkpoint.totalRemote,
+      itemsSeen: checkpoint.counters.rowsSeen,
+      itemsInserted: checkpoint.counters.rowsInserted,
+      itemsUpdated: checkpoint.counters.rowsUpdated,
+      itemsRejected: checkpoint.counters.rowsRejected,
+      counters: { ...checkpoint.counters },
+      maxSourceUpdatedAt: checkpoint.maxSourceUpdatedAt,
+      rateLimitSnapshot: checkpoint.rateLimitSnapshot,
+    })
+  }
+
+  async completeRun(
+    id: string,
+    input: {
+      status: Exclude<HerculesIngestionRunStatus, 'running'>
+      lastError?: string | null
+    }
+  ) {
+    const run = this.runs.get(id)
+    if (!run) throw new Error(`Ingestion run not found: ${id}`)
+    this.runs.set(id, {
+      ...run,
+      status: input.status,
+      lastError: input.lastError ?? null,
+      completedAt: new Date().toISOString(),
+    })
+  }
+
+  async recordReject(reject: HerculesIngestionReject) {
+    this.rejects.push(reject)
+  }
+
+  async getSyncWatermark(resource: HerculesIngestionResource) {
+    return this.watermarks.get(resource)?.watermark ?? null
+  }
+
+  async setSyncWatermark(
+    resource: HerculesIngestionResource,
+    watermark: string,
+    lastCompletedRunId: string
+  ) {
+    this.watermarks.set(resource, { watermark, lastCompletedRunId })
   }
 }

@@ -34,10 +34,10 @@ export function NewAccountWindowTable({ accounts }: { accounts: RepNewAccount[] 
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-info/10">
             <Users className="h-4 w-4 text-medship-info" />
           </span>
-          New-Customer Accounts (90-Day Window)
+          New-Customer Accounts (365-Day Window)
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Every completed order inside a customer&apos;s window earns the bonus while you qualify.
+          Every completed order inside a customer&apos;s 365-day window earns the premium new-business rate.
         </p>
       </CardHeader>
       <CardContent>

@@ -35,9 +35,21 @@ export const STAFF_API_AUTH_OPTIONS = {
   roles: ['superadmin', 'admin', 'staff'],
 } satisfies ApiAuthOptions
 
+// Staff plus the sales manager — the incentive Manager View audience.
+export const MANAGER_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_manager'],
+} satisfies ApiAuthOptions
+
+// Every signed-in sales role; sales_rep access is additionally row-scoped to
+// their own records at the API layer.
+export const SALES_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep'],
+} satisfies ApiAuthOptions
+
 // Packaging estimator tool: open to the sales tier as well — reps and the
-// quotes team estimate their own orders. Estimator CONFIG (boxes, rules,
-// dims browser/queue) stays staff-tier.
+// quotes team estimate their own orders. No row-scoping (estimates are
+// per-SO, not per-rep). Estimator CONFIG (boxes, rules, dims browser/queue)
+// stays staff-tier.
 export const ESTIMATOR_API_AUTH_OPTIONS = {
   roles: ['superadmin', 'admin', 'staff', 'sales_rep', 'sales_manager'],
 } satisfies ApiAuthOptions

@@ -38,13 +38,13 @@ export function WinBackTracker({ count, revenue, orders }: WinBackTrackerProps) 
             </span>
             Win-Backs (Promo Period)
           </span>
-          <Badge variant="outline" className="border-slate-500/30 bg-slate-500/10 text-slate-700">
-            Not bonus-eligible
+          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700">
+            Pays 5% for 365 days
           </Badge>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Customers who lapsed 365+ days and reordered: {count} orders, {formatUsd(revenue)} revenue. Tracked for a
-          potential Phase-5 incentive; earns base commission only.
+          Customers who lapsed 365+ days and reordered: {count} orders, {formatUsd(revenue)} revenue. Winback
+          revenue pays the 5% rate for 365 days after re-entry (does not count toward the enrollment quota).
         </p>
       </CardHeader>
       <CardContent>

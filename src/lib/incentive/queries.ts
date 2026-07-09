@@ -7,6 +7,8 @@ import type {
   MergeCandidateRow,
   MergeMapRow,
   OrderIncentiveDetailRow,
+  PayoutSnapshotRow,
+  PayoutVarianceRow,
   RepIncentiveMonthlyRow,
   RepNewAccount,
   UnmappedRepRow,
@@ -37,16 +39,23 @@ function normalizeMonthlyRow(row: Record<string, unknown>): RepIncentiveMonthlyR
     enrollments: toNumber(row.enrollments),
     enrollment_gate: toNumber(row.enrollment_gate),
     qualifies: Boolean(row.qualifies),
+    recurring_rate: toNumber(row.recurring_rate),
     order_count: toNumber(row.order_count),
-    new_window_order_count: toNumber(row.new_window_order_count),
+    new_order_count: toNumber(row.new_order_count),
+    winback_order_count: toNumber(row.winback_order_count),
+    recurring_order_count: toNumber(row.recurring_order_count),
+    new_revenue: toNumber(row.new_revenue),
+    winback_revenue: toNumber(row.winback_revenue),
+    recurring_revenue: toNumber(row.recurring_revenue),
     attributed_revenue: toNumber(row.attributed_revenue),
-    new_customer_revenue_gross: toNumber(row.new_customer_revenue_gross),
-    net_new_customer_revenue: toNumber(row.net_new_customer_revenue),
-    win_back_revenue: toNumber(row.win_back_revenue),
+    credit_amount: toNumber(row.credit_amount),
+    credit_count: toNumber(row.credit_count),
     blocking_unmapped_count: toNumber(row.blocking_unmapped_count),
-    base_commission: toNullableNumber(row.base_commission),
-    bonus_commission: toNullableNumber(row.bonus_commission),
+    new_commission: toNullableNumber(row.new_commission),
+    winback_commission: toNullableNumber(row.winback_commission),
+    recurring_commission: toNullableNumber(row.recurring_commission),
     projected_total: toNullableNumber(row.projected_total),
+    legacy_flat_commission: toNullableNumber(row.legacy_flat_commission),
   }
 }
 
@@ -339,6 +348,114 @@ export async function triggerRevenueCohortRefreshRpc(): Promise<Record<string, u
   const { data, error } = await supabase.rpc('refresh_revenue_cohorts')
   if (error) throw error
   return (data ?? {}) as Record<string, unknown>
+}
+
+export async function triggerIncentiveWorklistRefreshRpc(): Promise<Record<string, unknown>> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('refresh_incentive_worklists')
+  if (error) throw error
+  return (data ?? {}) as Record<string, unknown>
+}
+
+export async function freezeIncentiveMonth(
+  month: string,
+  frozenBy: string | null,
+  force = false
+): Promise<Record<string, unknown>> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('freeze_incentive_month', {
+    p_month: month,
+    p_frozen_by: frozenBy,
+    p_force: force,
+  })
+  if (error) throw error
+  return (data ?? {}) as Record<string, unknown>
+}
+
+export async function getPayoutSnapshots(): Promise<PayoutSnapshotRow[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('incentive_payout_snapshot')
+    .select('month, rep_key, rep_display_name, enrollments, enrollment_gate, qualifies, recurring_rate, new_revenue, winback_revenue, recurring_revenue, new_commission, winback_commission, recurring_commission, projected_total, legacy_flat_commission, frozen_at, frozen_by')
+    .order('month', { ascending: true })
+    .order('projected_total', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    ...row,
+    month: String(row.month),
+    enrollments: toNumber(row.enrollments),
+    enrollment_gate: toNumber(row.enrollment_gate),
+    recurring_rate: toNumber(row.recurring_rate),
+    new_revenue: toNumber(row.new_revenue),
+    winback_revenue: toNumber(row.winback_revenue),
+    recurring_revenue: toNumber(row.recurring_revenue),
+    new_commission: toNumber(row.new_commission),
+    winback_commission: toNumber(row.winback_commission),
+    recurring_commission: toNumber(row.recurring_commission),
+    projected_total: toNumber(row.projected_total),
+    legacy_flat_commission: toNumber(row.legacy_flat_commission),
+  })) as PayoutSnapshotRow[]
+}
+
+export async function getPayoutVariance(): Promise<PayoutVarianceRow[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('v_incentive_payout_variance')
+    .select('*')
+    .order('month', { ascending: true })
+    .limit(2000)
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    ...row,
+    month: String(row.month),
+    frozen_total: toNumber(row.frozen_total),
+    live_total: toNumber(row.live_total),
+    variance: toNumber(row.variance),
+    frozen_enrollments: toNumber(row.frozen_enrollments),
+    live_enrollments: toNumber(row.live_enrollments),
+  })) as PayoutVarianceRow[]
+}
+
+export interface RepCohortBreakdown {
+  newRevenue: number
+  newOrders: number
+  winbackRevenue: number
+  winbackOrders: number
+  recurringRevenue: number
+  recurringOrders: number
+  creditsAmount: number // negative; already netted inside the cohort buckets
+  creditsOrders: number
+}
+
+/**
+ * Per-cohort figures for one rep-month, straight from the rollup row —
+ * the same buckets commission is computed on (credits are netted in).
+ */
+export function buildCohortBreakdown(row: RepIncentiveMonthlyRow): RepCohortBreakdown {
+  return {
+    newRevenue: row.new_revenue,
+    newOrders: row.new_order_count,
+    winbackRevenue: row.winback_revenue,
+    winbackOrders: row.winback_order_count,
+    recurringRevenue: row.recurring_revenue,
+    recurringOrders: row.recurring_order_count,
+    creditsAmount: row.credit_amount,
+    creditsOrders: row.credit_count,
+  }
+}
+
+/** The rep_key a signed-in user is locked to (profiles.sf_user_id), if any. */
+export async function getRepKeyForUser(userId: string): Promise<string | null> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('sf_user_id')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) throw error
+  const key = (data?.sf_user_id as string | null) ?? null
+  return key && key.trim() !== '' ? key : null
 }
 
 export async function getRefreshState(): Promise<IncentiveRefreshState | null> {

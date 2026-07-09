@@ -16,14 +16,20 @@ export const GATE_FEASIBILITY_BAND = {
 export interface CommissionBreakdown {
   qualifies: boolean
   blocked: boolean
-  base: number | null
-  bonus: number | null
+  recurringRate: number
+  newCommission: number | null
+  winbackCommission: number | null
+  recurringCommission: number | null
   projected: number | null
+  legacyFlat: number | null
+  deltaVsLegacy: number | null // negative = quota penalty vs the old 4% flat model
 }
 
 export interface Counterfactual {
   enrollmentsAway: number
-  bonusAtStake: number
+  currentRate: number
+  fullRate: number
+  recurringAtStake: number // extra $ on this month's recurring book at the full rate
   message: string
 }
 
@@ -35,6 +41,18 @@ export function formatUsd(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 }
 
+function pct(rate: number): string {
+  const value = rate * 100
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`
+}
+
+/** The recurring-commission tier a given enrollment count earns. */
+export function recurringTierRate(enrollments: number, gate: number, settings: IncentiveSettings): number {
+  if (enrollments >= gate) return settings.recurringRateFull
+  if (enrollments >= 1) return settings.recurringRatePartial
+  return settings.recurringRateZero
+}
+
 /**
  * Prefer the rollup's precomputed figures (they carry the fail-loudly NULL
  * contract); re-derive from rates only to fill display gaps. Blocked rows
@@ -42,34 +60,51 @@ export function formatUsd(n: number): string {
  */
 export function computeCommission(row: RepIncentiveMonthlyRow, settings: IncentiveSettings): CommissionBreakdown {
   const blocked = row.blocking_unmapped_count > 0
-  const qualifies = row.enrollments >= (row.enrollment_gate ?? settings.enrollmentGate)
+  const gate = row.enrollment_gate ?? settings.enrollmentGate
+  const qualifies = row.enrollments >= gate
+  const recurringRate = row.recurring_rate ?? recurringTierRate(row.enrollments, gate, settings)
 
   if (blocked) {
-    return { qualifies, blocked: true, base: null, bonus: null, projected: null }
+    return {
+      qualifies, blocked: true, recurringRate,
+      newCommission: null, winbackCommission: null, recurringCommission: null,
+      projected: null, legacyFlat: null, deltaVsLegacy: null,
+    }
   }
 
-  const base = row.base_commission ?? round2(settings.baseRate * row.attributed_revenue)
-  const bonus = row.bonus_commission ?? (qualifies ? round2(settings.bonusRate * row.net_new_customer_revenue) : 0)
-  const projected = row.projected_total ?? round2(base + bonus)
-  return { qualifies, blocked: false, base, bonus, projected }
+  const newCommission = row.new_commission ?? round2(settings.newRate * row.new_revenue)
+  const winbackCommission = row.winback_commission ?? round2(settings.winbackRate * row.winback_revenue)
+  const recurringCommission = row.recurring_commission ?? round2(recurringRate * row.recurring_revenue)
+  const projected = row.projected_total ?? round2(newCommission + winbackCommission + recurringCommission)
+  const legacyFlat = row.legacy_flat_commission ?? round2(settings.baseRate * row.attributed_revenue)
+  return {
+    qualifies, blocked: false, recurringRate,
+    newCommission, winbackCommission, recurringCommission,
+    projected, legacyFlat,
+    deltaVsLegacy: round2(projected - legacyFlat),
+  }
 }
 
 /**
- * "1 enrollment away from unlocking +2% on $X." Returns null once the rep
- * qualifies (nothing to unlock).
+ * What the enrollment quota is worth: "N more enrollments lift your recurring
+ * rate from X% to 4% — +$Y on this month's recurring book." Returns null once
+ * the rep is at the full rate (nothing at stake).
  */
 export function computeCounterfactual(row: RepIncentiveMonthlyRow, settings: IncentiveSettings): Counterfactual | null {
   const gate = row.enrollment_gate ?? settings.enrollmentGate
   if (row.enrollments >= gate) return null
 
+  const currentRate = row.recurring_rate ?? recurringTierRate(row.enrollments, gate, settings)
+  const fullRate = settings.recurringRateFull
   const enrollmentsAway = gate - row.enrollments
-  const bonusAtStake = round2(settings.bonusRate * row.net_new_customer_revenue)
-  const pct = `${(settings.bonusRate * 100).toFixed(0)}%`
+  const recurringAtStake = round2((fullRate - currentRate) * Math.max(row.recurring_revenue, 0))
   const noun = enrollmentsAway === 1 ? 'enrollment' : 'enrollments'
   return {
     enrollmentsAway,
-    bonusAtStake,
-    message: `${enrollmentsAway} ${noun} away from unlocking +${pct} on ${formatUsd(row.net_new_customer_revenue)}`,
+    currentRate,
+    fullRate,
+    recurringAtStake,
+    message: `${enrollmentsAway} more ${noun} lifts your recurring rate from ${pct(currentRate)} to ${pct(fullRate)} — worth ${formatUsd(recurringAtStake)} on this month's recurring book`,
   }
 }
 
@@ -103,7 +138,7 @@ export function classReasonLabel(cls: IncentiveClass | string): { label: string;
     case 'RECURRING':
       return { label: 'Recurring', tone: 'info' }
     case 'WIN_BACK':
-      return { label: 'Win-back (no bonus)', tone: 'warning' }
+      return { label: 'Win-back', tone: 'warning' }
     case 'EXCLUDED_HOUSE':
       return { label: 'House account', tone: 'muted' }
     case 'EXCLUDED_NO_REP':

@@ -35,10 +35,24 @@ export type CohortEntryRow = {
   reason: string
 }
 
+export type WinbackOpportunityRow = {
+  canonicalKey: string
+  customerName: string | null
+  lastRep: string | null
+  state: string | null
+  lastOrderAt: string
+  lastOrderSo: string
+  daysLapsed: number
+  revenue3yr: number
+  revenueLifetime: number
+  lifetimeOrders: number
+}
+
 export type CohortDashboard = {
   monthly: CohortMonthlyPoint[]
   snapshot: CohortSnapshot
   recentEntries: CohortEntryRow[]
+  winbackOpportunities: WinbackOpportunityRow[]
 }
 
 function toNumber(value: unknown): number {
@@ -178,11 +192,36 @@ export async function getRecentCohortEntries(limit = 12): Promise<CohortEntryRow
   }))
 }
 
+/** Top lapsed customers for winback outreach, ranked by recent value. */
+export async function getWinbackOpportunities(limit = 150): Promise<WinbackOpportunityRow[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('v_winback_opportunities')
+    .select('*')
+    .order('revenue_3yr', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+
+  return (data ?? []).map((row) => ({
+    canonicalKey: String(row.canonical_customer_key),
+    customerName: (row.customer_name as string | null) ?? null,
+    lastRep: (row.last_rep_display_name as string | null) ?? (row.last_salesperson as string | null) ?? null,
+    state: (row.ship_to_state as string | null) ?? null,
+    lastOrderAt: String(row.last_order_at),
+    lastOrderSo: String(row.last_order_so),
+    daysLapsed: toNumber(row.days_lapsed),
+    revenue3yr: toNumber(row.revenue_3yr),
+    revenueLifetime: toNumber(row.revenue_lifetime),
+    lifetimeOrders: toNumber(row.lifetime_orders),
+  }))
+}
+
 export async function getCohortDashboard(): Promise<CohortDashboard> {
-  const [monthly, snapshot, recentEntries] = await Promise.all([
+  const [monthly, snapshot, recentEntries, winbackOpportunities] = await Promise.all([
     getCohortMonthly(),
     getCohortSnapshot(),
     getRecentCohortEntries(),
+    getWinbackOpportunities(),
   ])
-  return { monthly, snapshot, recentEntries }
+  return { monthly, snapshot, recentEntries, winbackOpportunities }
 }

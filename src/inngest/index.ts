@@ -28,9 +28,18 @@ export {
 export { sfFullSync } from './functions/sf-full-sync'
 export { sfIncrementalSync } from './functions/sf-incremental-sync'
 export {
+  herculesCatalogIngest,
+  herculesCatalogDeltaCron,
+} from './functions/hercules-catalog-ingest'
+export {
+  incentivePayoutFreeze,
   incentiveRecompute,
   incentiveRecomputeManual,
 } from './functions/incentive-recompute'
+export {
+  ceoDailyBriefing,
+  incentiveWeeklyDigest,
+} from './functions/incentive-comms'
 
 // Re-export client for convenience
 export { inngest } from './client'

@@ -63,8 +63,10 @@ export type HerculesApiPart = JsonObject & {
   countryOfOrigin?: unknown
   unspsc?: unknown
   isActive?: unknown
+  status?: unknown
   imageUrl?: unknown
   images?: unknown
+  imageURLs?: unknown
   vendors?: unknown
 }
 
@@ -124,6 +126,25 @@ function clampPageSize(pageSize: number | undefined) {
   return Math.min(Math.floor(pageSize), MAX_PAGE_SIZE)
 }
 
+// Egress payloads populate Mongo references as {_id, name} objects
+// (manufacturerId, vendorId); ingress-shaped fixtures carry flat name/id
+// strings. Read both shapes.
+function refField(value: unknown, field: '_id' | 'name') {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return textOrNull((value as { _id?: unknown; name?: unknown })[field])
+  }
+  return null
+}
+
+function flatOrNull(value: unknown) {
+  if (value && typeof value === 'object') return null
+  return textOrNull(value)
+}
+
+function vendorNameFor(vendor: HerculesApiPartVendor) {
+  return textOrNull(vendor.vendorName) ?? refField(vendor.vendorId, 'name')
+}
+
 export function normalizeHerculesApiPart(
   part: HerculesApiPart,
   options: {
@@ -133,8 +154,13 @@ export function normalizeHerculesApiPart(
   const supplierItemId = textOrNull(part._id) ?? textOrNull(part.msId)
   if (!supplierItemId) return null
 
-  const images = Array.isArray(part.images)
-    ? part.images.map(textOrNull).filter((value): value is string => value !== null)
+  const imageArray = Array.isArray(part.images)
+    ? part.images
+    : Array.isArray(part.imageURLs)
+      ? part.imageURLs
+      : null
+  const images = imageArray
+    ? imageArray.map(textOrNull).filter((value): value is string => value !== null)
     : textOrNull(part.imageUrl)
       ? [textOrNull(part.imageUrl) as string]
       : []
@@ -144,8 +170,8 @@ export function normalizeHerculesApiPart(
     msId: textOrNull(part.msId),
     description: textOrNull(part.description),
     manufacturer: {
-      id: textOrNull(part.manufacturerId),
-      name: textOrNull(part.manufacturerName),
+      id: refField(part.manufacturerId, '_id') ?? flatOrNull(part.manufacturerId),
+      name: textOrNull(part.manufacturerName) ?? refField(part.manufacturerId, 'name'),
       partNumber: textOrNull(part.manufacturerPartNumber),
     },
     category: textOrNull(part.category),
@@ -153,17 +179,21 @@ export function normalizeHerculesApiPart(
     brand: textOrNull(part.brand) ?? textOrNull(part.title),
     countryOfOrigin: textOrNull(part.countryOfOrigin),
     unspsc: textOrNull(part.unspsc),
-    status: part.isActive === false ? 'inactive' : 'active',
+    status:
+      textOrNull(part.status) ?? (part.isActive === false ? 'inactive' : 'active'),
     images,
     rawPayload: part,
     vendorOffers: arrayOrEmpty(part.vendors)
-      .filter((vendor): vendor is HerculesApiPartVendor => Boolean(textOrNull((vendor as HerculesApiPartVendor).vendorName)))
+      .filter((vendor): vendor is HerculesApiPartVendor =>
+        Boolean(vendorNameFor(vendor as HerculesApiPartVendor))
+      )
       .map((vendor) => ({
-        vendorName: textOrNull(vendor.vendorName) as string,
+        vendorName: vendorNameFor(vendor) as string,
         supplierCode: textOrNull(vendor.supplierCode),
         supplierId:
           textOrNull(vendor.supplierId) ??
-          textOrNull(vendor.vendorId) ??
+          refField(vendor.vendorId, '_id') ??
+          flatOrNull(vendor.vendorId) ??
           textOrNull(vendor._id),
         isPrimary: booleanOrFalse(vendor.isPrimary),
         vendorProductTitle: textOrNull(vendor.title),
@@ -173,7 +203,12 @@ export function normalizeHerculesApiPart(
         uoms: arrayOrEmpty(vendor.units).map((unitValue) => {
           const unit = unitValue as HerculesApiPartUnit
           const parsedPer = parsePerText(unit.per)
-          const listPrice = 'price' in unit ? unit.price : null
+          // Real egress units carry `cost` (catalog price) rather than
+          // `price`; keep it as the list price so it is queryable without
+          // asserting contract semantics (contractPrice stays authoritative
+          // for cost eligibility).
+          const listPrice =
+            'price' in unit ? unit.price : 'cost' in unit ? unit.cost : null
           const contractPrice =
             'contractPrice' in unit || !options.useLegacyCostFallback
               ? 'contractPrice' in unit

@@ -1,10 +1,11 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { KpiCard } from '@/components/dashboard/KpiCard'
+import { CeoBriefingCard } from '@/components/dashboard/CeoBriefingCard'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
 import { SyncStatusCard } from '@/components/dashboard/SyncStatusCard'
-import { SalesLeaderboard } from '@/components/dashboard/SalesLeaderboard'
+import { SalesLeaderboard, type LeaderboardMonth } from '@/components/dashboard/SalesLeaderboard'
 import { SalesActivityFeed } from '@/components/dashboard/SalesActivityFeed'
 import { PipelineSnapshot } from '@/components/dashboard/PipelineSnapshot'
 import { ClientMapPreview } from '@/components/dashboard/ClientMapPreview'
@@ -45,6 +46,7 @@ type DashboardOverviewResponse = {
   inventoryAlerts: Product[]
   integrations: IntegrationStatusData[]
   leaderboard: SeedSalesRep[]
+  leaderboardHistory: LeaderboardMonth[]
   activities: SeedSalesActivity[]
   pipeline: SeedPipelineStage[]
   mapCustomers: Customer[]
@@ -71,6 +73,7 @@ export default function DashboardPage() {
   const [inventoryAlerts, setInventoryAlerts] = useState<Product[]>([])
   const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
   const [leaderboard, setLeaderboard] = useState<SeedSalesRep[]>([])
+  const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardMonth[]>([])
   const [activities, setActivities] = useState<SeedSalesActivity[]>([])
   const [pipeline, setPipeline] = useState<SeedPipelineStage[]>([])
   const [mapCustomers, setMapCustomers] = useState<Customer[]>([])
@@ -90,6 +93,7 @@ export default function DashboardPage() {
         setInventoryAlerts(data.inventoryAlerts)
         setIntegrations(data.integrations)
         setLeaderboard(data.leaderboard)
+        setLeaderboardHistory(data.leaderboardHistory ?? [])
         setActivities(data.activities)
         setPipeline(data.pipeline)
         setMapCustomers(data.mapCustomers)
@@ -121,7 +125,9 @@ export default function DashboardPage() {
       <Header title="Dashboard" />
 
       <div className="space-y-6 p-4 md:p-6">
-        {/* Row 1 — KPI Cards (6 total: 3x2 grid) */}
+        <CeoBriefingCard />
+
+        {/* Row 1 â€” KPI Cards (6 total: 3x2 grid) */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard
             title="Revenue (MTD)"
@@ -174,10 +180,10 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Row 2 — Sales Leaderboard */}
-        <SalesLeaderboard reps={leaderboard} />
+        {/* Row 2 â€” Sales Leaderboard */}
+        <SalesLeaderboard reps={leaderboard} history={leaderboardHistory} />
 
-        {/* Row 3 — Charts */}
+        {/* Row 3 â€” Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-7">
             <RevenueChart data={monthlyRevenue} />
@@ -187,10 +193,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 4 — Client Map Preview */}
+        {/* Row 4 â€” Client Map Preview */}
         <ClientMapPreview customers={mapCustomers} regionSummaries={regionSummaries} />
 
-        {/* Row 5 — Sales Activity Feed + Pipeline Snapshot */}
+        {/* Row 5 â€” Sales Activity Feed + Pipeline Snapshot */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-7">
             <SalesActivityFeed activities={activities} reps={leaderboard} />
@@ -200,7 +206,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 5 — Recent Orders + Inventory Alerts */}
+        {/* Row 5 â€” Recent Orders + Inventory Alerts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Recent Orders */}
           <div className="lg:col-span-7">
@@ -324,7 +330,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 6 — Integration Health */}
+        {/* Row 6 â€” Integration Health */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Integration Health</CardTitle>
