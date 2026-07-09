@@ -96,6 +96,29 @@ export function UsersManager({
     }
   }
 
+  const emailAction = async (id: string, action: 'resend_invite' | 'send_reset', label: string) => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error ?? `${label} failed`)
+        return
+      }
+      if (data.emailSent === false) {
+        toast.warning(`${label}: the email failed to send — ${data.emailError ?? 'unknown error'}`)
+        return
+      }
+      toast.success(`${label} sent`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const updateUser = async (id: string, patch: { role?: AppRole; isActive?: boolean }) => {
     setBusy(true)
     // Optimistic update; reconcile from the server afterward.
@@ -189,14 +212,36 @@ export function UsersManager({
                 </TableCell>
                 <TableCell className="text-right">
                   {canManage && (
-                    <Button
-                      size="sm"
-                      variant={user.isActive ? 'outline' : 'default'}
-                      disabled={busy}
-                      onClick={() => updateUser(user.id, { isActive: !user.isActive })}
-                    >
-                      {user.isActive ? 'Deactivate' : 'Reactivate'}
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      {user.isActive && user.lastSignInAt === null && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => emailAction(user.id, 'resend_invite', 'Invite')}
+                        >
+                          Resend invite
+                        </Button>
+                      )}
+                      {user.isActive && user.lastSignInAt !== null && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => emailAction(user.id, 'send_reset', 'Password reset')}
+                        >
+                          Send reset
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant={user.isActive ? 'outline' : 'default'}
+                        disabled={busy}
+                        onClick={() => updateUser(user.id, { isActive: !user.isActive })}
+                      >
+                        {user.isActive ? 'Deactivate' : 'Reactivate'}
+                      </Button>
+                    </div>
                   )}
                 </TableCell>
               </TableRow>

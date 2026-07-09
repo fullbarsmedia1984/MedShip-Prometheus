@@ -4,11 +4,52 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { Check, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 const inputClass =
   'h-12 w-full rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 text-sm text-[#1C3C6E] outline-none transition-all placeholder:text-[#bbb] focus:border-[#1E98D5] focus:ring-2 focus:ring-[#1E98D5]/20'
+
+// Most-used passwords that clear the length rule; length is the primary
+// defense (NIST 800-63B), so composition below is encouraged, not required.
+const COMMON_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+  'qwerty123', 'qwertyuiop', 'iloveyou', 'sunshine', 'princess', 'football',
+  'baseball', 'superman', 'trustno1', 'welcome1', 'admin123', 'letmein1',
+  'medical1', 'medship1', 'prometheus',
+])
+
+type PasswordRule = {
+  label: string
+  passed: boolean
+  required: boolean
+}
+
+function evaluatePassword(password: string): { rules: PasswordRule[]; valid: boolean; strength: number } {
+  const rules: PasswordRule[] = [
+    { label: 'At least 8 characters', passed: password.length >= 8, required: true },
+    {
+      label: 'Not a commonly used password',
+      passed: password.length > 0 && !COMMON_PASSWORDS.has(password.toLowerCase()),
+      required: true,
+    },
+    { label: '12 or more characters', passed: password.length >= 12, required: false },
+    { label: 'Upper and lower case letters', passed: /[a-z]/.test(password) && /[A-Z]/.test(password), required: false },
+    { label: 'At least one number', passed: /\d/.test(password), required: false },
+    { label: 'At least one symbol', passed: /[^A-Za-z0-9]/.test(password), required: false },
+  ]
+
+  const valid = rules.filter((r) => r.required).every((r) => r.passed)
+  const passedCount = rules.filter((r) => r.passed).length
+  // 0-4 scale for the meter; required rules gate validity separately.
+  const strength = valid ? Math.min(4, Math.max(1, passedCount - 2)) : password.length > 0 ? 1 : 0
+
+  return { rules, valid, strength }
+}
+
+const STRENGTH_LABELS = ['', 'Weak', 'Fair', 'Good', 'Strong']
+const STRENGTH_COLORS = ['#D6DEE3', '#DC2626', '#F59E0B', '#1E98D5', '#0FA62C']
 
 function submitClass(disabled: boolean) {
   return cn(
@@ -49,10 +90,14 @@ export function ResetPasswordClient({ token }: { token: string | null }) {
     }
   }
 
+  const evaluation = evaluatePassword(password)
+  const confirmMatches = confirm.length > 0 && password === confirm
+  const canSubmit = evaluation.valid && confirmMatches && !loading
+
   const applyReset = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password.length < 8) {
-      toast.error('Password must be at least 8 characters.')
+    if (!evaluation.valid) {
+      toast.error('The password does not meet the requirements yet.')
       return
     }
     if (password !== confirm) {
@@ -121,10 +166,61 @@ export function ResetPasswordClient({ token }: { token: string | null }) {
                     minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 8 characters"
+                    placeholder="A long passphrase works best"
                     className={inputClass}
                   />
                 </div>
+
+                {/* Strength meter */}
+                {password.length > 0 && (
+                  <div>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4].map((seg) => (
+                        <div
+                          key={seg}
+                          className="h-1.5 flex-1 rounded-full transition-colors"
+                          style={{
+                            background:
+                              seg <= evaluation.strength
+                                ? STRENGTH_COLORS[evaluation.strength]
+                                : '#E4EAEE',
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <p
+                      className="mt-1 text-xs font-medium"
+                      style={{ color: STRENGTH_COLORS[evaluation.strength] }}
+                    >
+                      {STRENGTH_LABELS[evaluation.strength]}
+                    </p>
+                  </div>
+                )}
+
+                {/* Live rule checklist */}
+                <ul className="space-y-1">
+                  {evaluation.rules.map((rule) => (
+                    <li key={rule.label} className="flex items-center gap-2 text-xs">
+                      {rule.passed ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-[#0FA62C]" />
+                      ) : (
+                        <X
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0',
+                            rule.required && password.length > 0 ? 'text-[#DC2626]' : 'text-[#B5C8CD]'
+                          )}
+                        />
+                      )}
+                      <span className={rule.passed ? 'text-[#576671]' : 'text-[#8A99A5]'}>
+                        {rule.label}
+                        {!rule.required && (
+                          <span className="text-[#B5C8CD]"> (recommended)</span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
                 <div>
                   <label htmlFor="confirm" className="mb-1.5 block text-sm font-medium text-[#1C3C6E]">
                     Confirm password
@@ -139,8 +235,27 @@ export function ResetPasswordClient({ token }: { token: string | null }) {
                     placeholder="Repeat the password"
                     className={inputClass}
                   />
+                  {confirm.length > 0 && (
+                    <p
+                      className={cn(
+                        'mt-1.5 flex items-center gap-1.5 text-xs',
+                        confirmMatches ? 'text-[#0FA62C]' : 'text-[#DC2626]'
+                      )}
+                    >
+                      {confirmMatches ? (
+                        <>
+                          <Check className="h-3.5 w-3.5" /> Passwords match
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3.5 w-3.5" /> Passwords do not match
+                        </>
+                      )}
+                    </p>
+                  )}
                 </div>
-                <button type="submit" disabled={loading} className={submitClass(loading)}>
+
+                <button type="submit" disabled={!canSubmit} className={submitClass(!canSubmit)}>
                   {loading ? 'Saving...' : 'Set new password'}
                 </button>
               </form>

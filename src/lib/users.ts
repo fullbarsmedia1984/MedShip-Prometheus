@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logAudit, type AuditActor } from '@/lib/audit'
-import { sendInviteEmail, sendRoleChangedEmail } from '@/lib/email'
+import { sendInviteEmail, sendPasswordResetEmail, sendRoleChangedEmail } from '@/lib/email'
 import type { AppRole } from '@/lib/auth'
 
 export type ManagedUser = {
@@ -134,6 +134,93 @@ export async function inviteUser(params: {
   })
 
   return { id: userId, emailSent: invite.sent, emailError: invite.error }
+}
+
+/** Re-send the set-password invite to a user who has never signed in. */
+export async function resendInvite(params: {
+  userId: string
+  actor: AuditActor
+  inviterName: string
+}): Promise<{ emailSent: boolean; emailError?: string }> {
+  const supabase = createAdminClient()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email, role, is_active')
+    .eq('id', params.userId)
+    .maybeSingle()
+  if (!profile) throw new Error('User not found')
+  if (!profile.is_active) throw new Error('Reactivate the user before resending their invite')
+
+  const { data: authUser } = await supabase.auth.admin.getUserById(params.userId)
+  if (authUser?.user?.last_sign_in_at) {
+    throw new Error('This user has already signed in — send a password reset instead')
+  }
+
+  const { data: link, error } = await supabase.auth.admin.generateLink({
+    type: 'recovery',
+    email: profile.email,
+  })
+  if (error || !link?.properties?.hashed_token) {
+    throw new Error(error?.message ?? 'Failed to generate the invite link')
+  }
+
+  const inviteUrl = `${appUrl()}/reset-password?token=${encodeURIComponent(link.properties.hashed_token)}`
+  const result = await sendInviteEmail({
+    to: profile.email,
+    inviteUrl,
+    role: profile.role as AppRole,
+    inviterName: params.inviterName,
+  })
+
+  await logAudit({
+    actor: params.actor,
+    action: 'user.invite_resent',
+    entityType: 'profile',
+    entityId: params.userId,
+    summary: `Invite re-sent to ${profile.email}`,
+    diff: { emailSent: result.sent, emailError: result.error ?? null },
+  })
+
+  return { emailSent: result.sent, emailError: result.error }
+}
+
+/** Send a password-reset email to a user on an administrator's behalf. */
+export async function sendPasswordResetForUser(params: {
+  userId: string
+  actor: AuditActor
+}): Promise<{ emailSent: boolean; emailError?: string }> {
+  const supabase = createAdminClient()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email, is_active')
+    .eq('id', params.userId)
+    .maybeSingle()
+  if (!profile) throw new Error('User not found')
+  if (!profile.is_active) throw new Error('Reactivate the user before sending a reset')
+
+  const { data: link, error } = await supabase.auth.admin.generateLink({
+    type: 'recovery',
+    email: profile.email,
+  })
+  if (error || !link?.properties?.hashed_token) {
+    throw new Error(error?.message ?? 'Failed to generate the reset link')
+  }
+
+  const resetUrl = `${appUrl()}/reset-password?token=${encodeURIComponent(link.properties.hashed_token)}`
+  const result = await sendPasswordResetEmail({ to: profile.email, resetUrl, minutes: 60 })
+
+  await logAudit({
+    actor: params.actor,
+    action: 'user.password_reset_sent',
+    entityType: 'profile',
+    entityId: params.userId,
+    summary: `Password reset sent to ${profile.email} by an administrator`,
+    diff: { emailSent: result.sent, emailError: result.error ?? null },
+  })
+
+  return { emailSent: result.sent, emailError: result.error }
 }
 
 export async function changeUserRole(params: {
