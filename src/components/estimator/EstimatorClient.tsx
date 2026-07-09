@@ -41,7 +41,7 @@ import {
 
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.7
 
-export function EstimatorClient() {
+export function EstimatorClient({ canManage = false }: { canManage?: boolean }) {
   const [soInput, setSoInput] = useState('')
   const [loadingSo, setLoadingSo] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -156,16 +156,18 @@ export function EstimatorClient() {
                   )}
                   Fetch line items
                 </Button>
-                <Link
-                  href="/dashboard/estimator/admin"
-                  className={cn(
-                    buttonVariants({ variant: 'outline' }),
-                    'h-11 border-medship-border text-medship-slate hover:text-medship-primary dark:border-white/10 dark:text-white/60'
-                  )}
-                >
-                  <Settings2 className="mr-2 h-4 w-4" />
-                  Admin
-                </Link>
+                {canManage && (
+                  <Link
+                    href="/dashboard/estimator/admin"
+                    className={cn(
+                      buttonVariants({ variant: 'outline' }),
+                      'h-11 border-medship-border text-medship-slate hover:text-medship-primary dark:border-white/10 dark:text-white/60'
+                    )}
+                  >
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Admin
+                  </Link>
+                )}
               </div>
             </form>
           </CardContent>

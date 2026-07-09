@@ -45,7 +45,7 @@ const mainNav: NavItem[] = [
   { name: 'TAM', href: '/dashboard/tam', icon: GraduationCap, roles: STAFF_ROLES },
   { name: 'Quotes', href: '/dashboard/quotes', icon: FileText },
   { name: 'Pricing', href: '/dashboard/pricing', icon: DollarSign, roles: STAFF_ROLES },
-  { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes, roles: STAFF_ROLES },
+  { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: STAFF_ROLES },
   { name: 'Territory', href: '/dashboard/territory', icon: MapPin, roles: STAFF_ROLES },

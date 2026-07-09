@@ -11,7 +11,7 @@ import {
   type PackingRules,
   type PackResult,
 } from '@/lib/packing-engine'
-import type { EstimateRecord, VerifiedDims } from './types'
+import type { CatalogDims, EstimateRecord, VerifiedDims } from './types'
 
 type BoxRow = {
   id: string
@@ -221,6 +221,152 @@ export async function upsertVerifiedDims(input: {
     { onConflict: 'fishbowl_part_number' }
   )
   if (error) throw new Error(`Failed to save verified dims: ${error.message}`)
+}
+
+// -----------------------------------------------------------------------------
+// Catalog dims (item_dims_catalog — Hercules/Fishbowl backfill tier)
+// -----------------------------------------------------------------------------
+
+type CatalogDimsRow = {
+  id: string
+  fishbowl_part_number: string
+  uom_code: string
+  length_in: number
+  width_in: number
+  height_in: number
+  gross_weight_lb: number
+  net_weight_lb: number | null
+  weight_basis: CatalogDims['weightBasis']
+  source_system: CatalogDims['sourceSystem']
+  source_vendor: string | null
+  gtin: string | null
+  match_method: string
+  match_confidence: number
+}
+
+function toCatalogDims(row: CatalogDimsRow): CatalogDims {
+  return {
+    id: row.id,
+    fishbowlPartNumber: row.fishbowl_part_number,
+    uomCode: row.uom_code,
+    lengthIn: Number(row.length_in),
+    widthIn: Number(row.width_in),
+    heightIn: Number(row.height_in),
+    grossWeightLb: Number(row.gross_weight_lb),
+    netWeightLb: row.net_weight_lb === null ? null : Number(row.net_weight_lb),
+    weightBasis: row.weight_basis,
+    sourceSystem: row.source_system,
+    sourceVendor: row.source_vendor,
+    gtin: row.gtin,
+    matchMethod: row.match_method,
+    matchConfidence: Number(row.match_confidence),
+  }
+}
+
+/** Case-variant SO parts ("10001cs") resolve to the base part's CS-level row. */
+export function catalogLookupCandidates(partNumber: string): Array<{
+  partNumber: string
+  preferredUom: string | null
+}> {
+  const candidates: Array<{ partNumber: string; preferredUom: string | null }> = [
+    { partNumber, preferredUom: null },
+  ]
+  const caseVariant = partNumber.match(/^(.*?)cs$/i)
+  if (caseVariant && caseVariant[1]) {
+    candidates.push({ partNumber: caseVariant[1], preferredUom: 'CS' })
+  }
+  return candidates
+}
+
+/**
+ * Load catalog dims for a set of SO part numbers. Each part resolves to at
+ * most one row: its own best row (preferring EA, then lowest volume so a
+ * mixed-pack match never inflates the estimate), or — for case-variant part
+ * numbers — the base part's case-level row.
+ */
+export async function getCatalogDimsForParts(
+  partNumbers: string[]
+): Promise<Map<string, CatalogDims>> {
+  if (partNumbers.length === 0) return new Map()
+  const lookups = new Map<string, ReturnType<typeof catalogLookupCandidates>>()
+  for (const pn of partNumbers) lookups.set(pn, catalogLookupCandidates(pn))
+  const allKeys = [...new Set([...lookups.values()].flat().map((c) => c.partNumber))]
+
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('item_dims_catalog')
+    .select('*')
+    .in('fishbowl_part_number', allKeys)
+  if (error) throw new Error(`Failed to load catalog dims: ${error.message}`)
+
+  const rowsByPart = new Map<string, CatalogDimsRow[]>()
+  for (const row of (data ?? []) as CatalogDimsRow[]) {
+    const list = rowsByPart.get(row.fishbowl_part_number) ?? []
+    list.push(row)
+    rowsByPart.set(row.fishbowl_part_number, list)
+  }
+
+  const pickRow = (
+    rows: CatalogDimsRow[],
+    preferredUom: string | null
+  ): CatalogDimsRow | undefined => {
+    if (preferredUom) {
+      const match = rows.find((r) => r.uom_code.toUpperCase() === preferredUom)
+      if (match) return match
+      return undefined // case-variant fallback only trusts an actual CS row
+    }
+    const ea = rows.find((r) => r.uom_code.toUpperCase() === 'EA')
+    if (ea) return ea
+    return [...rows].sort(
+      (a, b) =>
+        Number(a.length_in) * Number(a.width_in) * Number(a.height_in) -
+        Number(b.length_in) * Number(b.width_in) * Number(b.height_in)
+    )[0]
+  }
+
+  const result = new Map<string, CatalogDims>()
+  for (const [pn, candidates] of lookups) {
+    for (const candidate of candidates) {
+      const rows = rowsByPart.get(candidate.partNumber)
+      if (!rows || rows.length === 0) continue
+      const row = pickRow(rows, candidate.preferredUom)
+      if (row) {
+        result.set(pn, toCatalogDims(row))
+        break
+      }
+    }
+  }
+  return result
+}
+
+// -----------------------------------------------------------------------------
+// Dims work queue (estimator_dims_queue view)
+// -----------------------------------------------------------------------------
+
+export interface DimsQueueEntry {
+  partNumber: string
+  partDescription: string | null
+  lineCount12mo: number
+  totalQty12mo: number
+  lastOrderedAt: string | null
+}
+
+/** Highest-velocity parts still missing trusted dims, for manual entry. */
+export async function getDimsQueue(limit = 100): Promise<DimsQueueEntry[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('estimator_dims_queue')
+    .select('*')
+    .order('line_count_12mo', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(`Failed to load dims queue: ${error.message}`)
+  return (data ?? []).map((row) => ({
+    partNumber: row.part_number as string,
+    partDescription: (row.part_description as string | null) ?? null,
+    lineCount12mo: Number(row.line_count_12mo),
+    totalQty12mo: Number(row.total_qty_12mo ?? 0),
+    lastOrderedAt: (row.last_ordered_at as string | null) ?? null,
+  }))
 }
 
 // -----------------------------------------------------------------------------

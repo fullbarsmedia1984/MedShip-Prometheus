@@ -15,7 +15,7 @@ export interface ItemAttributes {
   hazmat: boolean
 }
 
-export type DimsSource = 'verified' | 'fishbowl' | 'default'
+export type DimsSource = 'verified' | 'catalog' | 'fishbowl' | 'default'
 
 /** One SO line item expanded into packable form. */
 export interface PackableItem {

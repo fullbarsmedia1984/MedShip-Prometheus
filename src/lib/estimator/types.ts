@@ -43,6 +43,26 @@ export interface VerifiedDims {
   verifiedAt: string
 }
 
+/** A catalog-sourced dims row from item_dims_catalog (Hercules/Fishbowl backfill). */
+export interface CatalogDims {
+  id: string
+  fishbowlPartNumber: string
+  uomCode: string
+  lengthIn: number
+  widthIn: number
+  heightIn: number
+  /** Best available shipping weight for the pack (see weightBasis). */
+  grossWeightLb: number
+  /** Contents-only weight; null when the source does not distinguish it. */
+  netWeightLb: number | null
+  weightBasis: 'gross_labeled' | 'net_labeled' | 'unlabeled_assumed_gross'
+  sourceSystem: 'hercules' | 'fishbowl_product'
+  sourceVendor: string | null
+  gtin: string | null
+  matchMethod: string
+  matchConfidence: number
+}
+
 /** SO line joined with its dims resolution for the UI. */
 export interface ResolvedLineItem extends SoLineItem {
   dimsSource: DimsSource
@@ -55,6 +75,7 @@ export interface ResolvedLineItem extends SoLineItem {
     attributes: ItemAttributes
   }
   verified: VerifiedDims | null
+  catalog?: CatalogDims | null
 }
 
 export interface SalesOrderSummary {

@@ -19,8 +19,9 @@ import {
 } from '@/components/ui/table'
 import { fetchJson } from '@/lib/client-api'
 import { cn } from '@/lib/utils'
-import type { PackingRules } from '@/lib/packing-engine'
-import { formatDims } from './estimator-types'
+import { CONSERVATIVE_ATTRIBUTES, type PackingRules } from '@/lib/packing-engine'
+import { formatDims, type ResolvedLineItem } from './estimator-types'
+import { VerifyDimsDialog } from './VerifyDimsDialog'
 
 // -----------------------------------------------------------------------------
 // Boxes tab
@@ -600,6 +601,135 @@ function DimsTab() {
 }
 
 // -----------------------------------------------------------------------------
+// Dims work queue tab
+// -----------------------------------------------------------------------------
+
+type QueueEntry = {
+  partNumber: string
+  partDescription: string | null
+  lineCount12mo: number
+  totalQty12mo: number
+  lastOrderedAt: string | null
+}
+
+/** Wrap a queue row as a minimal SO line so VerifyDimsDialog can edit it. */
+function queueEntryAsLine(entry: QueueEntry): ResolvedLineItem {
+  return {
+    partNumber: entry.partNumber,
+    description: entry.partDescription ?? entry.partNumber,
+    quantity: 1,
+    uom: null,
+    productId: null,
+    fishbowlDims: { lengthIn: null, widthIn: null, heightIn: null, weightLb: null },
+    dimsSource: 'default',
+    resolved: {
+      lengthIn: 0,
+      widthIn: 0,
+      heightIn: 0,
+      weightLb: 0,
+      shipsInOwnCarton: false,
+      attributes: { ...CONSERVATIVE_ATTRIBUTES },
+    },
+    verified: null,
+    catalog: null,
+  }
+}
+
+function QueueTab() {
+  const [queue, setQueue] = useState<QueueEntry[] | null>(null)
+  const [editing, setEditing] = useState<QueueEntry | null>(null)
+
+  const load = () => {
+    fetchJson<{ queue: QueueEntry[] }>('/api/estimator/dims/queue?limit=200')
+      .then(({ queue }) => setQueue(queue))
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to load dims queue')
+        setQueue([])
+      })
+  }
+
+  useEffect(load, [])
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base text-medship-heading dark:text-white">
+          Missing-dims work queue
+        </CardTitle>
+        <p className="text-xs text-medship-slate dark:text-white/50">
+          Parts ordered in the last 12 months with no verified or catalog dims, ranked by order
+          frequency. Measuring the top of this list moves estimate confidence the fastest.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {!queue ? (
+          <div className="flex justify-center py-8 text-medship-slate">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </div>
+        ) : queue.length === 0 ? (
+          <div className="py-8 text-center text-sm text-medship-slate dark:text-white/50">
+            Queue is clear — every recently ordered part has trusted dims.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Part #</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">SO lines (12 mo)</TableHead>
+                <TableHead className="text-right">Qty (12 mo)</TableHead>
+                <TableHead>Last ordered</TableHead>
+                <TableHead className="w-[7rem]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {queue.map((entry) => (
+                <TableRow key={entry.partNumber}>
+                  <TableCell className="font-mono text-xs font-medium text-medship-heading dark:text-white">
+                    {entry.partNumber}
+                  </TableCell>
+                  <TableCell className="max-w-[24rem] truncate text-xs">
+                    {entry.partDescription ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{entry.lineCount12mo}</TableCell>
+                  <TableCell className="text-right tabular-nums">{entry.totalQty12mo}</TableCell>
+                  <TableCell className="text-xs text-medship-slate dark:text-white/60">
+                    {entry.lastOrderedAt
+                      ? new Date(entry.lastOrderedAt).toLocaleDateString()
+                      : '—'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditing(entry)}
+                      className="border-medship-primary/40 text-medship-primary"
+                    >
+                      Enter dims
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {editing && (
+          <VerifyDimsDialog
+            line={queueEntryAsLine(editing)}
+            onClose={() => setEditing(null)}
+            onSaved={() => {
+              setEditing(null)
+              load()
+            }}
+          />
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// -----------------------------------------------------------------------------
 // Page shell
 // -----------------------------------------------------------------------------
 
@@ -620,6 +750,7 @@ export function EstimatorAdminClient() {
             <TabsTrigger value="boxes">Standard boxes</TabsTrigger>
             <TabsTrigger value="rules">Packing rules</TabsTrigger>
             <TabsTrigger value="dims">Verified dims</TabsTrigger>
+            <TabsTrigger value="queue">Dims queue</TabsTrigger>
           </TabsList>
           <TabsContent value="boxes" className="mt-6">
             <BoxesTab />
@@ -629,6 +760,9 @@ export function EstimatorAdminClient() {
           </TabsContent>
           <TabsContent value="dims" className="mt-6">
             <DimsTab />
+          </TabsContent>
+          <TabsContent value="queue" className="mt-6">
+            <QueueTab />
           </TabsContent>
         </Tabs>
       </main>

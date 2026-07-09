@@ -7,6 +7,11 @@ const STYLES: Record<DimsSource, { label: string; className: string; dot: string
     className: 'bg-medship-success/10 text-medship-success border-medship-success/30',
     dot: 'bg-medship-success',
   },
+  catalog: {
+    label: 'Catalog',
+    className: 'bg-medship-primary/10 text-medship-primary border-medship-primary/30',
+    dot: 'bg-medship-primary',
+  },
   fishbowl: {
     label: 'Fishbowl — untrusted',
     className: 'bg-medship-warning/10 text-medship-warning border-medship-warning/40',

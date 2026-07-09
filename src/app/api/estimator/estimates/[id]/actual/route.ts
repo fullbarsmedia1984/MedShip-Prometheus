@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { ESTIMATOR_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { recordActualBoxes } from '@/lib/estimator/repositories'
 
 type ActualContext = {
@@ -8,7 +8,7 @@ type ActualContext = {
 
 export async function POST(request: NextRequest, context: ActualContext) {
   try {
-    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
+    const auth = await requireApiAuth(ESTIMATOR_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params

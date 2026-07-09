@@ -14,6 +14,7 @@ import {
 } from '@/lib/packing-engine'
 import { getEstimatorLlmProvider } from '@/lib/llm'
 import {
+  getCatalogDimsForParts,
   getPackingRules,
   getStandardBoxes,
   getVerifiedDimsForParts,
@@ -21,6 +22,7 @@ import {
 } from './repositories'
 import { fetchSalesOrderForEstimate } from './so-service'
 import type {
+  CatalogDims,
   EstimateRecord,
   ResolvedLineItem,
   SalesOrderSummary,
@@ -37,7 +39,8 @@ const PLACEHOLDER_DIMS = { lengthIn: 12, widthIn: 10, heightIn: 8, weightLb: 5 }
 
 function resolveLine(
   line: SoLineItem,
-  verified: VerifiedDims | undefined
+  verified: VerifiedDims | undefined,
+  catalog: CatalogDims | undefined
 ): ResolvedLineItem {
   if (verified) {
     return {
@@ -52,6 +55,28 @@ function resolveLine(
         attributes: verified.attributes,
       },
       verified,
+      catalog: catalog ?? null,
+    }
+  }
+
+  if (catalog) {
+    return {
+      ...line,
+      // Fishbowl-product-sourced rows keep advisory-tier trust: their
+      // granularity is inconsistent, so only Hercules vendor data earns the
+      // catalog confidence discount.
+      dimsSource: catalog.sourceSystem === 'hercules' ? 'catalog' : 'fishbowl',
+      resolved: {
+        lengthIn: catalog.lengthIn,
+        widthIn: catalog.widthIn,
+        heightIn: catalog.heightIn,
+        // Packing uses shipping weight; catalog gross is the best available.
+        weightLb: catalog.grossWeightLb,
+        shipsInOwnCarton: false,
+        attributes: { ...CONSERVATIVE_ATTRIBUTES },
+      },
+      verified: null,
+      catalog,
     }
   }
 
@@ -78,6 +103,7 @@ function resolveLine(
         attributes: { ...CONSERVATIVE_ATTRIBUTES },
       },
       verified: null,
+      catalog: null,
     }
   }
 
@@ -90,6 +116,7 @@ function resolveLine(
       attributes: { ...CONSERVATIVE_ATTRIBUTES },
     },
     verified: null,
+    catalog: null,
   }
 }
 
@@ -111,9 +138,13 @@ function toPackableItems(lines: ResolvedLineItem[]): PackableItem[] {
 /** Fetch an SO and resolve every line against the verified dims layer. */
 export async function getSalesOrderSummary(soNumber: string): Promise<SalesOrderSummary> {
   const so = await fetchSalesOrderForEstimate(soNumber)
-  const verifiedByPart = await getVerifiedDimsForParts(so.lineItems.map((l) => l.partNumber))
+  const partNumbers = so.lineItems.map((l) => l.partNumber)
+  const [verifiedByPart, catalogByPart] = await Promise.all([
+    getVerifiedDimsForParts(partNumbers),
+    getCatalogDimsForParts(partNumbers),
+  ])
   const lineItems = so.lineItems.map((line) =>
-    resolveLine(line, verifiedByPart.get(line.partNumber))
+    resolveLine(line, verifiedByPart.get(line.partNumber), catalogByPart.get(line.partNumber))
   )
   return {
     soNumber: so.soNumber,
