@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 import type {
   WallboardData,
   WallboardOrder,
@@ -44,16 +44,50 @@ function AgeChip({ order }: { order: WallboardOrder }) {
   )
 }
 
+function StockBadge({ order }: { order: WallboardOrder }) {
+  const s = order.stock
+  if (!s || s.state === 'na') return null
+  if (s.state === 'ready') {
+    return (
+      <span className="rounded-sm bg-[#0FA62C]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#3ECC5F]">
+        stock ✓
+      </span>
+    )
+  }
+  if (s.state === 'not_ordered') {
+    return (
+      <span className="animate-pulse rounded-sm bg-[#D93025]/20 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#FF7B6E]">
+        {s.shortLines - s.onOrderLines} short · no po
+      </span>
+    )
+  }
+  const eta = s.eta
+    ? new Date(s.eta + 'T00:00:00').toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+    : null
+  return (
+    <span className="rounded-sm bg-[#E89C0C]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#F5B94E]">
+      {s.state === 'partial' ? 'partial · ' : ''}on order{eta ? ` · ${eta}` : ''}
+    </span>
+  )
+}
+
 function OrderCard({
   order,
   index,
   variant,
   animate = true,
+  glowing = false,
+  onAcknowledge,
 }: {
   order: WallboardOrder
   index: number
   variant: LaneVariant
   animate?: boolean
+  glowing?: boolean
+  onAcknowledge?: (soNumber: string) => void
 }) {
   const accent = LANE_ACCENTS[variant]
   return (
@@ -61,9 +95,19 @@ function OrderCard({
       initial={animate ? { opacity: 0, y: 10 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: animate ? 0.1 + index * 0.04 : 0, duration: 0.35, ease }}
-      className="rounded-lg border border-white/10 bg-[#162035] px-3 py-2"
-      style={{ borderLeftColor: accent, borderLeftWidth: 3 }}
+      onClick={() => onAcknowledge?.(order.soNumber)}
+      className={`shrink-0 rounded-lg border border-white/10 bg-[#162035] px-3 py-2 ${
+        glowing ? 'wb-glow cursor-pointer' : ''
+      }`}
+      style={
+        {
+          borderLeftColor: accent,
+          borderLeftWidth: 3,
+          '--wb-glow-color': accent,
+        } as React.CSSProperties
+      }
       data-so={order.soNumber}
+      data-glowing={glowing || undefined}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[15px] font-bold tracking-tight text-white">
@@ -89,11 +133,14 @@ function OrderCard({
           {order.lines} lines · {order.qtyFulfilled}/{order.qty} units
           {order.shipTo ? ` · ${order.shipTo}` : ''}
         </span>
-        {order.partialLines > 0 && variant === 'picking' && (
-          <span className="shrink-0 rounded bg-[#E89C0C]/20 px-1 py-0.5 font-mono text-[9px] font-bold uppercase text-[#F5B94E]">
-            {order.partialLines} partial
-          </span>
-        )}
+        <span className="flex shrink-0 items-center gap-1">
+          {variant === 'ready' && <StockBadge order={order} />}
+          {order.partialLines > 0 && variant === 'picking' && (
+            <span className="rounded bg-[#E89C0C]/20 px-1 py-0.5 font-mono text-[9px] font-bold uppercase text-[#F5B94E]">
+              {order.partialLines} partial
+            </span>
+          )}
+        </span>
       </div>
       {variant === 'picking' && (
         <div className="mt-1.5 h-1.5 overflow-hidden rounded bg-white/10">
@@ -204,135 +251,12 @@ function AlertTicker({ alerts }: { alerts: string[] }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Expanded lane overlay: every order in a status, sortable            */
+/* Lane: collapsed shows the top of the queue; expanded shows all      */
+/* orders in-place with wheel scrolling and age/progress sorting.      */
 /* ------------------------------------------------------------------ */
 
 type SortKey = 'age' | 'progress'
 type SortDir = 'desc' | 'asc'
-
-function ExpandedLane({
-  title,
-  variant,
-  orders,
-  onClose,
-}: {
-  title: string
-  variant: LaneVariant
-  orders: WallboardOrder[]
-  onClose: () => void
-}) {
-  const accent = LANE_ACCENTS[variant]
-  const [sortKey, setSortKey] = useState<SortKey>('age')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  const sorted = [...orders].sort((a, b) => {
-    const v =
-      sortKey === 'age' ? a.ageDays - b.ageDays : a.pct - b.pct
-    return sortDir === 'desc' ? -v : v
-  })
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
-  }
-
-  const sortButton = (key: SortKey, label: string) => (
-    <button
-      onClick={() => toggleSort(key)}
-      className={`rounded-md border px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider transition-colors ${
-        sortKey === key
-          ? 'border-current bg-white/10'
-          : 'border-white/15 text-slate-400 hover:border-white/40 hover:text-white'
-      }`}
-      style={sortKey === key ? { color: accent } : undefined}
-      data-testid={`sort-${key}`}
-    >
-      {label} {sortKey === key ? (sortDir === 'desc' ? '↓' : '↑') : ''}
-    </button>
-  )
-
-  return (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
-        onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[3px]"
-      />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 14 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 14 }}
-        transition={{ duration: 0.28, ease }}
-        className="fixed inset-x-[4vw] inset-y-[6vh] z-50 flex flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#0F1A2E] shadow-2xl"
-        data-testid="expanded-lane"
-      >
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 px-5 py-3">
-          <div className="flex items-center gap-3">
-            <span className="h-3 w-3 rounded-sm" style={{ background: accent }} />
-            <h2 className="font-mono text-[15px] font-bold uppercase tracking-[0.16em] text-white">
-              {title}
-            </h2>
-            <span
-              className="rounded px-2 py-0.5 font-mono text-[13px] font-bold"
-              style={{ background: `${accent}26`, color: accent }}
-            >
-              {orders.length} orders
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-              sort
-            </span>
-            {sortButton('age', 'Age')}
-            {sortButton('progress', 'Progress')}
-            <button
-              onClick={onClose}
-              className="ml-2 rounded-md border border-white/15 px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider text-slate-400 transition-colors hover:border-[#D93025] hover:text-[#FF7B6E]"
-              data-testid="close-expanded"
-            >
-              esc ✕
-            </button>
-          </div>
-        </header>
-        <div className="grid flex-1 auto-rows-min grid-cols-3 gap-2 overflow-y-auto p-4 xl:grid-cols-4">
-          {sorted.map((o, i) => (
-            <OrderCard
-              key={o.soNumber}
-              order={o}
-              index={i}
-              variant={variant}
-              animate={false}
-            />
-          ))}
-          {sorted.length === 0 && (
-            <p className="col-span-full py-10 text-center font-mono text-[12px] uppercase tracking-wider text-slate-500">
-              — no orders in this status —
-            </p>
-          )}
-        </div>
-      </motion.div>
-    </>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* Ambient lane                                                        */
-/* ------------------------------------------------------------------ */
 
 function Lane({
   title,
@@ -340,18 +264,57 @@ function Lane({
   orders,
   previewOrders,
   index,
-  onExpand,
+  expanded,
+  onToggle,
+  glowSet,
+  onAcknowledge,
 }: {
   title: string
   variant: LaneVariant
   orders: WallboardOrder[]
   previewOrders: WallboardOrder[]
   index: number
-  onExpand: () => void
+  expanded: boolean
+  onToggle: () => void
+  glowSet: Set<string>
+  onAcknowledge: (soNumber: string) => void
 }) {
   const accent = LANE_ACCENTS[variant]
-  const shown = previewOrders.slice(0, LANE_CAPS[variant])
+  const [sortKey, setSortKey] = useState<SortKey>('age')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+    else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  const shown = expanded
+    ? [...orders].sort((a, b) => {
+        const v = sortKey === 'age' ? a.ageDays - b.ageDays : a.pct - b.pct
+        return sortDir === 'desc' ? -v : v
+      })
+    : previewOrders.slice(0, LANE_CAPS[variant])
   const hidden = orders.length - shown.length
+
+  const sortButton = (key: SortKey, label: string) => (
+    <button
+      onClick={() => toggleSort(key)}
+      className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+        sortKey === key
+          ? 'bg-white/10'
+          : 'text-slate-500 hover:text-white'
+      }`}
+      style={sortKey === key ? { color: accent } : undefined}
+      data-testid={`sort-${variant}-${key}`}
+    >
+      {label}
+      {sortKey === key ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+    </button>
+  )
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 18 }}
@@ -359,11 +322,12 @@ function Lane({
       transition={{ delay: index * 0.08, duration: 0.45, ease }}
       className="flex min-h-0 flex-col"
       data-lane={title}
+      data-expanded={expanded || undefined}
     >
       <header className="mb-2 flex items-center justify-between px-1">
         <button
-          onClick={onExpand}
-          title="Show all orders"
+          onClick={onToggle}
+          title={expanded ? 'Show less' : 'Show all orders'}
           className="group flex items-center gap-2"
           data-testid={`expand-${variant}`}
         >
@@ -371,32 +335,69 @@ function Lane({
           <h2 className="font-mono text-[13px] font-bold uppercase tracking-[0.16em] text-white transition-colors group-hover:text-[#3AACE3]">
             {title}
           </h2>
-          <span className="font-mono text-[11px] text-slate-500 opacity-0 transition-opacity group-hover:opacity-100">
-            ⤢
+          <span
+            className={`font-mono text-[11px] text-slate-500 transition-opacity ${
+              expanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            {expanded ? '⤡' : '⤢'}
           </span>
         </button>
-        <span
-          className="rounded px-2 py-0.5 font-mono text-[13px] font-bold"
-          style={{ background: `${accent}26`, color: accent }}
-        >
-          {orders.length}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {expanded && (
+            <>
+              {sortButton('age', 'Age')}
+              {sortButton('progress', 'Prog')}
+            </>
+          )}
+          <span
+            className="rounded px-2 py-0.5 font-mono text-[13px] font-bold"
+            style={{ background: `${accent}26`, color: accent }}
+          >
+            {orders.length}
+          </span>
+        </div>
       </header>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-2">
+      <div
+        className={`flex min-h-0 flex-1 flex-col gap-2 rounded-xl border p-2 transition-colors ${
+          expanded
+            ? 'overflow-y-auto border-white/15 bg-white/[0.04]'
+            : 'overflow-hidden border-white/5 bg-white/[0.02]'
+        }`}
+        data-testid={`lane-body-${variant}`}
+      >
         {shown.map((o, i) => (
-          <OrderCard key={o.soNumber} order={o} index={i} variant={variant} />
+          <OrderCard
+            key={o.soNumber}
+            order={o}
+            index={i}
+            variant={variant}
+            animate={!expanded}
+            glowing={glowSet.has(o.soNumber)}
+            onAcknowledge={onAcknowledge}
+          />
         ))}
         {shown.length === 0 && (
           <p className="px-2 py-6 text-center font-mono text-[11px] uppercase tracking-wider text-slate-500">
             — none —
           </p>
         )}
-        {hidden > 0 && (
+        {!expanded && hidden > 0 && (
           <button
-            onClick={onExpand}
+            onClick={onToggle}
             className="rounded px-1 py-0.5 text-center font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400 transition-colors hover:text-white"
+            data-testid={`view-all-${variant}`}
           >
             +{hidden} more — view all
+          </button>
+        )}
+        {expanded && (
+          <button
+            onClick={onToggle}
+            className="sticky bottom-0 rounded bg-[#0F1A2E]/90 px-1 py-1 text-center font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400 backdrop-blur transition-colors hover:text-white"
+            data-testid={`show-less-${variant}`}
+          >
+            ⤡ show less
           </button>
         )}
       </div>
@@ -416,21 +417,24 @@ function useClock() {
 
 /* ------------------------------------------------------------------ */
 
+function orderSig(o: WallboardOrder, variant: LaneVariant): string {
+  return `${variant}|${o.qtyFulfilled}|${o.pct}|${o.stock?.state ?? ''}|${o.completedToday}`
+}
+
 export function WallboardClient({ data }: { data: WallboardData }) {
   const router = useRouter()
   const clock = useClock()
   const [expanded, setExpanded] = useState<LaneVariant | null>(null)
+  const [glowSet, setGlowSet] = useState<Set<string>>(new Set())
+  const prevSigs = useRef<Map<string, string> | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => router.refresh(), 60000)
     return () => clearInterval(t)
   }, [router])
 
-  const syncStale = data.syncAgeMinutes !== null && data.syncAgeMinutes > 120
-  const k = data.kpis
-
-  // Ambient lanes show the actionable horizon (≤90d); the expanded view and
-  // the "longest waiting" rail carry the long tail.
+  // Ambient lanes show the actionable horizon (≤90d); expanded lanes and the
+  // "longest waiting" rail carry the long tail.
   const lanes: Record<
     LaneVariant,
     { title: string; orders: WallboardOrder[]; preview: WallboardOrder[] }
@@ -457,6 +461,40 @@ export function WallboardClient({ data }: { data: WallboardData }) {
     },
   }
 
+  // Change detection across syncs: a card glows when its lane or progress
+  // changed since the previous refresh, until clicked or the next sync.
+  useEffect(() => {
+    const next = new Map<string, string>()
+    for (const v of Object.keys(lanes) as LaneVariant[]) {
+      for (const o of lanes[v].orders) next.set(o.soNumber, orderSig(o, v))
+    }
+    if (prevSigs.current === null) {
+      prevSigs.current = next // first paint: nothing glows
+      return
+    }
+    const changed = new Set<string>()
+    for (const [so, sig] of next) {
+      const prev = prevSigs.current.get(so)
+      if (prev !== undefined && prev !== sig) changed.add(so)
+      if (prev === undefined) changed.add(so) // newly appeared order
+    }
+    prevSigs.current = next
+    setGlowSet(changed)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.generatedAt])
+
+  function acknowledge(soNumber: string) {
+    setGlowSet((prev) => {
+      if (!prev.has(soNumber)) return prev
+      const next = new Set(prev)
+      next.delete(soNumber)
+      return next
+    })
+  }
+
+  const syncStale = data.syncAgeMinutes !== null && data.syncAgeMinutes > 120
+  const k = data.kpis
+
   const kpis: { label: string; value: number; tone?: 'warn' | 'critical' | 'good' }[] = [
     { label: 'Ready to pick', value: k.readyCount },
     { label: 'Picking', value: k.pickingCount },
@@ -465,6 +503,11 @@ export function WallboardClient({ data }: { data: WallboardData }) {
       label: 'Stuck picks',
       value: k.stuckPickCount,
       tone: k.stuckPickCount > 0 ? 'critical' : undefined,
+    },
+    {
+      label: 'No PO short',
+      value: k.noPoCount,
+      tone: k.noPoCount > 0 ? 'critical' : undefined,
     },
     {
       label: 'Backlog >90d',
@@ -476,6 +519,20 @@ export function WallboardClient({ data }: { data: WallboardData }) {
 
   return (
     <div className="grid h-screen grid-rows-[auto_auto_1fr] gap-3 overflow-hidden bg-[#0F1A2E] p-4 text-white">
+      <style>{`
+        @keyframes wb-glow {
+          0%, 100% {
+            box-shadow: 0 0 0 1px var(--wb-glow-color),
+              0 0 10px 0 color-mix(in srgb, var(--wb-glow-color) 40%, transparent);
+          }
+          50% {
+            box-shadow: 0 0 0 2px var(--wb-glow-color),
+              0 0 22px 3px color-mix(in srgb, var(--wb-glow-color) 75%, transparent);
+          }
+        }
+        .wb-glow { animation: wb-glow 1.6s ease-in-out infinite; }
+      `}</style>
+
       {/* header */}
       <header className="flex items-center justify-between gap-6">
         <div className="shrink-0">
@@ -489,7 +546,7 @@ export function WallboardClient({ data }: { data: WallboardData }) {
           {kpis.map((kpi) => (
             <div
               key={kpi.label}
-              className={`min-w-[110px] rounded-lg border px-3 py-1.5 text-center ${
+              className={`min-w-[96px] rounded-lg border px-2.5 py-1.5 text-center ${
                 kpi.tone === 'critical'
                   ? 'border-[#D93025]/60 bg-[#D93025]/15'
                   : kpi.tone === 'warn'
@@ -573,7 +630,10 @@ export function WallboardClient({ data }: { data: WallboardData }) {
             orders={lanes[v].orders}
             previewOrders={lanes[v].preview}
             index={i}
-            onExpand={() => setExpanded(v)}
+            expanded={expanded === v}
+            onToggle={() => setExpanded(expanded === v ? null : v)}
+            glowSet={glowSet}
+            onAcknowledge={acknowledge}
           />
         ))}
 
@@ -617,17 +677,6 @@ export function WallboardClient({ data }: { data: WallboardData }) {
           </p>
         </motion.aside>
       </div>
-
-      <AnimatePresence>
-        {expanded && (
-          <ExpandedLane
-            title={lanes[expanded].title}
-            variant={expanded}
-            orders={lanes[expanded].orders}
-            onClose={() => setExpanded(null)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   )
 }

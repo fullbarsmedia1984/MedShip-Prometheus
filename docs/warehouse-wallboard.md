@@ -33,13 +33,43 @@ past-due in the data so it can't discriminate):
 - Header shows a **LIVE** dot with Fishbowl sync age (turns amber when the
   sync is >2h stale) and a clock.
 
+## Stock posture (Ready-to-pick lane)
+
+Each Issued order's unfulfilled **Sale** lines (drop-ship/shipping/kit lines
+excluded) are checked against cached Fishbowl inventory
+(`inventory_snapshot.qty_on_hand`, summed across locations) and open
+purchase orders:
+
+| Badge | Meaning |
+| --- | --- |
+| `STOCK ✓` (green) | Every line is on hand — pick it now |
+| `ON ORDER · <date>` (amber) | Short lines are all covered by open POs; date = earliest expected receipt |
+| `PARTIAL · ON ORDER` (amber) | Some lines on hand, the rest on order |
+| `N SHORT · NO PO` (red, pulsing) | Short lines with **no open PO** — purchasing needs to act. Also feeds the ticker and the "No PO short" KPI. |
+
+Open-PO data lives in `fb_open_po_lines` (migration 040), refreshed straight
+from Fishbowl's data-query API (`po`/`poitem`, statuses Issued/Partial) by
+`src/lib/warehouse-board/po-sync.ts`. The refresh runs *after* each page
+render via `next/server`'s `after()` when the cache is >15 min old, so the
+board never blocks on Fishbowl and tolerates it being down (stale cache).
+
 ## Behavior
 
 - Auto-refreshes every 60 seconds (server re-render; no interaction needed).
-- Lanes cap at 7 cards (oldest/most critical first) with a "+N more" chip;
-  verified to fit 1920×1080 with zero scroll.
+- Lanes cap at 7 cards (oldest/most critical first). Clicking a lane title or
+  "+N more — view all" expands the lane **in place**: every order in that
+  status becomes mouse-wheel scrollable, sortable by **age** or **progress**
+  (click again to flip direction), "show less" collapses.
+- **Change glow**: when a refresh shows an order changed since the previous
+  sync (lane move, pick progress, stock posture, newly appeared), its card
+  pulses a colored glow outline until someone clicks it or the next sync
+  recomputes the set.
+- **Ticker**: hover pauses it; click-drag scrubs backward/forward; releases
+  resume the auto-scroll.
 - Data access is server-side via the service-role client; the only public
   API is the gate `POST`. No order data is reachable without the cookie.
+- Line-item, inventory, and PO reads paginate past PostgREST's 1,000-row cap
+  (`pageAll` in `data.ts`) — the open book is ~3.8k line rows.
 
 Code: `src/lib/warehouse-board/`, `src/app/warehouse-board/`,
 `src/components/warehouse-board/`.
