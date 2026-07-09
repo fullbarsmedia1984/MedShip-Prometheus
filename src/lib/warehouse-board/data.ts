@@ -42,9 +42,18 @@ export interface WallboardOrder {
   stock: StockInfo | null
 }
 
+export interface SyncAges {
+  /** minutes since the newest fb_sales_orders row sync */
+  so: number | null
+  /** minutes since the open-PO cache refresh */
+  po: number | null
+  /** minutes since the newest inventory_snapshot row sync */
+  inventory: number | null
+}
+
 export interface WallboardData {
   generatedAt: string
-  syncAgeMinutes: number | null
+  syncAges: SyncAges
   kpis: {
     readyCount: number
     pickingCount: number
@@ -351,18 +360,38 @@ export async function getWallboardData(): Promise<WallboardData> {
     alerts.push(`${o.soNumber} ${o.customer} — closed short, review lines`)
   }
 
-  const newestSync = open
+  const newestSoSync = open
     .concat(shipped)
     .map((r) => r.last_synced_at)
     .filter((v): v is string => Boolean(v))
     .sort()
     .at(-1)
 
+  const ageMinutes = (ts: string | null | undefined): number | null =>
+    ts ? Math.round((now.getTime() - new Date(ts).getTime()) / 60000) : null
+
+  const [poSync, invSync] = await Promise.all([
+    supabase
+      .from('fb_open_po_lines')
+      .select('synced_at')
+      .order('synced_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('inventory_snapshot')
+      .select('last_synced_at')
+      .order('last_synced_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
   return {
     generatedAt: now.toISOString(),
-    syncAgeMinutes: newestSync
-      ? Math.round((now.getTime() - new Date(newestSync).getTime()) / 60000)
-      : null,
+    syncAges: {
+      so: ageMinutes(newestSoSync),
+      po: ageMinutes(poSync.data?.synced_at as string | undefined),
+      inventory: ageMinutes(invSync.data?.last_synced_at as string | undefined),
+    },
     kpis: {
       readyCount: ready.length,
       pickingCount: picking.length,

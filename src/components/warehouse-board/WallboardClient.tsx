@@ -1,17 +1,19 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'motion/react'
 import type {
   WallboardData,
   WallboardOrder,
   LaneSeverity,
+  SyncAges,
 } from '@/lib/warehouse-board/data'
 
 const ease = [0.22, 1, 0.36, 1] as const
 
 type LaneVariant = 'ready' | 'picking' | 'shipped' | 'short'
+type BoardLane = Exclude<LaneVariant, 'short'>
 
 const LANE_ACCENTS: Record<LaneVariant, string> = {
   ready: '#1E98D5',
@@ -21,17 +23,22 @@ const LANE_ACCENTS: Record<LaneVariant, string> = {
 }
 
 // Ambient (collapsed) card caps per lane — sized to fit 1080p with no scroll.
-const LANE_CAPS: Record<LaneVariant, number> = {
+const LANE_CAPS: Record<BoardLane, number> = {
   ready: 7,
   picking: 7,
-  shipped: 6,
-  short: 4,
+  shipped: 7,
 }
 
 const SEVERITY_STYLES: Record<LaneSeverity, string> = {
   ok: 'bg-white/10 text-slate-300',
   warn: 'bg-[#E89C0C]/20 text-[#F5B94E]',
   critical: 'bg-[#D93025]/25 text-[#FF7B6E] animate-pulse',
+}
+
+/** Quantities come from numeric sums — clamp float noise (33.333333333). */
+function fmtQty(n: number): string {
+  if (Number.isInteger(n)) return String(n)
+  return n.toLocaleString('en-US', { maximumFractionDigits: 1 })
 }
 
 function AgeChip({ order }: { order: WallboardOrder }) {
@@ -80,6 +87,7 @@ function OrderCard({
   variant,
   animate = true,
   glowing = false,
+  searchState = 'none',
   onAcknowledge,
 }: {
   order: WallboardOrder
@@ -87,27 +95,34 @@ function OrderCard({
   variant: LaneVariant
   animate?: boolean
   glowing?: boolean
+  /** none = no active search; hit = matches; miss = dimmed */
+  searchState?: 'none' | 'hit' | 'miss'
   onAcknowledge?: (soNumber: string) => void
 }) {
   const accent = LANE_ACCENTS[variant]
   return (
     <motion.div
       initial={animate ? { opacity: 0, y: 10 } : false}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: searchState === 'miss' ? 0.25 : 1, y: 0 }}
       transition={{ delay: animate ? 0.1 + index * 0.04 : 0, duration: 0.35, ease }}
       onClick={() => onAcknowledge?.(order.soNumber)}
-      className={`shrink-0 rounded-lg border border-white/10 bg-[#162035] px-3 py-2 ${
+      className={`shrink-0 rounded-lg border bg-[#162035] px-3 py-2 ${
         glowing ? 'wb-glow cursor-pointer' : ''
+      } ${
+        searchState === 'hit'
+          ? 'border-white ring-2 ring-white/80 shadow-[0_0_18px_2px_rgba(255,255,255,0.35)]'
+          : 'border-white/10'
       }`}
       style={
         {
-          borderLeftColor: accent,
+          borderLeftColor: searchState === 'hit' ? '#FFFFFF' : accent,
           borderLeftWidth: 3,
           '--wb-glow-color': accent,
         } as React.CSSProperties
       }
       data-so={order.soNumber}
       data-glowing={glowing || undefined}
+      data-search-hit={searchState === 'hit' || undefined}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[15px] font-bold tracking-tight text-white">
@@ -130,7 +145,7 @@ function OrderCard({
       </p>
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className="truncate font-mono text-[10px] uppercase tracking-wider text-slate-400">
-          {order.lines} lines · {order.qtyFulfilled}/{order.qty} units
+          {order.lines} lines · {fmtQty(order.qtyFulfilled)}/{fmtQty(order.qty)} units
           {order.shipTo ? ` · ${order.shipTo}` : ''}
         </span>
         <span className="flex shrink-0 items-center gap-1">
@@ -222,7 +237,6 @@ function AlertTicker({ alerts }: { alerts: string[] }) {
       }}
       onPointerMove={(e) => {
         if (!dragRef.current) return
-        // content follows the cursor: drag right rewinds, drag left advances
         offsetRef.current =
           dragRef.current.startOffset - (e.clientX - dragRef.current.startX)
       }}
@@ -251,12 +265,19 @@ function AlertTicker({ alerts }: { alerts: string[] }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Lane: collapsed shows the top of the queue; expanded shows all      */
-/* orders in-place with wheel scrolling and age/progress sorting.      */
+/* Lane                                                                */
 /* ------------------------------------------------------------------ */
 
 type SortKey = 'age' | 'progress'
 type SortDir = 'desc' | 'asc'
+
+function searchStateFor(
+  order: WallboardOrder,
+  query: string
+): 'none' | 'hit' | 'miss' {
+  if (!query) return 'none'
+  return order.soNumber.toLowerCase().includes(query) ? 'hit' : 'miss'
+}
 
 function Lane({
   title,
@@ -268,9 +289,10 @@ function Lane({
   onToggle,
   glowSet,
   onAcknowledge,
+  query,
 }: {
   title: string
-  variant: LaneVariant
+  variant: BoardLane
   orders: WallboardOrder[]
   previewOrders: WallboardOrder[]
   index: number
@@ -278,6 +300,7 @@ function Lane({
   onToggle: () => void
   glowSet: Set<string>
   onAcknowledge: (soNumber: string) => void
+  query: string
 }) {
   const accent = LANE_ACCENTS[variant]
   const [sortKey, setSortKey] = useState<SortKey>('age')
@@ -303,9 +326,7 @@ function Lane({
     <button
       onClick={() => toggleSort(key)}
       className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
-        sortKey === key
-          ? 'bg-white/10'
-          : 'text-slate-500 hover:text-white'
+        sortKey === key ? 'bg-white/10' : 'text-slate-500 hover:text-white'
       }`}
       style={sortKey === key ? { color: accent } : undefined}
       data-testid={`sort-${variant}-${key}`}
@@ -320,7 +341,7 @@ function Lane({
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08, duration: 0.45, ease }}
-      className="flex min-h-0 flex-col"
+      className="flex min-h-0 min-w-0 flex-col"
       data-lane={title}
       data-expanded={expanded || undefined}
     >
@@ -374,6 +395,7 @@ function Lane({
             variant={variant}
             animate={!expanded}
             glowing={glowSet.has(o.soNumber)}
+            searchState={searchStateFor(o, query)}
             onAcknowledge={onAcknowledge}
           />
         ))}
@@ -405,6 +427,8 @@ function Lane({
   )
 }
 
+/* ------------------------------------------------------------------ */
+
 function useClock() {
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
@@ -415,7 +439,38 @@ function useClock() {
   return now
 }
 
-/* ------------------------------------------------------------------ */
+function SyncPill({
+  label,
+  ageMinutes,
+  staleAfterMinutes,
+}: {
+  label: string
+  ageMinutes: number | null
+  staleAfterMinutes: number
+}) {
+  const stale = ageMinutes === null || ageMinutes > staleAfterMinutes
+  const ageText =
+    ageMinutes === null
+      ? '—'
+      : ageMinutes >= 90
+        ? `${Math.round(ageMinutes / 60)}h`
+        : `${ageMinutes}m`
+  return (
+    <span
+      className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider"
+      data-testid={`sync-${label.toLowerCase()}`}
+    >
+      <span
+        className={`inline-block h-1.5 w-1.5 rounded-full ${
+          stale ? 'bg-[#E89C0C]' : 'animate-pulse bg-[#3ECC5F]'
+        }`}
+      />
+      <span className={stale ? 'text-[#F5B94E]' : 'text-slate-400'}>
+        {label} {ageText}
+      </span>
+    </span>
+  )
+}
 
 function orderSig(o: WallboardOrder, variant: LaneVariant): string {
   return `${variant}|${o.qtyFulfilled}|${o.pct}|${o.stock?.state ?? ''}|${o.completedToday}`
@@ -424,59 +479,56 @@ function orderSig(o: WallboardOrder, variant: LaneVariant): string {
 export function WallboardClient({ data }: { data: WallboardData }) {
   const router = useRouter()
   const clock = useClock()
-  const [expanded, setExpanded] = useState<LaneVariant | null>(null)
+  const [expanded, setExpanded] = useState<BoardLane | null>(null)
   const [glowSet, setGlowSet] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState('')
   const prevSigs = useRef<Map<string, string> | null>(null)
+  const q = query.trim().toLowerCase()
 
   useEffect(() => {
     const t = setInterval(() => router.refresh(), 60000)
     return () => clearInterval(t)
   }, [router])
 
-  // Ambient lanes show the actionable horizon (≤90d); expanded lanes and the
-  // "longest waiting" rail carry the long tail.
   const lanes: Record<
-    LaneVariant,
+    BoardLane,
     { title: string; orders: WallboardOrder[]; preview: WallboardOrder[] }
-  > = {
-    ready: {
-      title: 'Ready to pick',
-      orders: data.ready,
-      preview: data.ready.filter((o) => o.ageDays <= 90),
-    },
-    picking: {
-      title: 'Picking',
-      orders: data.picking,
-      preview: data.picking.filter((o) => o.ageDays <= 90),
-    },
-    shipped: {
-      title: 'Shipped · 7 days',
-      orders: data.shipped,
-      preview: data.shipped,
-    },
-    short: {
-      title: 'Closed short',
-      orders: data.closedShort,
-      preview: data.closedShort,
-    },
-  }
+  > = useMemo(
+    () => ({
+      ready: {
+        title: 'Ready to pick',
+        orders: data.ready,
+        preview: data.ready.filter((o) => o.ageDays <= 90),
+      },
+      picking: {
+        title: 'Picking',
+        orders: data.picking,
+        preview: data.picking.filter((o) => o.ageDays <= 90),
+      },
+      shipped: {
+        title: 'Shipped · 7 days',
+        orders: data.shipped,
+        preview: data.shipped,
+      },
+    }),
+    [data]
+  )
 
-  // Change detection across syncs: a card glows when its lane or progress
-  // changed since the previous refresh, until clicked or the next sync.
+  // --- change glow across syncs ---
   useEffect(() => {
     const next = new Map<string, string>()
-    for (const v of Object.keys(lanes) as LaneVariant[]) {
+    for (const v of Object.keys(lanes) as BoardLane[]) {
       for (const o of lanes[v].orders) next.set(o.soNumber, orderSig(o, v))
     }
+    for (const o of data.closedShort) next.set(o.soNumber, orderSig(o, 'short'))
     if (prevSigs.current === null) {
-      prevSigs.current = next // first paint: nothing glows
+      prevSigs.current = next
       return
     }
     const changed = new Set<string>()
     for (const [so, sig] of next) {
       const prev = prevSigs.current.get(so)
-      if (prev !== undefined && prev !== sig) changed.add(so)
-      if (prev === undefined) changed.add(so) // newly appeared order
+      if (prev === undefined || prev !== sig) changed.add(so)
     }
     prevSigs.current = next
     setGlowSet(changed)
@@ -492,8 +544,47 @@ export function WallboardClient({ data }: { data: WallboardData }) {
     })
   }
 
-  const syncStale = data.syncAgeMinutes !== null && data.syncAgeMinutes > 120
+  // --- SO search: auto-expand the lane holding the first hit, scroll to it ---
+  const firstHitLane = useMemo<BoardLane | null>(() => {
+    if (!q) return null
+    for (const v of Object.keys(lanes) as BoardLane[]) {
+      if (lanes[v].orders.some((o) => o.soNumber.toLowerCase().includes(q))) {
+        return v
+      }
+    }
+    return null
+  }, [q, lanes])
+
+  useEffect(() => {
+    if (!q) return
+    if (firstHitLane) {
+      const lane = lanes[firstHitLane]
+      const visible = lane.preview.slice(0, LANE_CAPS[firstHitLane])
+      const hitVisible = visible.some((o) => o.soNumber.toLowerCase().includes(q))
+      if (!hitVisible) setExpanded(firstHitLane)
+    }
+    const t = setTimeout(() => {
+      document
+        .querySelector('[data-search-hit]')
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, firstHitLane, data.generatedAt])
+
+  const totalHits = useMemo(() => {
+    if (!q) return 0
+    const all = [
+      ...data.ready,
+      ...data.picking,
+      ...data.shipped,
+      ...data.closedShort,
+    ]
+    return all.filter((o) => o.soNumber.toLowerCase().includes(q)).length
+  }, [q, data])
+
   const k = data.kpis
+  const ages: SyncAges = data.syncAges
 
   const kpis: { label: string; value: number; tone?: 'warn' | 'critical' | 'good' }[] = [
     { label: 'Ready to pick', value: k.readyCount },
@@ -534,15 +625,45 @@ export function WallboardClient({ data }: { data: WallboardData }) {
       `}</style>
 
       {/* header */}
-      <header className="flex items-center justify-between gap-6">
-        <div className="shrink-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#1E98D5]">
-            Medical Shipment
-          </p>
-          <h1 className="text-xl font-bold tracking-tight">SHIPPING OPS</h1>
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex shrink-0 items-center gap-4">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#1E98D5]">
+              Medical Shipment
+            </p>
+            <h1 className="text-xl font-bold tracking-tight">SHIPPING OPS</h1>
+          </div>
+          <div className="relative">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find SO #…"
+              className="w-40 rounded-lg border border-white/15 bg-white/[0.05] px-3 py-2 font-mono text-[13px] text-white outline-none transition-colors placeholder:text-slate-500 focus:border-[#1E98D5]"
+              data-testid="so-search"
+            />
+            {q && (
+              <button
+                onClick={() => setQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 font-mono text-[11px] text-slate-400 hover:text-white"
+                data-testid="so-search-clear"
+              >
+                ✕
+              </button>
+            )}
+            {q && (
+              <p
+                className={`absolute -bottom-4 left-1 font-mono text-[9px] uppercase tracking-wider ${
+                  totalHits > 0 ? 'text-slate-400' : 'text-[#FF7B6E]'
+                }`}
+                data-testid="so-search-hits"
+              >
+                {totalHits > 0 ? `${totalHits} match${totalHits > 1 ? 'es' : ''}` : 'no match'}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-1 items-stretch justify-center gap-2">
+        <div className="flex min-w-0 flex-1 items-stretch justify-center gap-2">
           {kpis.map((kpi) => (
             <div
               key={kpi.label}
@@ -585,18 +706,15 @@ export function WallboardClient({ data }: { data: WallboardData }) {
                 })
               : '--:--'}
           </p>
-          <p className="mt-1 flex items-center justify-end gap-1.5 font-mono text-[10px] uppercase tracking-wider">
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                syncStale ? 'bg-[#E89C0C]' : 'animate-pulse bg-[#3ECC5F]'
-              }`}
+          <div className="mt-1.5 flex items-center justify-end gap-3">
+            <SyncPill label="SO" ageMinutes={ages.so} staleAfterMinutes={120} />
+            <SyncPill label="PO" ageMinutes={ages.po} staleAfterMinutes={26 * 60} />
+            <SyncPill
+              label="INV"
+              ageMinutes={ages.inventory}
+              staleAfterMinutes={26 * 60}
             />
-            <span className={syncStale ? 'text-[#F5B94E]' : 'text-slate-400'}>
-              {syncStale
-                ? `SYNC ${Math.round((data.syncAgeMinutes ?? 0) / 60)}h OLD`
-                : `LIVE · FISHBOWL ${data.syncAgeMinutes ?? '—'}m`}
-            </span>
-          </p>
+          </div>
         </div>
       </header>
 
@@ -621,8 +739,8 @@ export function WallboardClient({ data }: { data: WallboardData }) {
       </div>
 
       {/* lanes + rail */}
-      <div className="grid min-h-0 grid-cols-[1fr_1fr_1fr_1fr_300px] gap-3">
-        {(Object.keys(lanes) as LaneVariant[]).map((v, i) => (
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_320px] gap-3">
+        {(Object.keys(lanes) as BoardLane[]).map((v, i) => (
           <Lane
             key={v}
             title={lanes[v].title}
@@ -634,6 +752,7 @@ export function WallboardClient({ data }: { data: WallboardData }) {
             onToggle={() => setExpanded(expanded === v ? null : v)}
             glowSet={glowSet}
             onAcknowledge={acknowledge}
+            query={q}
           />
         ))}
 
@@ -641,40 +760,105 @@ export function WallboardClient({ data }: { data: WallboardData }) {
           initial={{ opacity: 0, x: 16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3, duration: 0.45, ease }}
-          className="flex min-h-0 flex-col rounded-xl border border-[#E89C0C]/30 bg-[#E89C0C]/5 p-3"
+          className="flex min-h-0 min-w-0 flex-col gap-3"
         >
-          <h2 className="mb-2 font-mono text-[12px] font-bold uppercase tracking-[0.16em] text-[#F5B94E]">
-            ⏳ Longest waiting
-          </h2>
-          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-            {data.longestWaiting.map((o, i) => (
-              <motion.div
-                key={o.soNumber}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.35 + i * 0.05, duration: 0.3, ease }}
-                className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#162035] px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="font-mono text-[13px] font-bold text-white">
-                    {o.soNumber}
-                  </p>
-                  <p className="truncate text-[11px] text-slate-400">{o.customer}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="font-mono text-xl font-bold leading-none text-[#F5B94E]">
-                    {o.ageDays}
-                  </p>
-                  <p className="font-mono text-[8px] uppercase tracking-wider text-slate-500">
-                    days
-                  </p>
-                </div>
-              </motion.div>
-            ))}
+          {/* longest waiting */}
+          <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-[#E89C0C]/30 bg-[#E89C0C]/5 p-3">
+            <h2 className="mb-2 font-mono text-[12px] font-bold uppercase tracking-[0.16em] text-[#F5B94E]">
+              ⏳ Longest waiting
+            </h2>
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+              {data.longestWaiting.map((o, i) => {
+                const ss = searchStateFor(o, q)
+                return (
+                  <motion.div
+                    key={o.soNumber}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: ss === 'miss' ? 0.25 : 1, x: 0 }}
+                    transition={{ delay: 0.35 + i * 0.05, duration: 0.3, ease }}
+                    className={`flex items-center justify-between gap-2 rounded-lg border bg-[#162035] px-3 py-2 ${
+                      ss === 'hit'
+                        ? 'border-white ring-2 ring-white/80'
+                        : 'border-white/10'
+                    }`}
+                    data-so={o.soNumber}
+                    data-search-hit={ss === 'hit' || undefined}
+                  >
+                    <div className="min-w-0">
+                      <p className="font-mono text-[13px] font-bold text-white">
+                        {o.soNumber}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-400">
+                        {o.customer}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-mono text-xl font-bold leading-none text-[#F5B94E]">
+                        {o.ageDays}
+                      </p>
+                      <p className="font-mono text-[8px] uppercase tracking-wider text-slate-500">
+                        days
+                      </p>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
           </div>
-          <p className="mt-2 text-center font-mono text-[9px] uppercase tracking-wider text-slate-500">
-            auto-refresh 60s · read only
-          </p>
+
+          {/* closed short review — off the main board, it's slower-moving */}
+          <div className="flex flex-col rounded-xl border border-[#D93025]/30 bg-[#D93025]/5 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="font-mono text-[12px] font-bold uppercase tracking-[0.16em] text-[#FF7B6E]">
+                Closed short · 30d
+              </h2>
+              <span className="rounded bg-[#D93025]/20 px-2 py-0.5 font-mono text-[12px] font-bold text-[#FF7B6E]">
+                {data.closedShort.length}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5" data-testid="closed-short-rail">
+              {data.closedShort.slice(0, 3).map((o) => {
+                const ss = searchStateFor(o, q)
+                return (
+                  <div
+                    key={o.soNumber}
+                    className={`flex items-center justify-between gap-2 rounded-lg border bg-[#162035] px-3 py-1.5 ${
+                      ss === 'hit'
+                        ? 'border-white ring-2 ring-white/80'
+                        : 'border-white/10'
+                    } ${ss === 'miss' ? 'opacity-25' : ''}`}
+                    data-so={o.soNumber}
+                    data-search-hit={ss === 'hit' || undefined}
+                  >
+                    <div className="min-w-0">
+                      <p className="font-mono text-[12px] font-bold text-white">
+                        {o.soNumber}
+                      </p>
+                      <p className="truncate text-[10px] text-slate-400">
+                        {o.customer}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-mono text-[9px] uppercase text-slate-500">
+                      {o.completedAt
+                        ? new Date(o.completedAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })
+                        : ''}
+                    </span>
+                  </div>
+                )
+              })}
+              {data.closedShort.length === 0 && (
+                <p className="py-1 text-center font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                  — none in 30 days —
+                </p>
+              )}
+            </div>
+            <p className="mt-2 text-center font-mono text-[9px] uppercase tracking-wider text-slate-500">
+              auto-refresh 60s · read only
+            </p>
+          </div>
         </motion.aside>
       </div>
     </div>

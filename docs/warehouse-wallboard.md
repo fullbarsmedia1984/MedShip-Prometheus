@@ -15,7 +15,13 @@ Lanes map to Fishbowl sales-order statuses:
 | **Ready to pick** | `Issued` | Committed, picking not started. Oldest first. |
 | **Picking** | `In Progress` | Line-level progress bar from `quantity_fulfilled / quantity`; partial-line badge. |
 | **Shipped · 7 days** | `Fulfilled`, `date_completed` in last 7d | Today's ships highlighted. |
-| **Closed short** | `Closed Short`, last 30d | Shipped incomplete — review. |
+
+**Closed short** (last 30d, slower-moving review data) lives in the right
+rail under "Longest waiting", off the main board. The header shows per-source
+sync ages — **SO / PO / INV** pills (green pulse = fresh; amber when SO >2h
+or PO/INV >26h) — plus an **SO search** box: typing dims non-matches,
+outlines hits in white, auto-expands the lane holding the first hit and
+scrolls to it. One-page, no popups; clearing restores the ambient board.
 
 Alerting (age is measured from `date_issued`; `date_scheduled` is ~100%
 past-due in the data so it can't discriminate):
