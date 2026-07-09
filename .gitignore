@@ -80,3 +80,6 @@ outputs/pricing_discovery/**
 # P7 repair run logs
 repair-run*.log
 
+
+# Word lock files
+~$*
