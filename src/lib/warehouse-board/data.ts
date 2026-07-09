@@ -32,21 +32,15 @@ export interface WallboardData {
     staleBacklogCount: number
     shippedThisWeek: number
   }
+  /** Full lists — the client caps the ambient lanes and offers an
+   *  expanded, sortable view of everything. */
   ready: WallboardOrder[]
-  readyOverflow: number
   picking: WallboardOrder[]
-  pickingOverflow: number
   shipped: WallboardOrder[]
-  shippedOverflow: number
   closedShort: WallboardOrder[]
-  closedShortOverflow: number
   longestWaiting: WallboardOrder[]
   alerts: string[]
 }
-
-const LANE_LIMIT = 7
-const SHIPPED_LIMIT = 6
-const SHORT_LIMIT = 4
 
 type SoRow = {
   so_number: string
@@ -185,10 +179,9 @@ export async function getWallboardData(): Promise<WallboardData> {
   const staleBacklogCount = allOpen.filter((o) => o.ageDays > 90).length
   const stuck = picking.filter((o) => o.ageDays > 14)
 
-  // The wallboard lanes focus on the actionable horizon (≤90 days); the
-  // long tail lives in the "longest waiting" rail + backlog KPI.
-  const readyLane = ready.filter((o) => o.ageDays <= 90)
-  const pickingLane = picking.filter((o) => o.ageDays <= 90)
+  const readyCritical = ready.filter(
+    (o) => o.severity === 'critical' && o.ageDays <= 90
+  )
 
   const longestWaiting = allOpen
     .slice()
@@ -203,7 +196,7 @@ export async function getWallboardData(): Promise<WallboardData> {
       }`
     )
   }
-  for (const o of readyLane.filter((x) => x.severity === 'critical').slice(0, 3)) {
+  for (const o of readyCritical.slice(0, 3)) {
     alerts.push(`${o.soNumber} ${o.customer} — waiting to pick ${o.ageDays}d`)
   }
   for (const o of shortO.slice(0, 2)) {
@@ -230,17 +223,10 @@ export async function getWallboardData(): Promise<WallboardData> {
       staleBacklogCount,
       shippedThisWeek: shippedO.length,
     },
-    ready: readyLane.slice(0, LANE_LIMIT),
-    readyOverflow: Math.max(0, ready.length - Math.min(readyLane.length, LANE_LIMIT)),
-    picking: pickingLane.slice(0, LANE_LIMIT),
-    pickingOverflow: Math.max(
-      0,
-      picking.length - Math.min(pickingLane.length, LANE_LIMIT)
-    ),
-    shipped: shippedO.slice(0, SHIPPED_LIMIT),
-    shippedOverflow: Math.max(0, shippedO.length - SHIPPED_LIMIT),
-    closedShort: shortO.slice(0, SHORT_LIMIT),
-    closedShortOverflow: Math.max(0, shortO.length - SHORT_LIMIT),
+    ready,
+    picking,
+    shipped: shippedO,
+    closedShort: shortO,
     longestWaiting,
     alerts,
   }
