@@ -16,6 +16,7 @@ import {
   FileText,
   GraduationCap,
   MapPin,
+  SquareKanban,
   RefreshCw,
   Trophy,
   List,
@@ -44,6 +45,7 @@ type NavItem = {
 const mainNav: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: STAFF_ROLES },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
+  { name: 'Kanban', href: '/dashboard/kanban', icon: SquareKanban },
   { name: 'Incentives', href: '/dashboard/incentives', icon: Trophy, roles: MANAGER_ROLES },
   { name: 'My Scorecard', href: '/dashboard/incentives/scorecard', icon: Trophy, roles: REP_ROLES },
   { name: 'TAM', href: '/dashboard/tam', icon: GraduationCap, roles: STAFF_ROLES },
