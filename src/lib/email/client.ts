@@ -48,6 +48,16 @@ export async function sendEmail(input: SendEmailInput): Promise<EmailResult> {
     }
   }
 
+  // Catch a malformed sender before the API call so the error names the env
+  // var instead of surfacing as an opaque Resend 422.
+  if (!/^[^<>@\s]+@[^<>@\s]+\.[^<>@\s]+$|^.+ ?<[^<>@\s]+@[^<>@\s]+\.[^<>@\s]+>$/.test(from)) {
+    return {
+      sent: false,
+      provider: 'none',
+      error: `EMAIL_FROM ("${from}") is invalid. Use email@example.com or Name <email@example.com>.`,
+    }
+  }
+
   try {
     const { data, error } = await resend.emails.send({
       from,

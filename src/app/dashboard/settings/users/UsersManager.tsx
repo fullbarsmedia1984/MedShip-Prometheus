@@ -80,7 +80,13 @@ export function UsersManager({
         toast.error(data.error ?? 'Failed to invite user')
         return
       }
-      toast.success(`Invite sent to ${inviteEmail}`)
+      if (data.emailSent === false) {
+        toast.warning(
+          `Account created, but the invite email failed: ${data.emailError ?? 'unknown error'}. Fix the email config and invite them again to resend.`
+        )
+      } else {
+        toast.success(`Invite sent to ${inviteEmail}`)
+      }
       setInviteOpen(false)
       setInviteEmail('')
       setInviteFishbowlId('')
