@@ -20,8 +20,8 @@ export type ManagedUser = {
 // grant staff and below. superadmin is never assignable through this path
 // (the sole-superadmin invariant is also enforced by a DB trigger).
 export const ASSIGNABLE_ROLES: Record<'superadmin' | 'admin', AppRole[]> = {
-  superadmin: ['admin', 'staff', 'sales_rep', 'sales_manager'],
-  admin: ['staff', 'sales_rep', 'sales_manager'],
+  superadmin: ['admin', 'staff', 'sales_rep', 'sales_manager', 'warehouse'],
+  admin: ['staff', 'sales_rep', 'sales_manager', 'warehouse'],
 }
 
 function appUrl(): string {

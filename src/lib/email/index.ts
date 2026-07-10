@@ -17,6 +17,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   staff: 'Administrative Staff',
   sales_rep: 'Sales Rep',
   sales_manager: 'Sales Manager',
+  warehouse: 'Warehouse / Logistics',
 }
 
 export function roleLabel(role: AppRole): string {

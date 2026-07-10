@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { unstable_cache } from 'next/cache'
-import { requireApiAuth } from '@/lib/auth'
+import { SALES_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import {
   SALES_DASHBOARD_CACHE_TAG,
   getSalesDashboardCore,
@@ -114,7 +114,7 @@ const getSalesDashboardPayload = unstable_cache(
 
 export async function GET() {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(SALES_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     return NextResponse.json(await getSalesDashboardPayload())

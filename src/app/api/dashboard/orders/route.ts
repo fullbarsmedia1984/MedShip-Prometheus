@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireApiAuth } from '@/lib/auth'
+import { SALES_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { getRepAliases } from '@/lib/reps'
 import { getOrders, getSalesReps } from '@/lib/data'
 import type { OrderFilters } from '@/lib/data'
@@ -46,7 +46,7 @@ function buildDataQualitySummary(visibleOrders: Order[], allOrders: Order[]): Da
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiAuth()
+    const auth = await requireApiAuth(SALES_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const params = request.nextUrl.searchParams

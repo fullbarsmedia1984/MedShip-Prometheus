@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  SALES_API_AUTH_OPTIONS,
+  KANBAN_API_AUTH_OPTIONS,
   requireApiAuth,
   requireDashboardAuth,
 } from '@/lib/auth'
@@ -74,7 +74,7 @@ function buildContext(
 
 /** For dashboard pages: redirects to /login when signed out. */
 export async function requireKanbanPageContext(): Promise<KanbanContext> {
-  const auth = await requireDashboardAuth(SALES_API_AUTH_OPTIONS)
+  const auth = await requireDashboardAuth(KANBAN_API_AUTH_OPTIONS)
   const identity = await resolveIdentity(
     auth.user?.id ?? null,
     auth.user?.email ?? null
@@ -84,7 +84,7 @@ export async function requireKanbanPageContext(): Promise<KanbanContext> {
 
 /** For API routes: returns a NextResponse on auth failure. */
 export async function requireKanbanApiContext() {
-  const auth = await requireApiAuth(SALES_API_AUTH_OPTIONS)
+  const auth = await requireApiAuth(KANBAN_API_AUTH_OPTIONS)
   if (!auth.authorized) {
     return { authorized: false as const, response: auth.response }
   }

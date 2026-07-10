@@ -9,12 +9,19 @@ import {
   isVerifiedCookieValid,
 } from '@/lib/twofactor'
 
-export type AppRole = 'superadmin' | 'admin' | 'staff' | 'sales_rep' | 'sales_manager'
+export type AppRole =
+  | 'superadmin'
+  | 'admin'
+  | 'staff'
+  | 'sales_rep'
+  | 'sales_manager'
+  | 'warehouse'
 
 const APP_ROLES: readonly AppRole[] = [
   'superadmin',
   'admin',
   'staff',
+  'warehouse',
   'sales_rep',
   'sales_manager',
 ]
@@ -46,12 +53,24 @@ export const SALES_API_AUTH_OPTIONS = {
   roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep'],
 } satisfies ApiAuthOptions
 
-// Packaging estimator tool: open to the sales tier as well — reps and the
-// quotes team estimate their own orders. No row-scoping (estimates are
-// per-SO, not per-rep). Estimator CONFIG (boxes, rules, dims browser/queue)
-// stays staff-tier.
+// Packaging estimator tool: open to the sales tier and warehouse — reps and
+// the quotes team estimate their own orders; warehouse estimates at pack-out.
+// No row-scoping (estimates are per-SO, not per-rep). Estimator CONFIG
+// (boxes, rules, dims browser/queue) stays staff-tier.
 export const ESTIMATOR_API_AUTH_OPTIONS = {
-  roles: ['superadmin', 'admin', 'staff', 'sales_rep', 'sales_manager'],
+  roles: ['superadmin', 'admin', 'staff', 'sales_rep', 'sales_manager', 'warehouse'],
+} satisfies ApiAuthOptions
+
+// Kanban boards: every signed-in role, including warehouse/logistics.
+// Board/task-level permissions are enforced inside the kanban module.
+export const KANBAN_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep', 'warehouse'],
+} satisfies ApiAuthOptions
+
+// Supplier catalog: every signed-in role, including warehouse/logistics
+// (supplier cost visibility per the 2026-07-08 owner decision).
+export const CATALOG_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep', 'warehouse'],
 } satisfies ApiAuthOptions
 
 type AuthContext = {

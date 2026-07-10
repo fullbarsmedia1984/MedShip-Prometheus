@@ -2,9 +2,23 @@ import {
   hasWarehouseGateAccess,
   isWarehouseBoardConfigured,
 } from '@/lib/warehouse-board/gate'
+import { getAuthContext, type AppRole } from '@/lib/auth'
 import { getWallboardData } from '@/lib/warehouse-board/data'
 import { WallboardClient } from '@/components/warehouse-board/WallboardClient'
 import { WallboardGate } from '@/components/warehouse-board/WallboardGate'
+
+// Signed-in roles that may view the board without the TV password.
+const WALLBOARD_ROLES: AppRole[] = ['superadmin', 'admin', 'staff', 'warehouse']
+
+async function hasRoleAccess(): Promise<boolean> {
+  const auth = await getAuthContext()
+  return (
+    auth !== null &&
+    !auth.pendingTwoFactor &&
+    auth.role !== null &&
+    WALLBOARD_ROLES.includes(auth.role)
+  )
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +37,9 @@ export default async function WarehouseBoardPage() {
     )
   }
 
-  if (!(await hasWarehouseGateAccess())) {
+  // Two ways in: the shared TV password (kiosks) or a signed-in session with
+  // a wallboard-tier role.
+  if (!(await hasWarehouseGateAccess()) && !(await hasRoleAccess())) {
     return <WallboardGate />
   }
 
