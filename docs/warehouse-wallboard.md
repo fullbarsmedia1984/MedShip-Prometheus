@@ -19,7 +19,7 @@ Lanes map to Fishbowl sales-order statuses:
 | --- | --- | --- |
 | **Ready to pick** | `Issued` | Committed, picking not started. Oldest first. |
 | **Picking** | `In Progress` | Line-level progress bar from `quantity_fulfilled / quantity`; partial-line badge. |
-| **Shipped · 7 days** | `Fulfilled`, `date_completed` in last 7d | Today's ships highlighted. |
+| **Shipped · 7 days** | Shipment records (`ship`, statusId 30) in last 7d ∪ `Fulfilled` in window | Shipments are ground truth for "out the door" — an SO with a shipment counts even while still In Progress (shows a `PART` badge and stays in Picking too). Cache: `fb_recent_shipments` (migration 042), P12 Inngest cron every 15 min + `POST /api/sync/shipments`. |
 
 **Closed short** (last 30d, slower-moving review data) lives in the right
 rail under "Longest waiting", off the main board. The header shows per-source

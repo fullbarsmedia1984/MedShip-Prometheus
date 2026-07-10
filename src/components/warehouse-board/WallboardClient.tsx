@@ -129,8 +129,15 @@ function OrderCard({
           {order.soNumber}
         </span>
         {variant === 'shipped' ? (
-          <span className="font-mono text-[11px] font-bold text-[#3ECC5F]">
-            {order.completedToday ? '✓ TODAY' : '✓ SHIPPED'}
+          <span className="flex items-center gap-1.5">
+            {order.partialShipment && (
+              <span className="rounded bg-[#E89C0C]/20 px-1 py-0.5 font-mono text-[9px] font-bold uppercase text-[#F5B94E]">
+                part
+              </span>
+            )}
+            <span className="font-mono text-[11px] font-bold text-[#3ECC5F]">
+              {order.completedToday ? '✓ TODAY' : '✓ SHIPPED'}
+            </span>
           </span>
         ) : variant === 'short' ? (
           <span className="font-mono text-[11px] font-bold text-[#FF7B6E]">
@@ -706,8 +713,13 @@ export function WallboardClient({ data }: { data: WallboardData }) {
                 })
               : '--:--'}
           </p>
-          <div className="mt-1.5 flex items-center justify-end gap-3">
+          <div className="mt-1.5 flex items-center justify-end gap-2.5">
             <SyncPill label="SO" ageMinutes={ages.so} staleAfterMinutes={120} />
+            <SyncPill
+              label="SHIP"
+              ageMinutes={ages.shipments}
+              staleAfterMinutes={120}
+            />
             <SyncPill label="PO" ageMinutes={ages.po} staleAfterMinutes={26 * 60} />
             <SyncPill
               label="INV"

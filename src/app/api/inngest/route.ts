@@ -27,6 +27,8 @@ import {
   ceoDailyBriefing,
   purchaseOrdersSync,
   purchaseOrdersSyncManual,
+  shipmentsCacheSync,
+  shipmentsCacheSyncManual,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -82,5 +84,9 @@ export const { GET, POST, PUT } = serve({
     // P11: Fishbowl Purchase Orders -> Supabase (wallboard + future purchasing)
     purchaseOrdersSync,
     purchaseOrdersSyncManual,
+
+    // P12: Recent shipments cache (wallboard Shipped lane)
+    shipmentsCacheSync,
+    shipmentsCacheSyncManual,
   ],
 })

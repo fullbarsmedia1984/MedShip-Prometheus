@@ -38,6 +38,8 @@ export interface WallboardOrder {
   severity: LaneSeverity
   completedAt: string | null
   completedToday: boolean
+  /** shipment(s) went out but the SO still has open lines */
+  partialShipment: boolean
   /** populated for ready-to-pick orders only */
   stock: StockInfo | null
 }
@@ -49,6 +51,8 @@ export interface SyncAges {
   po: number | null
   /** minutes since the newest inventory_snapshot row sync */
   inventory: number | null
+  /** minutes since the shipments cache refresh */
+  shipments: number | null
 }
 
 export interface WallboardData {
@@ -143,6 +147,7 @@ function toOrder(
   const completed = row.date_completed ? new Date(row.date_completed) : null
   return {
     stock: null,
+    partialShipment: false,
     soNumber: row.so_number,
     customer: row.customer_name ?? '—',
     shipTo:
@@ -195,15 +200,50 @@ export async function getWallboardData(): Promise<WallboardData> {
   ])
   if (openRes.error) throw openRes.error
   const open = (openRes.data ?? []) as SoRow[]
-  const shipped = (shippedRes.data ?? []) as SoRow[]
+  const fulfilled = (shippedRes.data ?? []) as SoRow[]
   const closedShort = (shortRes.data ?? []) as SoRow[]
+
+  // Shipments are the ground truth for "went out the door": a shipment in
+  // the last 7 days puts the SO on the Shipped lane even while the SO is
+  // still In Progress (partial) or before date_completed lands in the cache.
+  const { data: shipRows, error: shipErr } = await supabase
+    .from('fb_recent_shipments')
+    .select('so_number, date_shipped, synced_at')
+    .gte('date_shipped', weekAgo)
+  if (shipErr) throw shipErr
+  const latestShipBySo = new Map<string, string>()
+  for (const row of shipRows ?? []) {
+    const cur = latestShipBySo.get(row.so_number as string)
+    const ts = row.date_shipped as string
+    if (!cur || ts > cur) latestShipBySo.set(row.so_number as string, ts)
+  }
+
+  // SO rows for shipment-sourced orders that aren't already loaded
+  // (e.g. flipped Fulfilled with a stale date_completed, or Closed Short).
+  const loadedSos = new Set(
+    [...open, ...fulfilled, ...closedShort].map((r) => r.so_number)
+  )
+  const missingShipSos = [...latestShipBySo.keys()].filter(
+    (so) => !loadedSos.has(so)
+  )
+  let shipOnlyRows: SoRow[] = []
+  if (missingShipSos.length > 0) {
+    const { data, error } = await supabase
+      .from('fb_sales_orders')
+      .select(soColumns)
+      .in('so_number', missingShipSos)
+    if (error) throw error
+    shipOnlyRows = (data ?? []) as SoRow[]
+  }
 
   // Line-item aggregates for every SO on the board (batch the IN() filter).
   // For Issued orders also collect unfulfilled Sale lines for the stock check.
   const issuedSos = new Set(
     open.filter((r) => r.status === 'Issued').map((r) => r.so_number)
   )
-  const soNumbers = [...open, ...shipped, ...closedShort].map((r) => r.so_number)
+  const soNumbers = [...open, ...fulfilled, ...closedShort, ...shipOnlyRows].map(
+    (r) => r.so_number
+  )
   const aggs = new Map<string, ItemAgg>()
   const openSaleLines = new Map<string, { part: string; remaining: number }[]>()
   for (let i = 0; i < soNumbers.length; i += 100) {
@@ -331,7 +371,7 @@ export async function getWallboardData(): Promise<WallboardData> {
     return Boolean(agg && agg.dropShip > 0 && agg.lines === 0)
   }
   const openWh = open.filter((r) => !isDropShipSo(r.so_number))
-  const shippedWh = shipped.filter((r) => !isDropShipSo(r.so_number))
+  const fulfilledWh = fulfilled.filter((r) => !isDropShipSo(r.so_number))
   const closedShortWh = closedShort.filter((r) => !isDropShipSo(r.so_number))
 
   const toO = (r: SoRow) => toOrder(r, aggs.get(r.so_number), now)
@@ -340,8 +380,43 @@ export async function getWallboardData(): Promise<WallboardData> {
     .filter((r) => r.status === 'Issued')
     .map((r) => ({ ...toO(r), stock: stockFor(r.so_number) }))
   const picking = openWh.filter((r) => r.status === 'In Progress').map(toO)
-  const shippedO = shippedWh.map(toO)
   const shortO = closedShortWh.map(toO)
+
+  // Shipped lane: SOs with a shipment in the last 7 days, unioned with
+  // Fulfilled-in-window SOs (covers fulfillments whose ship records predate
+  // the cache). Shipment dates override completedAt; an SO that shipped but
+  // still has open lines is flagged as a partial shipment (it also stays in
+  // Picking — both are true).
+  const shippedBySo = new Map<string, WallboardOrder>()
+  for (const row of fulfilledWh) {
+    shippedBySo.set(row.so_number, toO(row))
+  }
+  const allRowsBySo = new Map<string, SoRow>(
+    [...open, ...fulfilled, ...closedShort, ...shipOnlyRows].map((r) => [
+      r.so_number,
+      r,
+    ])
+  )
+  for (const [soNumber, shippedAt] of latestShipBySo) {
+    const row = allRowsBySo.get(soNumber)
+    if (!row || isDropShipSo(soNumber)) continue
+    const base = shippedBySo.get(soNumber) ?? toO(row)
+    const shippedDate = new Date(shippedAt)
+    shippedBySo.set(soNumber, {
+      ...base,
+      completedAt:
+        !base.completedAt || shippedAt > base.completedAt
+          ? shippedAt
+          : base.completedAt,
+      completedToday:
+        base.completedToday ||
+        shippedDate.toDateString() === now.toDateString(),
+      partialShipment: row.status === 'In Progress',
+    })
+  }
+  const shippedO = [...shippedBySo.values()].sort((a, b) =>
+    (b.completedAt ?? '').localeCompare(a.completedAt ?? '')
+  )
 
   // Oldest first = most critical at the top of each lane.
   ready.sort((a, b) => b.ageDays - a.ageDays)
@@ -387,7 +462,7 @@ export async function getWallboardData(): Promise<WallboardData> {
   }
 
   const newestSoSync = open
-    .concat(shipped)
+    .concat(fulfilled)
     .map((r) => r.last_synced_at)
     .filter((v): v is string => Boolean(v))
     .sort()
@@ -396,7 +471,7 @@ export async function getWallboardData(): Promise<WallboardData> {
   const ageMinutes = (ts: string | null | undefined): number | null =>
     ts ? Math.round((now.getTime() - new Date(ts).getTime()) / 60000) : null
 
-  const [poSync, invSync] = await Promise.all([
+  const [poSync, invSync, shipSync] = await Promise.all([
     supabase
       .from('fb_open_po_lines')
       .select('synced_at')
@@ -409,6 +484,12 @@ export async function getWallboardData(): Promise<WallboardData> {
       .order('last_synced_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('fb_recent_shipments')
+      .select('synced_at')
+      .order('synced_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   return {
@@ -417,6 +498,7 @@ export async function getWallboardData(): Promise<WallboardData> {
       so: ageMinutes(newestSoSync),
       po: ageMinutes(poSync.data?.synced_at as string | undefined),
       inventory: ageMinutes(invSync.data?.last_synced_at as string | undefined),
+      shipments: ageMinutes(shipSync.data?.synced_at as string | undefined),
     },
     kpis: {
       readyCount: ready.length,

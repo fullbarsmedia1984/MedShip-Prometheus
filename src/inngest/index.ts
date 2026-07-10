@@ -44,6 +44,10 @@ export {
   purchaseOrdersSync,
   purchaseOrdersSyncManual,
 } from './functions/purchase-orders-sync'
+export {
+  shipmentsCacheSync,
+  shipmentsCacheSyncManual,
+} from './functions/shipments-sync'
 
 // Re-export client for convenience
 export { inngest } from './client'
