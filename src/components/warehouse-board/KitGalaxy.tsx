@@ -255,7 +255,12 @@ export function KitGalaxy({
     scene.add(galaxy)
 
     let planets: PlanetEntry[] = []
-    let moons: MoonEntry[] = []
+    // picked/partial components orbit as orbs with link lines + particles;
+    // unpicked components are inert flat gray sprites (no line, no flow)
+    let orbMoons: MoonEntry[] = []
+    let flatMoons: MoonEntry[] = []
+    let flatPoints: THREE.Points | null = null
+    let flatPositions: Float32Array | null = null
     let moonMesh: THREE.InstancedMesh | null = null
     let suns: THREE.Mesh[] = []
     let labels: THREE.Sprite[] = []
@@ -296,7 +301,10 @@ export function KitGalaxy({
       })
       galaxy.clear()
       planets = []
-      moons = []
+      orbMoons = []
+      flatMoons = []
+      flatPoints = null
+      flatPositions = null
       suns = []
       labels = []
       beams = []
@@ -313,23 +321,47 @@ export function KitGalaxy({
     function rebuild(d: KitGalaxyData) {
       clearGalaxy()
 
-      let totalMoons = 0
+      let totalOrbs = 0
+      let totalFlat = 0
       for (const school of d.schools) {
         for (const kit of school.kits) {
-          totalMoons += Math.min(kit.items.length, MOONS_PER_KIT_CAP)
+          for (const item of kit.items.slice(0, MOONS_PER_KIT_CAP)) {
+            if (item.fulfilled > 0) totalOrbs++
+            else totalFlat++
+          }
         }
       }
       moonMesh = new THREE.InstancedMesh(
         moonGeo,
         new THREE.MeshBasicMaterial(),
-        Math.max(totalMoons, 1)
+        Math.max(totalOrbs, 1)
       )
       moonMesh.userData.type = 'moons'
       galaxy.add(moonMesh)
 
-      // moon -> planet link lines (gradient: moon color -> planet color)
-      linkPositions = new Float32Array(totalMoons * 2 * 3)
-      const linkColors = new Float32Array(totalMoons * 2 * 3)
+      // unpicked components: inert flat gray sprites
+      flatPositions = new Float32Array(Math.max(totalFlat, 1) * 3)
+      const flatGeo = new THREE.BufferGeometry()
+      flatGeo.setAttribute('position', new THREE.BufferAttribute(flatPositions, 3))
+      flatPoints = new THREE.Points(
+        flatGeo,
+        new THREE.PointsMaterial({
+          map: particleTexture,
+          color: 0x6b7684,
+          size: 0.85,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.7,
+          alphaTest: 0.02,
+          depthWrite: false,
+        })
+      )
+      flatPoints.userData.type = 'flatmoons'
+      galaxy.add(flatPoints)
+
+      // moon -> planet link lines (picked/partial only; gradient moon -> planet)
+      linkPositions = new Float32Array(totalOrbs * 2 * 3)
+      const linkColors = new Float32Array(totalOrbs * 2 * 3)
       const linkGeo = new THREE.BufferGeometry()
       linkGeo.setAttribute('position', new THREE.BufferAttribute(linkPositions, 3))
       linkGeo.setAttribute('color', new THREE.BufferAttribute(linkColors, 3))
@@ -346,8 +378,8 @@ export function KitGalaxy({
       galaxy.add(linkLines)
 
       // particles flowing along the links (component -> kit)
-      particlePositions = new Float32Array(totalMoons * 3)
-      const particleColors = new Float32Array(totalMoons * 3)
+      particlePositions = new Float32Array(Math.max(totalOrbs, 1) * 3)
+      const particleColors = new Float32Array(Math.max(totalOrbs, 1) * 3)
       const particleGeo = new THREE.BufferGeometry()
       particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3))
       particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3))
@@ -477,17 +509,7 @@ export function KitGalaxy({
           kit.items.slice(0, MOONS_PER_KIT_CAP).forEach((item, m) => {
             const done = item.fulfilled >= item.qty && item.qty > 0
             const partial = !done && item.fulfilled > 0
-            const moonColor = new THREE.Color(
-              done ? MOON_DONE : partial ? MOON_PARTIAL : MOON_TODO
-            )
-            moonMesh!.setColorAt(moonIdx, moonColor)
-
-            // link gradient: moon end gets moon color, planet end planet color
-            moonColor.toArray(linkColors, moonIdx * 6)
-            planetColor.toArray(linkColors, moonIdx * 6 + 3)
-            moonColor.toArray(particleColors, moonIdx * 3)
-
-            moons.push({
+            const entry: MoonEntry = {
               planetIdx,
               orbitR: planetR + 0.9 + (m % 6) * 0.42,
               angle: hashAngle(item.part + m),
@@ -495,16 +517,30 @@ export function KitGalaxy({
               speed: 0.45 + (m % 5) * 0.175,
               tilt: ((m % 7) - 3) * 0.12,
               phase: (m * 0.37) % 1,
-              color: moonColor,
+              color: new THREE.Color(
+                done ? MOON_DONE : partial ? MOON_PARTIAL : MOON_TODO
+              ),
               item,
               soNumber: kit.soNumber,
-            })
-            moonIdx++
+            }
+            if (done || partial) {
+              moonMesh!.setColorAt(moonIdx, entry.color)
+              // link gradient: moon end gets moon color, planet end planet color
+              entry.color.toArray(linkColors, moonIdx * 6)
+              planetColor.toArray(linkColors, moonIdx * 6 + 3)
+              entry.color.toArray(particleColors, moonIdx * 3)
+              orbMoons.push(entry)
+              moonIdx++
+            } else {
+              // unpicked: flat gray sprite, no link, no particle flow
+              flatMoons.push(entry)
+            }
           })
         })
       })
       if (moonMesh.instanceColor) moonMesh.instanceColor.needsUpdate = true
       moonMesh.count = moonIdx
+      flatPoints.geometry.setDrawRange(0, flatMoons.length)
     }
 
     function focusSo(q: string) {
@@ -547,8 +583,10 @@ export function KitGalaxy({
     }
     function pick(): THREE.Intersection | null {
       raycaster.setFromCamera(pointer, camera)
+      raycaster.params.Points.threshold = 0.6
       const targets: THREE.Object3D[] = [...suns, ...planets.map((p) => p.mesh)]
       if (moonMesh) targets.push(moonMesh)
+      if (flatPoints) targets.push(flatPoints)
       const hits = raycaster.intersectObjects(targets, false)
       return hits[0] ?? null
     }
@@ -630,7 +668,7 @@ export function KitGalaxy({
           y: pointerClientY,
         })
       } else if (obj.userData.type === 'moons' && hit.instanceId !== undefined) {
-        const moon = moons[hit.instanceId]
+        const moon = orbMoons[hit.instanceId]
         if (moon) {
           const it = moon.item
           setHover({
@@ -638,6 +676,20 @@ export function KitGalaxy({
             lines: [
               it.desc ?? '',
               `${moon.soNumber} · ${Math.min(it.fulfilled, it.qty)}/${it.qty} picked`,
+            ].filter(Boolean),
+            x: pointerClientX,
+            y: pointerClientY,
+          })
+        }
+      } else if (obj.userData.type === 'flatmoons' && hit.index !== undefined) {
+        const moon = flatMoons[hit.index]
+        if (moon) {
+          const it = moon.item
+          setHover({
+            title: it.part,
+            lines: [
+              it.desc ?? '',
+              `${moon.soNumber} · not picked yet (0/${it.qty})`,
             ].filter(Boolean),
             x: pointerClientX,
             y: pointerClientY,
@@ -693,15 +745,16 @@ export function KitGalaxy({
           .multiplyScalar(boosted ? 2.4 + Math.sin(t * 2.8) * 0.5 : 1)
       }
 
-      // moon hover highlight (instanced color over-drive)
+      // moon hover highlight (instanced color over-drive; orbs only —
+      // flat unpicked sprites stay inert by design)
       if (moonMesh && hoverMoonId !== boostedMoonId) {
-        if (boostedMoonId !== null && moons[boostedMoonId]) {
-          moonMesh.setColorAt(boostedMoonId, moons[boostedMoonId].color)
+        if (boostedMoonId !== null && orbMoons[boostedMoonId]) {
+          moonMesh.setColorAt(boostedMoonId, orbMoons[boostedMoonId].color)
         }
-        if (hoverMoonId !== null && moons[hoverMoonId]) {
+        if (hoverMoonId !== null && orbMoons[hoverMoonId]) {
           moonMesh.setColorAt(
             hoverMoonId,
-            moons[hoverMoonId].color.clone().multiplyScalar(2.6)
+            orbMoons[hoverMoonId].color.clone().multiplyScalar(2.6)
           )
         }
         boostedMoonId = hoverMoonId
@@ -709,8 +762,8 @@ export function KitGalaxy({
       }
 
       if (moonMesh && linkPositions && particlePositions) {
-        for (let i = 0; i < moons.length; i++) {
-          const m = moons[i]
+        for (let i = 0; i < orbMoons.length; i++) {
+          const m = orbMoons[i]
           const p = planets[m.planetIdx]
           if (!p) continue
           const a = m.angle + simTime * m.speed
@@ -742,6 +795,21 @@ export function KitGalaxy({
         if (particles) {
           ;(particles.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true
         }
+      }
+
+      // unpicked components: same slow orbit, no links, no flow
+      if (flatPoints && flatPositions) {
+        for (let i = 0; i < flatMoons.length; i++) {
+          const m = flatMoons[i]
+          const p = planets[m.planetIdx]
+          if (!p) continue
+          const a = m.angle + simTime * m.speed
+          flatPositions[i * 3] = p.mesh.position.x + Math.cos(a) * m.orbitR
+          flatPositions[i * 3 + 1] =
+            p.mesh.position.y + Math.sin(a * 1.3) * m.tilt
+          flatPositions[i * 3 + 2] = p.mesh.position.z + Math.sin(a) * m.orbitR
+        }
+        ;(flatPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true
       }
 
       for (const sun of suns) {
@@ -863,6 +931,8 @@ export function KitGalaxy({
           <span className="text-[#3ECC5F]">● shipped</span>
           {'  '}
           <span className="text-[#FF7B6E]">● overdue (pulsing)</span>
+          {'  '}
+          <span className="text-slate-500">● gray moon = not picked</span>
         </p>
         <p className="mt-1 text-slate-500">
           drag to orbit · wheel to zoom · right-drag to pan · click a body for
