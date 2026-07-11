@@ -13,9 +13,14 @@ suns are schools (customers), planets are kit orders, moons are component
 lines (Sale/Kit types, capped at 20 rendered moons per kit). Colors: blue
 waiting, amber assembling, green shipped (30-day window, shipment records
 included), red pulsing overdue; moons green/amber/slate by pick progress.
-Drag orbits, wheel zooms, right-drag pans, click focuses, hover reveals
-school/kit/component detail; the SO search box focuses matching planets.
-Data: `getKitGalaxyData()` in `src/lib/warehouse-board/galaxy-data.ts`,
+Drag orbits, wheel zooms, right-drag pans (pan only — screen-space), click
+a school/kit for a translucent detail panel (Esc or empty-space click
+closes), hover shows quick tooltips; hovering or an open panel suspends
+orbital motion until released. Moon→planet link lines carry flowing
+particles (components streaming into the kit); an UnrealBloom pass glows
+everything; school labels scale with camera distance for readability.
+The SO search box focuses + highlights matching planets. Data:
+`getKitGalaxyData()` in `src/lib/warehouse-board/galaxy-data.ts`,
 refreshed with the same 60s cycle.
 
 **Drop-ship exclusion**: SOs whose only product lines are `Drop Ship` never
