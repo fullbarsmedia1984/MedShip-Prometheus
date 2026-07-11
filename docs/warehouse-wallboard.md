@@ -8,6 +8,16 @@ password invalidates every screen.
 
 ## What it shows (all derived from synced Fishbowl data)
 
+**Kit Galaxy** (header toggle): a three.js orbital graph of `-KIT` orders —
+suns are schools (customers), planets are kit orders, moons are component
+lines (Sale/Kit types, capped at 20 rendered moons per kit). Colors: blue
+waiting, amber assembling, green shipped (30-day window, shipment records
+included), red pulsing overdue; moons green/amber/slate by pick progress.
+Drag orbits, wheel zooms, right-drag pans, click focuses, hover reveals
+school/kit/component detail; the SO search box focuses matching planets.
+Data: `getKitGalaxyData()` in `src/lib/warehouse-board/galaxy-data.ts`,
+refreshed with the same 60s cycle.
+
 **Drop-ship exclusion**: SOs whose only product lines are `Drop Ship` never
 enter the warehouse and are excluded from every lane, KPI, alert, and the
 rails. Mixed orders stay, and their line/unit counts and pick-progress bars

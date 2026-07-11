@@ -9,6 +9,8 @@ import type {
   LaneSeverity,
   SyncAges,
 } from '@/lib/warehouse-board/data'
+import type { KitGalaxyData } from '@/lib/warehouse-board/galaxy-data'
+import { KitGalaxy } from './KitGalaxy'
 
 const ease = [0.22, 1, 0.36, 1] as const
 
@@ -483,9 +485,16 @@ function orderSig(o: WallboardOrder, variant: LaneVariant): string {
   return `${variant}|${o.qtyFulfilled}|${o.pct}|${o.stock?.state ?? ''}|${o.completedToday}`
 }
 
-export function WallboardClient({ data }: { data: WallboardData }) {
+export function WallboardClient({
+  data,
+  galaxy,
+}: {
+  data: WallboardData
+  galaxy: KitGalaxyData
+}) {
   const router = useRouter()
   const clock = useClock()
+  const [view, setView] = useState<'board' | 'galaxy'>('board')
   const [expanded, setExpanded] = useState<BoardLane | null>(null)
   const [glowSet, setGlowSet] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
@@ -616,7 +625,11 @@ export function WallboardClient({ data }: { data: WallboardData }) {
   ]
 
   return (
-    <div className="grid h-screen grid-rows-[auto_auto_1fr] gap-3 overflow-hidden bg-[#0F1A2E] p-4 text-white">
+    <div
+      className={`grid h-screen gap-3 overflow-hidden bg-[#0F1A2E] p-4 text-white ${
+        view === 'board' ? 'grid-rows-[auto_auto_1fr]' : 'grid-rows-[auto_1fr]'
+      }`}
+    >
       <style>{`
         @keyframes wb-glow {
           0%, 100% {
@@ -639,6 +652,30 @@ export function WallboardClient({ data }: { data: WallboardData }) {
               Medical Shipment
             </p>
             <h1 className="text-xl font-bold tracking-tight">SHIPPING OPS</h1>
+          </div>
+          <div className="flex rounded-lg border border-white/15 p-0.5 font-mono text-[10px] font-bold uppercase tracking-wider">
+            <button
+              onClick={() => setView('board')}
+              className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                view === 'board'
+                  ? 'bg-[#1E98D5] text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              data-testid="view-board"
+            >
+              Board
+            </button>
+            <button
+              onClick={() => setView('galaxy')}
+              className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                view === 'galaxy'
+                  ? 'bg-[#1E98D5] text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              data-testid="view-galaxy"
+            >
+              ✦ Kit Galaxy
+            </button>
           </div>
           <div className="relative">
             <input
@@ -671,7 +708,7 @@ export function WallboardClient({ data }: { data: WallboardData }) {
         </div>
 
         <div className="flex min-w-0 flex-1 items-stretch justify-center gap-2">
-          {kpis.map((kpi) => (
+          {view === 'board' && kpis.map((kpi) => (
             <div
               key={kpi.label}
               className={`min-w-[96px] rounded-lg border px-2.5 py-1.5 text-center ${
@@ -731,6 +768,7 @@ export function WallboardClient({ data }: { data: WallboardData }) {
       </header>
 
       {/* alert ticker */}
+      {view === 'board' && (
       <div
         className={`flex items-center gap-3 overflow-hidden rounded-lg border px-3 py-1.5 ${
           data.alerts.length > 0
@@ -749,8 +787,17 @@ export function WallboardClient({ data }: { data: WallboardData }) {
         </span>
         <AlertTicker alerts={data.alerts} />
       </div>
+      )}
+
+      {/* Kit Galaxy view */}
+      {view === 'galaxy' && (
+        <div className="flex min-h-0 flex-col">
+          <KitGalaxy data={galaxy} query={q} />
+        </div>
+      )}
 
       {/* lanes + rail */}
+      {view === 'board' && (
       <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_320px] gap-3">
         {(Object.keys(lanes) as BoardLane[]).map((v, i) => (
           <Lane
@@ -873,6 +920,7 @@ export function WallboardClient({ data }: { data: WallboardData }) {
           </div>
         </motion.aside>
       </div>
+      )}
     </div>
   )
 }
