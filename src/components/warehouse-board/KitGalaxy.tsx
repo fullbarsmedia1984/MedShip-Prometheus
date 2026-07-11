@@ -118,6 +118,22 @@ function isNewKit(kit: GalaxyKit): boolean {
   return !readAcks()[kit.soNumber]
 }
 
+/** Assembly shockwave tier for a kit still on the floor:
+ *  1 = ≥50% (subtle) · 2 = ≥75% (intense) · 3 = fully assembled (big + beam). */
+function waveTier(kit: GalaxyKit): 0 | 1 | 2 | 3 {
+  if (kit.status === 'shipped' || kit.units <= 0) return 0
+  if (kit.pct >= 100) return 3
+  if (kit.pct >= 75) return 2
+  if (kit.pct >= 50) return 1
+  return 0
+}
+
+const WAVE_CONFIG: Record<1 | 2 | 3, { period: number; max: number; peak: number; rings: number }> = {
+  1: { period: 4.2, max: 3.2, peak: 0.2, rings: 1 },
+  2: { period: 2.4, max: 5.0, peak: 0.36, rings: 2 },
+  3: { period: 1.6, max: 7.5, peak: 0.5, rings: 3 },
+}
+
 type PlanetEntry = {
   mesh: THREE.Mesh
   sunPos: THREE.Vector3
@@ -269,6 +285,15 @@ export function KitGalaxy({
     let particles: THREE.Points | null = null
     let particlePositions: Float32Array | null = null
     let beams: { mesh: THREE.Mesh; planetIdx: number }[] = []
+    let waves: {
+      mesh: THREE.Mesh
+      planetIdx: number
+      period: number
+      offset: number
+      maxScale: number
+      peak: number
+      baseR: number
+    }[] = []
     const focusTarget = new THREE.Vector3(0, 0, 0)
     let highlightSo: string | null = null
     let hoverPaused = false
@@ -277,6 +302,7 @@ export function KitGalaxy({
     let boostedMoonId: number | null = null
     const particleTexture = makeParticleTexture()
     const beamGeo = new THREE.CylinderGeometry(0.35, 1.1, 70, 12, 1, true)
+    const waveGeo = new THREE.RingGeometry(0.92, 1, 64)
 
     const moonGeo = new THREE.SphereGeometry(0.24, 10, 10)
     const planetGeo = new THREE.SphereGeometry(1, 24, 24)
@@ -291,7 +317,7 @@ export function KitGalaxy({
           else mat?.dispose()
           if (
             mesh.geometry &&
-            ![moonGeo, planetGeo, sunGeo, beamGeo].includes(
+            ![moonGeo, planetGeo, sunGeo, beamGeo, waveGeo].includes(
               mesh.geometry as THREE.SphereGeometry
             )
           ) {
@@ -308,6 +334,7 @@ export function KitGalaxy({
       suns = []
       labels = []
       beams = []
+      waves = []
       moonMesh = null
       linkLines = null
       linkPositions = null
@@ -465,6 +492,9 @@ export function KitGalaxy({
           )
           planet.scale.setScalar(planetR)
           const isNew = isNewKit(kit)
+          const tier = waveTier(kit)
+          const assembledUnacked =
+            tier === 3 && !readAcks()['asm:' + kit.soNumber]
           planet.userData = {
             type: 'kit',
             kit,
@@ -472,15 +502,17 @@ export function KitGalaxy({
             baseScale: planetR,
             baseColor: new THREE.Color(color),
             isNew,
+            assembledUnacked,
           }
           galaxy.add(planet)
 
-          if (isNew) {
-            // 24h "new order" announcement: a light beam rising off the planet
+          // Beam announcements (one per planet, assembled wins):
+          // green = fully assembled & ready to ship, blue = new order (24h)
+          if (assembledUnacked || isNew) {
             const beam = new THREE.Mesh(
               beamGeo,
               new THREE.MeshBasicMaterial({
-                color: 0xcfe9ff,
+                color: assembledUnacked ? 0xa9f5c4 : 0xcfe9ff,
                 transparent: true,
                 opacity: 0.28,
                 blending: THREE.AdditiveBlending,
@@ -491,6 +523,36 @@ export function KitGalaxy({
             beam.userData.isBeam = true
             galaxy.add(beam)
             beams.push({ mesh: beam, planetIdx: planets.length })
+          }
+
+          // assembly-progress shockwaves (50% / 75% / 100% tiers)
+          if (tier !== 0) {
+            const cfg = WAVE_CONFIG[tier]
+            for (let w = 0; w < cfg.rings; w++) {
+              const wave = new THREE.Mesh(
+                waveGeo,
+                new THREE.MeshBasicMaterial({
+                  color,
+                  transparent: true,
+                  opacity: 0,
+                  side: THREE.DoubleSide,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                })
+              )
+              wave.rotation.x = -Math.PI / 2
+              wave.raycast = () => {} // decorative — never block hover picks
+              galaxy.add(wave)
+              waves.push({
+                mesh: wave,
+                planetIdx: planets.length,
+                period: cfg.period,
+                offset: (w / cfg.rings) * cfg.period,
+                maxScale: cfg.max,
+                peak: cfg.peak,
+                baseR: planetR,
+              })
+            }
           }
 
           planets.push({
@@ -607,10 +669,13 @@ export function KitGalaxy({
           kit: obj.userData.kit,
           school: obj.userData.school,
         })
-        if (obj.userData.isNew) {
-          // acknowledge the new order: kill the beam on this display
+        if (obj.userData.isNew || obj.userData.assembledUnacked) {
+          // acknowledge the announcement: kill the beam on this display
+          const so = (obj.userData.kit as GalaxyKit).soNumber
+          if (obj.userData.isNew) writeAck(so)
+          if (obj.userData.assembledUnacked) writeAck('asm:' + so)
           obj.userData.isNew = false
-          writeAck((obj.userData.kit as GalaxyKit).soNumber)
+          obj.userData.assembledUnacked = false
           const idx = planets.findIndex((p) => p.mesh === obj)
           beams = beams.filter((b) => {
             if (b.planetIdx !== idx) return true
@@ -726,7 +791,9 @@ export function KitGalaxy({
           p.sunPos.z + Math.sin(p.angle) * p.orbitR
         )
         const base = p.mesh.userData.baseScale as number
-        const isNew = p.mesh.userData.isNew === true
+        const isNew =
+          p.mesh.userData.isNew === true ||
+          p.mesh.userData.assembledUnacked === true
         if (p.kit.soNumber === highlightSo || isNew) {
           p.mesh.scale.setScalar(base * (1.35 + Math.sin(t * 3.2) * 0.2))
         } else if (p.kit.severity === 'critical') {
@@ -824,7 +891,7 @@ export function KitGalaxy({
         mat.color.copy(baseColor).multiplyScalar(boosted ? 2.2 : 1)
       }
 
-      // new-order beams track their planet and shimmer
+      // announcement beams track their planet and shimmer
       for (const b of beams) {
         const p = planets[b.planetIdx]
         if (!p) continue
@@ -835,6 +902,17 @@ export function KitGalaxy({
         )
         const mat = b.mesh.material as THREE.MeshBasicMaterial
         mat.opacity = 0.22 + Math.sin(t * 2.6) * 0.1
+      }
+
+      // assembly shockwaves: expanding, fading rings around the planet
+      for (const w of waves) {
+        const p = planets[w.planetIdx]
+        if (!p) continue
+        const phase = ((t + w.offset) % w.period) / w.period
+        w.mesh.position.copy(p.mesh.position)
+        w.mesh.scale.setScalar(w.baseR * (1.3 + phase * w.maxScale))
+        ;(w.mesh.material as THREE.MeshBasicMaterial).opacity =
+          w.peak * (1 - phase) * (1 - phase)
       }
 
       // labels keep near-constant screen size: scale with camera distance
@@ -933,6 +1011,10 @@ export function KitGalaxy({
           <span className="text-[#FF7B6E]">● overdue (pulsing)</span>
           {'  '}
           <span className="text-slate-500">● gray moon = not picked</span>
+        </p>
+        <p className="mt-0.5 text-slate-500">
+          shockwaves = 50% / 75% / 100% assembled · green beam = ready to ship ·
+          blue beam = new order
         </p>
         <p className="mt-1 text-slate-500">
           drag to orbit · wheel to zoom · right-drag to pan · click a body for
