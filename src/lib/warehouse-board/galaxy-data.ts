@@ -20,6 +20,8 @@ export interface GalaxyKit {
   soNumber: string
   status: KitStatus
   ageDays: number
+  /** ISO timestamp the SO was issued — drives the 24h "new order" beam */
+  issuedAt: string | null
   severity: LaneSeverity
   pct: number
   units: number
@@ -183,6 +185,7 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
       soNumber: row.so_number,
       status,
       ageDays,
+      issuedAt: row.date_issued,
       severity,
       pct: units > 0 ? Math.min(100, Math.round((unitsDone / units) * 100)) : 0,
       units,

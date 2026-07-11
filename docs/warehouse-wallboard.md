@@ -16,9 +16,13 @@ included), red pulsing overdue; moons green/amber/slate by pick progress.
 Drag orbits, wheel zooms, right-drag pans (pan only — screen-space), click
 a school/kit for a translucent detail panel (Esc or empty-space click
 closes), hover shows quick tooltips; hovering or an open panel suspends
-orbital motion until released. Moon→planet link lines carry flowing
-particles (components streaming into the kit); an UnrealBloom pass glows
-everything; school labels scale with camera distance for readability.
+orbital motion until released. Moon→planet link lines carry flowing soft
+particles (components streaming into the kit). Bloom is subtle at rest and
+intensifies on the hovered/selected body (color over-drive past the bloom
+threshold); labels are dimmed below the threshold so text never glows and
+auto-shrink to fit long school names. Kit orders issued within the last
+24 hours blaze with a boosted glow and a vertical light beam until someone
+clicks the planet (acknowledgement persists per display via localStorage).
 The SO search box focuses + highlights matching planets. Data:
 `getKitGalaxyData()` in `src/lib/warehouse-board/galaxy-data.ts`,
 refreshed with the same 60s cycle.

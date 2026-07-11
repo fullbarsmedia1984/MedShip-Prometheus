@@ -47,21 +47,75 @@ function makeLabelSprite(text: string): THREE.Sprite {
   canvas.width = 512
   canvas.height = 96
   const ctx = canvas.getContext('2d')!
-  ctx.font = '600 40px "Segoe UI", Arial, sans-serif'
+  const label = text.length > 40 ? text.slice(0, 39) + '…' : text
+  // shrink the font until the name actually fits the canvas
+  let fontSize = 40
+  ctx.font = `600 ${fontSize}px "Segoe UI", Arial, sans-serif`
+  const width = ctx.measureText(label).width
+  if (width > 480) {
+    fontSize = Math.max(20, Math.floor((fontSize * 480) / width))
+    ctx.font = `600 ${fontSize}px "Segoe UI", Arial, sans-serif`
+  }
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.shadowColor = 'rgba(0,0,0,0.9)'
-  ctx.shadowBlur = 10
-  ctx.fillStyle = 'rgba(230,240,248,0.95)'
-  const label = text.length > 26 ? text.slice(0, 25) + '…' : text
+  ctx.shadowBlur = 8
+  // deliberately dim: keeps the text under the bloom threshold (no glow)
+  ctx.fillStyle = 'rgba(168,184,196,0.92)'
   ctx.fillText(label, 256, 48)
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false })
   )
+  sprite.material.color.setScalar(0.8)
   sprite.scale.set(17, 3.2, 1)
   return sprite
+}
+
+// soft round particle sprite (Points render hard squares without a map)
+function makeParticleTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 64
+  canvas.height = 64
+  const ctx = canvas.getContext('2d')!
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+  g.addColorStop(0, 'rgba(255,255,255,0.9)')
+  g.addColorStop(0.35, 'rgba(255,255,255,0.35)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 64, 64)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+// "New order" acknowledgements live per-display in localStorage: the beam
+// burns for 24h after issue unless someone clicks the planet.
+const ACK_KEY = 'wb-kit-galaxy-ack'
+function readAcks(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(ACK_KEY) ?? '{}')
+  } catch {
+    return {}
+  }
+}
+function writeAck(soNumber: string) {
+  try {
+    const map = readAcks()
+    map[soNumber] = Date.now()
+    for (const k of Object.keys(map)) {
+      if (Date.now() - map[k] > 7 * 86400000) delete map[k]
+    }
+    localStorage.setItem(ACK_KEY, JSON.stringify(map))
+  } catch {
+    // storage unavailable (private mode) — beam just persists
+  }
+}
+function isNewKit(kit: GalaxyKit): boolean {
+  if (!kit.issuedAt) return false
+  if (Date.now() - new Date(kit.issuedAt).getTime() > 86400000) return false
+  return !readAcks()[kit.soNumber]
 }
 
 type PlanetEntry = {
@@ -158,11 +212,14 @@ export function KitGalaxy({
     // bloom: the "everything glows" pass
     const composer = new EffectComposer(renderer)
     composer.addPass(new RenderPass(scene, camera))
+    // Dialed way back: ambient glow is subtle; hovered/selected/new bodies
+    // get their material color over-driven past the threshold, which is
+    // what makes them bloom hard.
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(mount.clientWidth, mount.clientHeight),
-      0.85, // strength
-      0.55, // radius
-      0.12 // threshold — dark scene, so most lit things bloom subtly
+      0.35, // strength
+      0.35, // radius
+      0.3 // threshold — dim things (labels, links) never bloom
     )
     composer.addPass(bloom)
 
@@ -206,9 +263,15 @@ export function KitGalaxy({
     let linkPositions: Float32Array | null = null
     let particles: THREE.Points | null = null
     let particlePositions: Float32Array | null = null
+    let beams: { mesh: THREE.Mesh; planetIdx: number }[] = []
     const focusTarget = new THREE.Vector3(0, 0, 0)
     let highlightSo: string | null = null
     let hoverPaused = false
+    let hoverObj: THREE.Object3D | null = null
+    let hoverMoonId: number | null = null
+    let boostedMoonId: number | null = null
+    const particleTexture = makeParticleTexture()
+    const beamGeo = new THREE.CylinderGeometry(0.35, 1.1, 70, 12, 1, true)
 
     const moonGeo = new THREE.SphereGeometry(0.24, 10, 10)
     const planetGeo = new THREE.SphereGeometry(1, 24, 24)
@@ -223,7 +286,9 @@ export function KitGalaxy({
           else mat?.dispose()
           if (
             mesh.geometry &&
-            ![moonGeo, planetGeo, sunGeo].includes(mesh.geometry as THREE.SphereGeometry)
+            ![moonGeo, planetGeo, sunGeo, beamGeo].includes(
+              mesh.geometry as THREE.SphereGeometry
+            )
           ) {
             mesh.geometry.dispose()
           }
@@ -234,11 +299,15 @@ export function KitGalaxy({
       moons = []
       suns = []
       labels = []
+      beams = []
       moonMesh = null
       linkLines = null
       linkPositions = null
       particles = null
       particlePositions = null
+      hoverObj = null
+      hoverMoonId = null
+      boostedMoonId = null
     }
 
     function rebuild(d: KitGalaxyData) {
@@ -285,11 +354,13 @@ export function KitGalaxy({
       particles = new THREE.Points(
         particleGeo,
         new THREE.PointsMaterial({
-          size: 1.5,
+          map: particleTexture,
+          size: 0.9,
           sizeAttenuation: true,
           vertexColors: true,
           transparent: true,
-          opacity: 0.9,
+          opacity: 0.75,
+          alphaTest: 0.02,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
@@ -308,13 +379,14 @@ export function KitGalaxy({
 
         const urgent = school.kits.some((k) => k.severity === 'critical')
         const sunR = 2.1 + Math.min(school.kits.length * 0.3, 2.4)
+        const sunColor = new THREE.Color(urgent ? 0xe86a50 : 0xf5c860)
         const sun = new THREE.Mesh(
           sunGeo,
-          new THREE.MeshBasicMaterial({ color: urgent ? 0xe86a50 : 0xf5c860 })
+          new THREE.MeshBasicMaterial({ color: sunColor })
         )
         sun.scale.setScalar(sunR)
         sun.position.copy(sunPos)
-        sun.userData = { type: 'school', school, urgent }
+        sun.userData = { type: 'school', school, urgent, baseColor: sunColor.clone() }
         galaxy.add(sun)
         suns.push(sun)
 
@@ -360,13 +432,34 @@ export function KitGalaxy({
             new THREE.MeshBasicMaterial({ color })
           )
           planet.scale.setScalar(planetR)
+          const isNew = isNewKit(kit)
           planet.userData = {
             type: 'kit',
             kit,
             school: school.name,
             baseScale: planetR,
+            baseColor: new THREE.Color(color),
+            isNew,
           }
           galaxy.add(planet)
+
+          if (isNew) {
+            // 24h "new order" announcement: a light beam rising off the planet
+            const beam = new THREE.Mesh(
+              beamGeo,
+              new THREE.MeshBasicMaterial({
+                color: 0xcfe9ff,
+                transparent: true,
+                opacity: 0.28,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+              })
+            )
+            beam.userData.isBeam = true
+            galaxy.add(beam)
+            beams.push({ mesh: beam, planetIdx: planets.length })
+          }
 
           planets.push({
             mesh: planet,
@@ -476,6 +569,18 @@ export function KitGalaxy({
           kit: obj.userData.kit,
           school: obj.userData.school,
         })
+        if (obj.userData.isNew) {
+          // acknowledge the new order: kill the beam on this display
+          obj.userData.isNew = false
+          writeAck((obj.userData.kit as GalaxyKit).soNumber)
+          const idx = planets.findIndex((p) => p.mesh === obj)
+          beams = beams.filter((b) => {
+            if (b.planetIdx !== idx) return true
+            galaxy.remove(b.mesh)
+            ;(b.mesh.material as THREE.Material).dispose()
+            return false
+          })
+        }
       }
     }
     renderer.domElement.addEventListener('pointermove', onPointerMove)
@@ -487,6 +592,8 @@ export function KitGalaxy({
       const hit = pick()
       if (!hit) {
         hoverPaused = false
+        hoverObj = null
+        hoverMoonId = null
         setHover(null)
         renderer.domElement.style.cursor = 'grab'
         return
@@ -494,6 +601,11 @@ export function KitGalaxy({
       hoverPaused = true
       renderer.domElement.style.cursor = 'pointer'
       const obj = hit.object
+      hoverObj = obj.userData.type === 'moons' ? null : obj
+      hoverMoonId =
+        obj.userData.type === 'moons' && hit.instanceId !== undefined
+          ? hit.instanceId
+          : null
       if (obj.userData.type === 'school') {
         const school = obj.userData.school as GalaxySchool
         const shipped = school.kits.filter((k) => k.status === 'shipped').length
@@ -550,6 +662,10 @@ export function KitGalaxy({
       const suspended = hoverPaused || selectedRef.current !== null
       if (!suspended) simTime += dt
 
+      const sel = selectedRef.current
+      const selSo = sel?.type === 'kit' ? sel.kit.soNumber : null
+      const selSchool = sel?.type === 'school' ? sel.school.name : null
+
       for (const p of planets) {
         if (!suspended) p.angle += p.speed * dt
         p.mesh.position.set(
@@ -558,13 +674,38 @@ export function KitGalaxy({
           p.sunPos.z + Math.sin(p.angle) * p.orbitR
         )
         const base = p.mesh.userData.baseScale as number
-        if (p.kit.soNumber === highlightSo) {
-          p.mesh.scale.setScalar(base * (1.5 + Math.sin(t * 4) * 0.25))
+        const isNew = p.mesh.userData.isNew === true
+        if (p.kit.soNumber === highlightSo || isNew) {
+          p.mesh.scale.setScalar(base * (1.35 + Math.sin(t * 3.2) * 0.2))
         } else if (p.kit.severity === 'critical') {
           p.mesh.scale.setScalar(base * (1 + Math.sin(t * 3) * 0.14))
         } else {
           p.mesh.scale.setScalar(base)
         }
+        // brightness drives bloom: hovered/selected/new planets over-drive
+        // their color past the bloom threshold; everything else stays calm
+        const baseColor = p.mesh.userData.baseColor as THREE.Color
+        const mat = p.mesh.material as THREE.MeshBasicMaterial
+        const boosted =
+          hoverObj === p.mesh || p.kit.soNumber === selSo || isNew
+        mat.color
+          .copy(baseColor)
+          .multiplyScalar(boosted ? 2.4 + Math.sin(t * 2.8) * 0.5 : 1)
+      }
+
+      // moon hover highlight (instanced color over-drive)
+      if (moonMesh && hoverMoonId !== boostedMoonId) {
+        if (boostedMoonId !== null && moons[boostedMoonId]) {
+          moonMesh.setColorAt(boostedMoonId, moons[boostedMoonId].color)
+        }
+        if (hoverMoonId !== null && moons[hoverMoonId]) {
+          moonMesh.setColorAt(
+            hoverMoonId,
+            moons[hoverMoonId].color.clone().multiplyScalar(2.6)
+          )
+        }
+        boostedMoonId = hoverMoonId
+        if (moonMesh.instanceColor) moonMesh.instanceColor.needsUpdate = true
       }
 
       if (moonMesh && linkPositions && particlePositions) {
@@ -604,15 +745,28 @@ export function KitGalaxy({
       }
 
       for (const sun of suns) {
+        const school = sun.userData.school as GalaxySchool
         if (sun.userData.urgent) {
-          const base =
-            2.1 +
-            Math.min(
-              ((sun.userData.school as GalaxySchool).kits.length as number) * 0.3,
-              2.4
-            )
+          const base = 2.1 + Math.min(school.kits.length * 0.3, 2.4)
           sun.scale.setScalar(base * (1 + Math.sin(t * 2.4) * 0.06))
         }
+        const baseColor = sun.userData.baseColor as THREE.Color
+        const mat = sun.material as THREE.MeshBasicMaterial
+        const boosted = hoverObj === sun || school.name === selSchool
+        mat.color.copy(baseColor).multiplyScalar(boosted ? 2.2 : 1)
+      }
+
+      // new-order beams track their planet and shimmer
+      for (const b of beams) {
+        const p = planets[b.planetIdx]
+        if (!p) continue
+        b.mesh.position.set(
+          p.mesh.position.x,
+          p.mesh.position.y + 35,
+          p.mesh.position.z
+        )
+        const mat = b.mesh.material as THREE.MeshBasicMaterial
+        mat.opacity = 0.22 + Math.sin(t * 2.6) * 0.1
       }
 
       // labels keep near-constant screen size: scale with camera distance
