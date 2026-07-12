@@ -114,11 +114,16 @@ async function isP7SalesOrderCacheStale(supabase: SupabaseClient) {
 }
 
 async function hasActiveP7Run(supabase: SupabaseClient) {
+  // Only recent runs count as active: crashed runs leave 'running' rows
+  // behind forever, and without a cutoff they starve every other Fishbowl
+  // automation (P2 yielded on 24 zombie rows dating back to 2026-07-01).
+  const activeCutoff = new Date(Date.now() - 60 * 60_000).toISOString()
   const { data, error } = await supabase
     .from('fishbowl_so_sync_runs')
     .select('id')
     .eq('status', 'running')
     .in('mode', ['backfill', 'pages', 'details', 'incremental'])
+    .gte('started_at', activeCutoff)
     .limit(1)
 
   if (error) {
