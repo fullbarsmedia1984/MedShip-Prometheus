@@ -727,7 +727,14 @@ export function KitGalaxy({
           lines: [
             String(obj.userData.school ?? ''),
             `${kit.status.toUpperCase()} · ${kit.pct}% assembled · ${kit.ageDays}d old · click for detail`,
-            ...(kit.severity === 'critical' ? ['⚠ OVERDUE'] : []),
+            ...(kit.shipBy
+              ? [`ship by ${kit.shipBy}${kit.tableLocation ? ` · table ${kit.tableLocation}` : ''}`]
+              : kit.tableLocation
+                ? [`table ${kit.tableLocation}`]
+                : []),
+            ...(kit.severity === 'critical'
+              ? [kit.dueBased ? '⚠ LATE FOR SCHOOL NEED-BY' : '⚠ OVERDUE (age)']
+              : []),
           ],
           x: pointerClientX,
           y: pointerClientY,
@@ -1162,6 +1169,26 @@ export function KitGalaxy({
                               { month: 'short', day: 'numeric' }
                             )
                           : selected.kit.items.length}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white/[0.05] px-2.5 py-2">
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500">
+                        Ship by · need-by
+                      </p>
+                      <p className="mt-0.5 font-bold text-white">
+                        {selected.kit.shipBy
+                          ? `${selected.kit.shipBy.slice(5).replace('-', '/')} · ${selected.kit.needBy?.slice(5).replace('-', '/') ?? '—'}`
+                          : 'set in Kit Assembly'}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white/[0.05] px-2.5 py-2">
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500">
+                        Table · rep · kit list
+                      </p>
+                      <p className="mt-0.5 font-bold text-white">
+                        {selected.kit.tableLocation ?? '—'} ·{' '}
+                        {selected.kit.rep ?? '—'} ·{' '}
+                        {selected.kit.kitListPrinted ? '✓' : '✗'}
                       </p>
                     </div>
                   </div>

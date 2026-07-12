@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { shipDeadline, workdaysBetween } from '@/lib/kits/workdays'
 
 export type LaneSeverity = 'ok' | 'warn' | 'critical'
 
@@ -42,6 +43,10 @@ export interface WallboardOrder {
   partialShipment: boolean
   /** populated for ready-to-pick orders only */
   stock: StockInfo | null
+  /** kit orders with entered need-by dates: the real ship deadline */
+  kitShipBy: string | null
+  /** kit staging table (kit_orders.table_location) */
+  kitTable: string | null
 }
 
 export interface SyncAges {
@@ -148,6 +153,8 @@ function toOrder(
   return {
     stock: null,
     partialShipment: false,
+    kitShipBy: null,
+    kitTable: null,
     soNumber: row.so_number,
     customer: row.customer_name ?? '—',
     shipTo:
@@ -380,6 +387,42 @@ export async function getWallboardData(): Promise<WallboardData> {
     .filter((r) => r.status === 'Issued')
     .map((r) => ({ ...toO(r), stock: stockFor(r.so_number) }))
   const picking = openWh.filter((r) => r.status === 'In Progress').map(toO)
+
+  // Kit orders with entered need-by dates get due-based urgency (Phase 2):
+  // the real ship deadline replaces the age heuristic on their cards.
+  {
+    const kitSos = [...ready, ...picking]
+      .map((o) => o.soNumber)
+      .filter((soNum) => /-KIT/i.test(soNum))
+    if (kitSos.length > 0) {
+      const { data: kitOps } = await supabase
+        .from('kit_orders')
+        .select('so_number, absolute_need_by, transit_days, table_location')
+        .in('so_number', kitSos)
+      const today = now.toISOString().slice(0, 10)
+      const bySo = new Map(
+        (kitOps ?? []).map((r) => [r.so_number as string, r])
+      )
+      for (const order of [...ready, ...picking]) {
+        const ops = bySo.get(order.soNumber)
+        if (!ops) continue
+        order.kitTable = (ops.table_location as string | null) ?? null
+        if (ops.absolute_need_by) {
+          const shipBy = shipDeadline(
+            String(ops.absolute_need_by),
+            Number(ops.transit_days ?? 0)
+          )
+          order.kitShipBy = shipBy
+          order.severity =
+            shipBy < today
+              ? 'critical'
+              : workdaysBetween(today, shipBy) <= 3
+                ? 'warn'
+                : 'ok'
+        }
+      }
+    }
+  }
   const shortO = closedShortWh.map(toO)
 
   // Shipped lane: SOs with a shipment in the last 7 days, unioned with

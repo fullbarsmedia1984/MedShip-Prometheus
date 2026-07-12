@@ -44,11 +44,26 @@ function fmtQty(n: number): string {
 }
 
 function AgeChip({ order }: { order: WallboardOrder }) {
+  // Kit orders with entered need-by dates show the real deadline instead
+  // of age (severity already reflects it).
+  let text = `${order.ageDays}d`
+  if (order.kitShipBy) {
+    const today = new Date().toISOString().slice(0, 10)
+    text =
+      order.kitShipBy < today
+        ? 'LATE'
+        : 'SHIP ' +
+          new Date(order.kitShipBy + 'T12:00:00').toLocaleDateString('en-US', {
+            month: 'numeric',
+            day: 'numeric',
+          })
+  }
   return (
     <span
       className={`rounded px-1.5 py-0.5 font-mono text-[11px] font-bold ${SEVERITY_STYLES[order.severity]}`}
+      title={order.kitShipBy ? `kit ship-by ${order.kitShipBy} · age ${order.ageDays}d` : undefined}
     >
-      {order.ageDays}d
+      {text}
     </span>
   )
 }
@@ -155,6 +170,7 @@ function OrderCard({
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className="truncate font-mono text-[10px] uppercase tracking-wider text-slate-400">
           {order.lines} lines · {fmtQty(order.qtyFulfilled)}/{fmtQty(order.qty)} units
+          {order.kitTable ? ` · tbl ${order.kitTable}` : ''}
           {order.shipTo ? ` · ${order.shipTo}` : ''}
         </span>
         <span className="flex shrink-0 items-center gap-1">

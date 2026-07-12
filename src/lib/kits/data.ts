@@ -95,6 +95,126 @@ async function pageAll<T>(
   return out
 }
 
+export interface KitKpiGroup {
+  key: string
+  shipped: number
+  onTimeKnown: number
+  onTimePct: number | null
+  medianTurnDays: number | null
+}
+
+export interface KitKpis {
+  windowDays: number
+  shipped: number
+  onTimeKnown: number
+  onTimePct: number | null
+  medianTurnDays: number | null
+  byRep: KitKpiGroup[]
+  bySchool: KitKpiGroup[]
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2
+    ? sorted[mid]
+    : Math.round(((sorted[mid - 1] + sorted[mid]) / 2) * 10) / 10
+}
+
+/** Shipped-kit performance over a trailing window. On-time is only known
+ *  for kits whose need-by/transit were entered (kit_orders). */
+export async function getKitKpis(windowDays = 90): Promise<KitKpis> {
+  const supabase = createAdminClient()
+  const since = new Date(Date.now() - windowDays * 86400000).toISOString()
+
+  const [soRes, opsRes] = await Promise.all([
+    supabase
+      .from('fb_sales_orders')
+      .select('so_number, customer_name, date_issued, date_completed')
+      .ilike('so_number', '%-KIT%')
+      .in('status', ['Fulfilled', 'Closed Short'])
+      .gte('date_completed', since),
+    supabase
+      .from('kit_orders')
+      .select('so_number, rep, absolute_need_by, transit_days'),
+  ])
+  if (soRes.error) throw soRes.error
+  if (opsRes.error) throw opsRes.error
+
+  const ops = new Map(
+    (opsRes.data ?? []).map((r) => [r.so_number as string, r])
+  )
+
+  type Fact = {
+    rep: string
+    school: string
+    turn: number | null
+    onTime: boolean | null
+  }
+  const facts: Fact[] = (soRes.data ?? []).map((so) => {
+    const o = ops.get(so.so_number as string)
+    const issued = so.date_issued ? String(so.date_issued).slice(0, 10) : null
+    const done = so.date_completed
+      ? String(so.date_completed).slice(0, 10)
+      : null
+    const turn = issued && done ? workdaysBetween(issued, done) : null
+    const deadline =
+      o?.absolute_need_by != null
+        ? shipDeadline(String(o.absolute_need_by), Number(o.transit_days ?? 0))
+        : null
+    return {
+      rep: (o?.rep as string | null) ?? '—',
+      school: (so.customer_name as string | null)?.trim() || 'Unassigned',
+      turn,
+      onTime: done && deadline ? done <= deadline : null,
+    }
+  })
+
+  function roll(keyOf: (f: Fact) => string): KitKpiGroup[] {
+    const groups = new Map<string, Fact[]>()
+    for (const f of facts) {
+      const k = keyOf(f)
+      ;(groups.get(k) ?? groups.set(k, []).get(k)!).push(f)
+    }
+    return [...groups.entries()]
+      .map(([key, list]) => {
+        const known = list.filter((f) => f.onTime !== null)
+        return {
+          key,
+          shipped: list.length,
+          onTimeKnown: known.length,
+          onTimePct:
+            known.length > 0
+              ? Math.round(
+                  (known.filter((f) => f.onTime).length / known.length) * 100
+                )
+              : null,
+          medianTurnDays: median(
+            list.map((f) => f.turn).filter((t): t is number => t !== null)
+          ),
+        }
+      })
+      .sort((a, b) => b.shipped - a.shipped)
+  }
+
+  const known = facts.filter((f) => f.onTime !== null)
+  return {
+    windowDays,
+    shipped: facts.length,
+    onTimeKnown: known.length,
+    onTimePct:
+      known.length > 0
+        ? Math.round((known.filter((f) => f.onTime).length / known.length) * 100)
+        : null,
+    medianTurnDays: median(
+      facts.map((f) => f.turn).filter((t): t is number => t !== null)
+    ),
+    byRep: roll((f) => f.rep),
+    bySchool: roll((f) => f.school).slice(0, 10),
+  }
+}
+
 export async function getKitWorkbench(): Promise<KitWorkbench> {
   const supabase = createAdminClient()
   const now = new Date()

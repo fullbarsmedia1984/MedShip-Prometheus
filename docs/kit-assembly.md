@@ -43,8 +43,18 @@ Open the live workbook sheet → save/copy as CSV → `/dashboard/kits` →
 "Import workbook" → paste → Import. Only ops fields import; Fishbowl facts
 stay live. Unknown Order#s are reported, not written.
 
-## Phase 2 (planned)
+## Phase 2 (shipped)
 
-Need-by-driven urgency in the wallboard + Kit Galaxy, floor checkoff flow,
-KPI rollups (on-time %, turn time by rep/school), replacing the Backorder
-Report workbook with a purchasing exception view.
+- **Due-based urgency everywhere**: kit orders with entered need-by dates
+  drive severity from the real ship deadline (late / ≤3 workdays warn) on
+  the wallboard lanes (chip shows `SHIP M/D` or `LATE` instead of age, and
+  the staging table appears on the card) and in the Kit Galaxy (planet
+  color/pulse; tooltip + detail panel show ship-by, need-by, table, rep,
+  kit-list state). Kits without dates fall back to age tiers.
+- **Performance tab** (`/dashboard/kits`): shipped count, on-time %
+  (measurable only where dates were entered — coverage grows with adoption),
+  median turn time (workdays PO→ship), rolled up by rep and by school over
+  a 90-day window (`getKitKpis`).
+- **Backorders tab**: every short part aggregated across open kit orders —
+  total short, kits affected, PO coverage + ETA, NO-PO flagged. This is the
+  purchasing exception view that replaces the Backorder Report workbook.

@@ -7,6 +7,7 @@ import type {
   KitWorkbench,
   KitRow,
   KitUrgency,
+  KitKpis,
 } from '@/lib/kits/data'
 
 const URGENCY_META: Record<
@@ -29,12 +30,17 @@ function fmtDate(iso: string | null): string {
 
 export function KitsWorkbench({
   initial,
+  kpis,
   canImport,
 }: {
   initial: KitWorkbench
+  kpis: KitKpis
   canImport: boolean
 }) {
   const router = useRouter()
+  const [tab, setTab] = useState<'workbench' | 'performance' | 'backorders'>(
+    'workbench'
+  )
   const [rows, setRows] = useState<KitRow[]>(initial.rows)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [showShipped, setShowShipped] = useState(false)
@@ -136,8 +142,35 @@ export function KitsWorkbench({
         </div>
       </div>
 
+      {/* tabs */}
+      <div className="mb-4 flex gap-1 border-b border-border">
+        {(
+          [
+            ['workbench', 'Workbench'],
+            ['performance', `Performance · ${kpis.windowDays}d`],
+            ['backorders', 'Backorders'],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              tab === key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+            data-testid={`kits-tab-${key}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'performance' && <PerformanceTab kpis={kpis} />}
+      {tab === 'backorders' && <BackordersTab rows={rows} />}
+
       {/* totals */}
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className={`mb-4 flex flex-wrap gap-2 ${tab !== 'workbench' ? 'hidden' : ''}`}>
         {[
           { label: 'Open kits', value: t.open, cls: 'text-foreground' },
           { label: 'Needs dates', value: t.needsDates, cls: t.needsDates ? 'text-slate-600' : 'text-muted-foreground' },
@@ -158,7 +191,11 @@ export function KitsWorkbench({
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div
+        className={`overflow-x-auto rounded-lg border border-border ${
+          tab !== 'workbench' ? 'hidden' : ''
+        }`}
+      >
         <table className="w-full min-w-[1180px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -262,6 +299,210 @@ export function KitsWorkbench({
           </>
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+function PerformanceTab({ kpis }: { kpis: KitKpis }) {
+  const groupTable = (title: string, groups: KitKpis['byRep']) => (
+    <div className="rounded-lg border border-border">
+      <p className="border-b border-border bg-muted/50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+            <th className="px-3 py-1.5">Group</th>
+            <th className="px-3 py-1.5 text-right">Shipped</th>
+            <th className="px-3 py-1.5 text-right">On-time</th>
+            <th className="px-3 py-1.5 text-right">Median turn</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g) => (
+            <tr key={g.key} className="border-b border-border/50">
+              <td className="max-w-[220px] truncate px-3 py-1.5" title={g.key}>
+                {g.key}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono">{g.shipped}</td>
+              <td className="px-3 py-1.5 text-right font-mono">
+                {g.onTimePct !== null ? (
+                  <span
+                    className={
+                      g.onTimePct >= 90
+                        ? 'text-emerald-600'
+                        : g.onTimePct >= 70
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                    }
+                  >
+                    {g.onTimePct}%{' '}
+                    <span className="text-muted-foreground">({g.onTimeKnown})</span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">no dates</span>
+                )}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono">
+                {g.medianTurnDays !== null ? `${g.medianTurnDays} wd` : '—'}
+              </td>
+            </tr>
+          ))}
+          {groups.length === 0 && (
+            <tr>
+              <td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">
+                No shipped kits in window.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  return (
+    <div className="mb-6" data-testid="kits-performance">
+      <div className="mb-4 flex flex-wrap gap-2">
+        {[
+          { label: `Shipped · ${kpis.windowDays}d`, value: String(kpis.shipped), cls: 'text-foreground' },
+          {
+            label: `On-time (${kpis.onTimeKnown} with dates)`,
+            value: kpis.onTimePct !== null ? `${kpis.onTimePct}%` : '—',
+            cls:
+              kpis.onTimePct === null
+                ? 'text-muted-foreground'
+                : kpis.onTimePct >= 90
+                  ? 'text-emerald-600'
+                  : kpis.onTimePct >= 70
+                    ? 'text-amber-600'
+                    : 'text-red-600',
+          },
+          {
+            label: 'Median turn (workdays)',
+            value: kpis.medianTurnDays !== null ? String(kpis.medianTurnDays) : '—',
+            cls: 'text-foreground',
+          },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className={`text-xl font-semibold leading-none ${s.cls}`}>{s.value}</p>
+            <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+              {s.label}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mb-3 text-sm text-muted-foreground">
+        On-time is measurable only for kits whose need-by dates were entered —
+        coverage grows as the team fills dates in. Turn time = workdays from PO
+        received to shipped.
+      </p>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {groupTable('By rep', kpis.byRep)}
+        {groupTable('By school (top 10)', kpis.bySchool)}
+      </div>
+    </div>
+  )
+}
+
+function BackordersTab({ rows }: { rows: KitRow[] }) {
+  type Agg = {
+    part: string
+    desc: string | null
+    totalShort: number
+    kits: { so: string; short: number }[]
+    onOrder: boolean
+    eta: string | null
+  }
+  const byPart = new Map<string, Agg>()
+  for (const r of rows) {
+    if (r.status === 'shipped') continue
+    for (const b of r.backorders) {
+      const agg =
+        byPart.get(b.part) ??
+        byPart
+          .set(b.part, {
+            part: b.part,
+            desc: b.desc,
+            totalShort: 0,
+            kits: [],
+            onOrder: b.onOrder,
+            eta: b.eta,
+          })
+          .get(b.part)!
+      agg.totalShort += b.short
+      const existing = agg.kits.find((k) => k.so === r.soNumber)
+      if (existing) existing.short += b.short
+      else agg.kits.push({ so: r.soNumber, short: b.short })
+    }
+  }
+  const aggs = [...byPart.values()].sort(
+    (a, b) =>
+      Number(a.onOrder) - Number(b.onOrder) || b.totalShort - a.totalShort
+  )
+  const noPo = aggs.filter((a) => !a.onOrder).length
+
+  return (
+    <div className="mb-6" data-testid="kits-backorders">
+      <p className="mb-3 text-sm text-muted-foreground">
+        Every part short across open kit orders, live from inventory and open
+        POs — this view replaces the Backorder Report workbook.{' '}
+        <span className={noPo > 0 ? 'font-semibold text-red-600' : ''}>
+          {noPo} part{noPo === 1 ? '' : 's'} short with NO PO.
+        </span>
+      </p>
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[860px] text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              <th className="px-3 py-2">Part</th>
+              <th className="px-3 py-2">Description</th>
+              <th className="px-3 py-2 text-right">Total short</th>
+              <th className="px-3 py-2">Kits affected</th>
+              <th className="px-3 py-2">PO coverage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {aggs.map((a) => (
+              <tr key={a.part} className="border-b border-border/50 align-top">
+                <td className="px-3 py-1.5 font-mono font-semibold">{a.part}</td>
+                <td className="max-w-[320px] truncate px-3 py-1.5 text-muted-foreground" title={a.desc ?? ''}>
+                  {a.desc ?? '—'}
+                </td>
+                <td className="px-3 py-1.5 text-right font-mono">{a.totalShort}</td>
+                <td className="px-3 py-1.5">
+                  <span className="font-mono text-xs">
+                    {a.kits
+                      .slice(0, 4)
+                      .map((k) => k.so)
+                      .join(', ')}
+                    {a.kits.length > 4 ? ` +${a.kits.length - 4}` : ''}
+                  </span>
+                </td>
+                <td className="px-3 py-1.5">
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[11px] font-bold ${
+                      a.onOrder
+                        ? 'border-amber-300 bg-amber-100 text-amber-700'
+                        : 'border-red-300 bg-red-100 text-red-700'
+                    }`}
+                  >
+                    {a.onOrder
+                      ? `PO · eta ${a.eta ? fmtDate(a.eta) : 'unknown'}`
+                      : 'NO PO'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {aggs.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                  No shortages across open kit orders.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

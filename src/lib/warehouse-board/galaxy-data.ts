@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { shipDeadline, workdaysBetween } from '@/lib/kits/workdays'
 import type { LaneSeverity } from './data'
 
 // Kit Galaxy: -KIT sales orders rendered as a solar-system graph.
@@ -28,6 +29,14 @@ export interface GalaxyKit {
   unitsDone: number
   shippedAt: string | null
   items: GalaxyItem[]
+  /** ops overlay (kit_orders) — Phase 2 */
+  needBy: string | null
+  shipBy: string | null
+  tableLocation: string | null
+  kitListPrinted: boolean
+  rep: string | null
+  /** true when severity comes from the real ship deadline, not age */
+  dueBased: boolean
 }
 
 export interface GalaxySchool {
@@ -92,6 +101,25 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
     ...((openRes.data ?? []) as KitSoRow[]),
     ...((doneRes.data ?? []) as KitSoRow[]),
   ]
+
+  // ops overlay: real due dates + floor state (Phase 2)
+  type OpsRow = {
+    so_number: string
+    absolute_need_by: string | null
+    transit_days: number | null
+    table_location: string | null
+    kit_list_printed: boolean
+    rep: string | null
+  }
+  const { data: opsRows } = await supabase
+    .from('kit_orders')
+    .select(
+      'so_number, absolute_need_by, transit_days, table_location, kit_list_printed, rep'
+    )
+    .in('so_number', soRows.map((r) => r.so_number))
+  const opsBySo = new Map<string, OpsRow>(
+    ((opsRows ?? []) as OpsRow[]).map((r) => [r.so_number, r])
+  )
 
   // Recent shipments make an open kit "shipped" even before status flips.
   const { data: shipRows } = await supabase
@@ -163,20 +191,31 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
     const ageDays = row.date_issued
       ? dayDiff(new Date(row.date_issued), now)
       : 0
-    const severity: LaneSeverity =
-      status === 'shipped'
-        ? 'ok'
-        : status === 'waiting'
-          ? ageDays > 7
-            ? 'critical'
-            : ageDays > 3
-              ? 'warn'
-              : 'ok'
-          : ageDays > 14
-            ? 'critical'
-            : ageDays > 7
-              ? 'warn'
-              : 'ok'
+    // Urgency: prefer the real ship deadline (need-by minus transit) when
+    // ops dates were entered; fall back to age tiers otherwise.
+    const ops = opsBySo.get(row.so_number)
+    const shipBy =
+      ops?.absolute_need_by != null
+        ? shipDeadline(ops.absolute_need_by, ops.transit_days ?? 0)
+        : null
+    const today = now.toISOString().slice(0, 10)
+    let severity: LaneSeverity
+    let dueBased = false
+    if (status === 'shipped') {
+      severity = 'ok'
+    } else if (shipBy) {
+      dueBased = true
+      severity =
+        shipBy < today
+          ? 'critical'
+          : workdaysBetween(today, shipBy) <= 3
+            ? 'warn'
+            : 'ok'
+    } else if (status === 'waiting') {
+      severity = ageDays > 7 ? 'critical' : ageDays > 3 ? 'warn' : 'ok'
+    } else {
+      severity = ageDays > 14 ? 'critical' : ageDays > 7 ? 'warn' : 'ok'
+    }
 
     totals[status] += 1
     totals.items += items.length
@@ -192,6 +231,12 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
       unitsDone,
       shippedAt: isShipped ? shippedAt : null,
       items,
+      needBy: ops?.absolute_need_by ?? null,
+      shipBy,
+      tableLocation: ops?.table_location ?? null,
+      kitListPrinted: ops?.kit_list_printed ?? false,
+      rep: ops?.rep ?? null,
+      dueBased,
     }
     const school = row.customer_name?.trim() || 'Unassigned'
     ;(bySchool.get(school) ?? bySchool.set(school, []).get(school)!).push(kit)
