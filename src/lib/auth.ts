@@ -73,6 +73,11 @@ export const CATALOG_API_AUTH_OPTIONS = {
   roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep', 'warehouse'],
 } satisfies ApiAuthOptions
 
+// P13 kit assembly module: the floor runs it (warehouse) and staff oversee.
+export const KITS_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'warehouse'],
+} satisfies ApiAuthOptions
+
 type AuthContext = {
   user: User | null
   role: AppRole | null
