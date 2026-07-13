@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'motion/react'
 import type {
@@ -9,6 +9,7 @@ import type {
   KitUrgency,
   KitKpis,
 } from '@/lib/kits/data'
+import type { KitImportPreview } from '@/lib/kits/import'
 
 const URGENCY_META: Record<
   KitUrgency,
@@ -48,10 +49,12 @@ export function KitsWorkbench({
   const [importOpen, setImportOpen] = useState(false)
   const [importCsv, setImportCsv] = useState('')
   const [importResult, setImportResult] = useState<string | null>(null)
+  const [importPreview, setImportPreview] = useState<KitImportPreview | null>(null)
+  const [importBusy, setImportBusy] = useState(false)
   const [savingSo, setSavingSo] = useState<string | null>(null)
 
   // keep server-refreshed data flowing in
-  useMemo(() => setRows(initial.rows), [initial.generatedAt]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setRows(initial.rows), [initial.generatedAt, initial.rows])
 
   const visible = rows.filter(
     (r) =>
@@ -81,25 +84,40 @@ export function KitsWorkbench({
     }
   }
 
-  async function runImport() {
-    setImportResult('Importing…')
-    const res = await fetch('/api/kits/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ csv: importCsv }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      setImportResult(`Failed: ${data?.error ?? res.status}`)
-      return
+  async function runImport(mode: 'preview' | 'commit') {
+    setImportBusy(true)
+    setImportResult(mode === 'preview' ? 'Checking workbook…' : 'Applying reviewed changes…')
+    try {
+      const res = await fetch('/api/kits/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          csv: importCsv,
+          mode,
+          confirmDigest: mode === 'commit' ? importPreview?.digest : undefined,
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (data?.preview) setImportPreview(data.preview as KitImportPreview)
+      if (!res.ok) {
+        setImportResult(`Failed: ${data?.error ?? res.status}`)
+        return
+      }
+      if (mode === 'preview') {
+        const summary = (data.preview as KitImportPreview).summary
+        setImportResult(
+          `Preview ready: ${summary.changes} change${summary.changes === 1 ? '' : 's'}; nothing has been written.`
+        )
+        return
+      }
+      setImportResult(
+        `Applied ${data.applied} reviewed change${data.applied === 1 ? '' : 's'}.` +
+          (data.auditLogged ? '' : ' Changes applied, but the audit log needs attention.')
+      )
+      router.refresh()
+    } finally {
+      setImportBusy(false)
     }
-    setImportResult(
-      `Imported ${data.imported} kit orders.` +
-        (data.skipped?.length
-          ? ` Skipped (not found in Fishbowl cache): ${data.skipped.join(', ')}`
-          : '')
-    )
-    router.refresh()
   }
 
   const t = initial.totals
@@ -263,14 +281,19 @@ export function KitsWorkbench({
             >
               <h2 className="text-lg font-semibold">Import Nursing Kit Report</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                In Excel: select the live report sheet → File → Save As → CSV, or
-                copy the table and paste here. Recognized columns: Order#,
+                Paste a CSV export or copied Excel table. Preview is required and
+                automatically excludes closed/shipped history. Recognized columns: Order#,
                 Earliest/Absolute Need By, Days for Transit, Rep, Table Location,
-                Notes. Only ops fields are imported — Fishbowl facts stay live.
+                and the exact Notes column. Blank cells preserve existing Zeus data;
+                Fishbowl facts stay live.
               </p>
               <textarea
                 value={importCsv}
-                onChange={(e) => setImportCsv(e.target.value)}
+                onChange={(e) => {
+                  setImportCsv(e.target.value)
+                  setImportPreview(null)
+                  setImportResult(null)
+                }}
                 rows={10}
                 placeholder="PO Received,Earliest Need By,Absolute Need By,Status,Order#,School Name,REP,KITS,..."
                 className="mt-3 w-full rounded-md border border-border bg-background p-2 font-mono text-xs outline-none focus:border-primary"
@@ -278,6 +301,45 @@ export function KitsWorkbench({
               />
               {importResult && (
                 <p className="mt-2 text-sm text-muted-foreground">{importResult}</p>
+              )}
+              {importPreview && (
+                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                    <p><span className="font-semibold">{importPreview.summary.eligible}</span> eligible</p>
+                    <p><span className="font-semibold">{importPreview.summary.inserts}</span> new</p>
+                    <p><span className="font-semibold">{importPreview.summary.updates}</span> updates</p>
+                    <p><span className="font-semibold">{importPreview.summary.unchanged}</span> unchanged</p>
+                    <p><span className="font-semibold">{importPreview.summary.needsDates}</span> need dates</p>
+                    <p><span className="font-semibold">{importPreview.summary.estimates}</span> estimates</p>
+                    <p><span className="font-semibold">{importPreview.summary.skippedIneligible}</span> historical</p>
+                    <p><span className="font-semibold">{importPreview.summary.skippedNotFound}</span> not found</p>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Notes mapping: {importPreview.recognizedColumns.notes ?? 'not present; existing notes preserved'}
+                  </p>
+                  {importPreview.blockingErrors.length > 0 && (
+                    <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-700">
+                      <p className="font-semibold">
+                        Fix {importPreview.blockingErrors.length} validation error{importPreview.blockingErrors.length === 1 ? '' : 's'} before applying:
+                      </p>
+                      <ul className="mt-1 list-disc pl-4">
+                        {importPreview.blockingErrors.slice(0, 6).map((error, index) => (
+                          <li key={`${error.row}-${error.field}-${index}`}>
+                            Row {error.row}{error.soNumber ? ` (${error.soNumber})` : ''}: {error.message}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {importPreview.summary.skippedNotFound > 0 && (
+                    <p className="mt-2 text-xs text-amber-700">
+                      Not found: {importPreview.skipped
+                        .filter((row) => row.reason === 'not_found')
+                        .map((row) => row.soNumber)
+                        .join(', ')}
+                    </p>
+                  )}
+                </div>
               )}
               <div className="mt-3 flex justify-end gap-2">
                 <button
@@ -287,13 +349,27 @@ export function KitsWorkbench({
                   Close
                 </button>
                 <button
-                  onClick={() => void runImport()}
-                  disabled={!importCsv.trim()}
-                  className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                  onClick={() => void runImport('preview')}
+                  disabled={!importCsv.trim() || importBusy}
+                  className="h-9 rounded-md border border-primary px-4 text-sm font-medium text-primary disabled:opacity-50"
                   data-testid="kits-import-run"
                 >
-                  Import
+                  {importBusy && !importPreview ? 'Checking…' : 'Preview'}
                 </button>
+                {importPreview && (
+                  <button
+                    onClick={() => void runImport('commit')}
+                    disabled={
+                      importBusy ||
+                      importPreview.blockingErrors.length > 0 ||
+                      importPreview.summary.changes === 0
+                    }
+                    className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                    data-testid="kits-import-apply"
+                  >
+                    Apply {importPreview.summary.changes} change{importPreview.summary.changes === 1 ? '' : 's'}
+                  </button>
+                )}
               </div>
             </motion.div>
           </>

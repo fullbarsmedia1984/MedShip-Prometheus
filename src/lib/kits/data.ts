@@ -286,6 +286,7 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     part_number: string | null
     quantity: number | null
     quantity_fulfilled: number | null
+    quantity_picked: number | string | null
     line_type: string | null
     prod_desc: string | null
   }
@@ -297,7 +298,7 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
       supabase
         .from('fb_sales_order_items')
         .select(
-          'sales_order_number, part_number, quantity, quantity_fulfilled, line_type:raw_data->type->>name, prod_desc:raw_data->product->>description'
+          'sales_order_number, part_number, quantity, quantity_fulfilled, quantity_picked:raw_data->>quantityPicked, line_type:raw_data->type->>name, prod_desc:raw_data->product->>description'
         )
         .in('sales_order_number', batch)
         .order('id')
@@ -365,7 +366,10 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     const units = items.reduce((s, x) => s + Number(x.quantity ?? 0), 0)
     const unitsDone = items.reduce(
       (s, x) =>
-        s + Math.min(Number(x.quantity_fulfilled ?? 0), Number(x.quantity ?? 0)),
+        s + Math.min(
+          Number(x.quantity_picked ?? x.quantity_fulfilled ?? 0),
+          Number(x.quantity ?? 0)
+        ),
       0
     )
     const ops = opsBySo.get(so.so_number) ?? EMPTY_OPS
@@ -378,7 +382,9 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
 
     const backorders: KitBackorderLine[] = []
     for (const it of items) {
-      const remaining = Number(it.quantity ?? 0) - Number(it.quantity_fulfilled ?? 0)
+      const remaining = Number(it.quantity ?? 0) - Number(
+        it.quantity_picked ?? it.quantity_fulfilled ?? 0
+      )
       if (remaining <= 0 || isShipped) continue
       const avail = onHand.get(it.part_number as string) ?? 0
       if (avail >= remaining) continue

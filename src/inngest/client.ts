@@ -60,7 +60,8 @@ export type InngestEvents = {
     data: {
       fullSync?: boolean
       triggeredBy?: string
-      action?: 'backfill.start' | 'backfill.pages' | 'detail.hydrate' | 'incremental' | 'pause' | 'retry.failed' | 'salesforce.mirror'
+      action?: 'backfill.start' | 'backfill.pages' | 'detail.hydrate' | 'detail.refresh' | 'incremental' | 'pause' | 'retry.failed' | 'salesforce.mirror'
+      soNumbers?: string[]
     }
   }
 

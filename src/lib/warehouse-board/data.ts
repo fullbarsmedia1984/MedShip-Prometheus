@@ -259,7 +259,7 @@ export async function getWallboardData(): Promise<WallboardData> {
       supabase
         .from('fb_sales_order_items')
         .select(
-          'sales_order_number, part_number, quantity, quantity_fulfilled, line_type:raw_data->type->>name'
+          'sales_order_number, part_number, quantity, quantity_fulfilled, quantity_picked:raw_data->>quantityPicked, line_type:raw_data->type->>name'
         )
         .in('sales_order_number', batch)
         .order('id')
@@ -272,7 +272,11 @@ export async function getWallboardData(): Promise<WallboardData> {
         aggs.get(key) ??
         { lines: 0, qty: 0, fulfilled: 0, partial: 0, dropShip: 0 }
       const q = Number(row.quantity ?? 0)
-      const f = Number(row.quantity_fulfilled ?? 0)
+      const f = Number(
+        (row as { quantity_picked?: number | string | null }).quantity_picked ??
+          row.quantity_fulfilled ??
+          0
+      )
       if (lineType === 'Drop Ship') {
         agg.dropShip += 1
       } else if (lineType === 'Sale' || lineType === 'Kit') {

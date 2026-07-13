@@ -678,6 +678,101 @@ export async function hydrateSalesOrderDetailBatch(
 }
 
 /**
+ * Re-read an explicit, bounded set of cached sales orders from Fishbowl's
+ * detail endpoint. This is for live orders whose sparse list header has moved
+ * forward while their authoritative line-item set is still stale.
+ */
+export async function refreshSalesOrderDetailSelection(
+  supabase: SupabaseClient,
+  client: FishbowlClient,
+  requestedSoNumbers: string[]
+) {
+  const soNumbers = [...new Set(
+    requestedSoNumbers.map((value) => value.trim().toUpperCase()).filter(Boolean)
+  )]
+  if (soNumbers.length === 0) throw new Error('At least one sales order is required')
+  if (soNumbers.length > 250) throw new Error('Targeted sales-order refresh is limited to 250 orders')
+  if (soNumbers.some((soNumber) => !/-KIT$/.test(soNumber))) {
+    throw new Error('Targeted kit refresh accepts only sales orders ending in -KIT')
+  }
+
+  const run = await createRun(supabase, 'details', {
+    strategy: 'targeted_selection',
+    requested: soNumbers.length,
+    soNumbers,
+  })
+  let detailsSucceeded = 0
+  let detailsFailed = 0
+  let itemsUpserted = 0
+  const failures: Array<{ soNumber: string; error: string }> = []
+
+  try {
+    const { data, error } = await supabase
+      .from('fb_sales_orders')
+      .select('so_number,fishbowl_id')
+      .in('so_number', soNumbers)
+    if (error) throw new Error(`Could not load targeted Fishbowl orders: ${error.message}`)
+
+    const cached = new Map(
+      (data ?? []).map((row) => [
+        String(row.so_number),
+        row.fishbowl_id === null ? null : String(row.fishbowl_id),
+      ])
+    )
+
+    for (const soNumber of soNumbers) {
+      try {
+        const fishbowlId = cached.get(soNumber)
+        if (!fishbowlId) throw new Error('Sales order is missing from the cache or has no Fishbowl id')
+        const detail = await getSalesOrderById(client, fishbowlId)
+        if (!detail) throw new Error('Fishbowl detail endpoint returned no order')
+        const result = await upsertSalesOrdersToCache(supabase, [detail], {
+          includeDetailStatus: true,
+          detailStatus: 'success',
+        })
+        detailsSucceeded++
+        itemsUpserted += result.items
+
+        await supabase
+          .from('fishbowl_so_detail_queue')
+          .upsert({
+            fishbowl_id: fishbowlId,
+            so_number: soNumber,
+            status: 'success',
+            attempts: 0,
+            line_count: result.items,
+            last_error: null,
+            hydrated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'so_number' })
+      } catch (error) {
+        detailsFailed++
+        failures.push({
+          soNumber,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    const summary = {
+      strategy: 'targeted_selection',
+      requested: soNumbers.length,
+      detailsAttempted: soNumbers.length,
+      detailsSucceeded,
+      detailsFailed,
+      itemsUpserted,
+      failures,
+    }
+    await finishRun(supabase, run.id, detailsFailed > 0 ? 'partial' : 'success', summary)
+    return summary
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await finishRun(supabase, run.id, 'failed', {}, message)
+    throw error
+  }
+}
+
+/**
  * Backfill date_issued from the Fishbowl database via the data-query
  * endpoint. The REST list/detail payloads never include dateIssued, so
  * without this step issued dates go stale (or null) and orders land in the

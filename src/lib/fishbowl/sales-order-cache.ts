@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { FBRawSalesOrder, FBRawSalesOrderItem } from './sales-orders'
 import { classifySalesOrder, getSalesOrderQualityFlags } from './sales-order-quality'
+import { expandSalesOrderItems } from './sales-order-items'
 
 type CanonicalState = 'quote' | 'order' | 'void' | 'unknown'
 
@@ -118,7 +119,14 @@ export function normalizeSalesOrder(
   const status = toText(valueAt(raw, ['status', 'statusName'])) ?? 'Unknown'
   const rawItems = valueAt(raw, ['items', 'lines', 'salesOrderItems', 'soItems'])
   const items = Array.isArray(rawItems) ? rawItems as FBRawSalesOrderItem[] : []
-  const normalizedItems = items.map((item, index) => normalizeLineItem(soNumber, item, index))
+  // Fishbowl represents a Kit master as one top-level SO line and nests the
+  // actual component lines in kitItems. Flatten that hierarchy into the
+  // canonical cache so line counts, pick progress, inventory shortages, and
+  // open-PO coverage operate on the real components instead of the master only.
+  const expandedItems = expandSalesOrderItems(items)
+  const normalizedItems = expandedItems.map((item, index) =>
+    normalizeLineItem(soNumber, item, index)
+  )
   const amount = toNumber(valueAt(raw, ['total', 'totalAmount', 'grandTotal', 'totalPrice']))
   const subtotalAmount = toNumber(valueAt(raw, ['subtotal', 'subTotal', 'subTotalPrice']))
   const dateCreated = toDate(valueAt(raw, ['dateCreated', 'createdDate', 'createdAt']))
@@ -213,7 +221,8 @@ export async function upsertSalesOrdersToCache(
     // does) — a null here means "not in this payload", not "un-issued".
     // Omit the key so upserts leave the stored value untouched.
     if (order.header.date_issued === null) {
-      const { date_issued: _omitted, ...rest } = order.header
+      const rest = { ...order.header }
+      delete rest.date_issued
       return rest as NormalizedSalesOrder['header']
     }
     return order.header
