@@ -86,3 +86,21 @@ Flag these conditions:
 - Keep all command-line scripts runnable from repo root.
 - Include README documentation for each workflow.
 - Add tests using sanitized fixture files.
+
+## Whole-repository handoff context
+
+Before changing Prometheus outside the contract-pricing ingestion workflow,
+read `CODEX.md`. It is the current repository map, source-of-truth guide,
+validation baseline, and takeover context.
+
+For Shipping Ops Dashboard, Kit Galaxy, or Nursing Kit Production Manager
+work, also read:
+
+- `docs/warehouse-wallboard.md`
+- `docs/kit-assembly.md`
+- `docs/shipping-ops-kits-audit-2026-07-12.md`
+
+Do not recursively scan `.claude/worktrees/`; it contains ignored nested
+worktrees and dependency/build copies that are not part of the active source
+tree. Scope repository-wide searches to tracked/authored paths and exclude
+`node_modules`, `.next`, outputs, raw data, and nested agent worktrees.

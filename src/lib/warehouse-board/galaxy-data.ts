@@ -146,6 +146,7 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
     part_number: string | null
     quantity: number | null
     quantity_fulfilled: number | null
+    quantity_picked: number | string | null
     line_type: string | null
     prod_desc: string | null
   }
@@ -157,7 +158,7 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
       supabase
         .from('fb_sales_order_items')
         .select(
-          'sales_order_number, part_number, quantity, quantity_fulfilled, line_type:raw_data->type->>name, prod_desc:raw_data->product->>description'
+          'sales_order_number, part_number, quantity, quantity_fulfilled, quantity_picked:raw_data->>quantityPicked, line_type:raw_data->type->>name, prod_desc:raw_data->product->>description'
         )
         .in('sales_order_number', batch)
         .order('id')
@@ -171,7 +172,7 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
         part: row.part_number,
         desc: row.prod_desc,
         qty: Number(row.quantity ?? 0),
-        fulfilled: Number(row.quantity_fulfilled ?? 0),
+        fulfilled: Number(row.quantity_picked ?? row.quantity_fulfilled ?? 0),
       })
       itemsBySo.set(row.sales_order_number, list)
     }

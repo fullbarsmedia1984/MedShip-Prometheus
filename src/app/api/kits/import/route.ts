@@ -1,170 +1,158 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import {
+  buildKitImportPreview,
+  extractKitImportOrderNumbers,
+  type KitImportKnownOrder,
+  type KitImportOverlay,
+} from '@/lib/kits/import'
+import { createAdminClient } from '@/lib/supabase/admin'
 
-// POST /api/kits/import — one-time seeding from the SharePoint
-// "Nursing Kit Report" workbook (paste as CSV). Recognizes the workbook's
-// column headers; only touches ops-overlay fields, never Fishbowl facts.
-// Rows whose Order# doesn't match a cached -KIT SO are reported back.
+type ImportMode = 'preview' | 'commit'
 
-type ParsedRow = Record<string, string>
+const OVERLAY_SELECT = [
+  'so_number',
+  'earliest_need_by',
+  'absolute_need_by',
+  'transit_days',
+  'rep',
+  'table_location',
+  'notes',
+].join(',')
 
-function parseCsv(text: string): ParsedRow[] {
-  const rows: string[][] = []
-  let cur: string[] = []
-  let cell = ''
-  let inQuotes = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (inQuotes) {
-      if (ch === '"' && text[i + 1] === '"') {
-        cell += '"'
-        i++
-      } else if (ch === '"') inQuotes = false
-      else cell += ch
-    } else if (ch === '"') inQuotes = true
-    else if (ch === ',') {
-      cur.push(cell)
-      cell = ''
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++
-      cur.push(cell)
-      cell = ''
-      if (cur.some((c) => c.trim() !== '')) rows.push(cur)
-      cur = []
-    } else cell += ch
+async function loadImportContext(
+  supabase: ReturnType<typeof createAdminClient>,
+  soNumbers: string[]
+) {
+  const knownOrders = new Map<string, KitImportKnownOrder>()
+  const existingOverlays = new Map<string, KitImportOverlay>()
+
+  for (let index = 0; index < soNumbers.length; index += 200) {
+    const batch = soNumbers.slice(index, index + 200)
+    const [ordersResult, overlaysResult] = await Promise.all([
+      supabase
+        .from('fb_sales_orders')
+        .select('so_number,status')
+        .in('so_number', batch),
+      supabase
+        .from('kit_orders')
+        .select(OVERLAY_SELECT)
+        .in('so_number', batch),
+    ])
+
+    if (ordersResult.error) {
+      throw new Error(`Could not verify Fishbowl kit orders: ${ordersResult.error.message}`)
+    }
+    if (overlaysResult.error) {
+      throw new Error(`Could not read existing kit operations data: ${overlaysResult.error.message}`)
+    }
+
+    for (const row of ordersResult.data ?? []) {
+      const known = row as KitImportKnownOrder
+      knownOrders.set(known.so_number, known)
+    }
+    for (const row of overlaysResult.data ?? []) {
+      const overlay = row as unknown as KitImportOverlay
+      existingOverlays.set(overlay.so_number, overlay)
+    }
   }
-  cur.push(cell)
-  if (cur.some((c) => c.trim() !== '')) rows.push(cur)
-  if (rows.length < 2) return []
 
-  const headers = rows[0].map((h) => h.trim().toLowerCase())
-  return rows.slice(1).map((r) => {
-    const obj: ParsedRow = {}
-    headers.forEach((h, i) => {
-      obj[h] = (r[i] ?? '').trim()
-    })
-    return obj
-  })
+  return { knownOrders, existingOverlays }
 }
 
-function findKey(row: ParsedRow, ...needles: string[]): string | null {
-  for (const key of Object.keys(row)) {
-    if (needles.some((n) => key.includes(n))) return key
-  }
-  return null
-}
-
-/** Accepts 8/14, 8/14/2026, 2026-08-14 → YYYY-MM-DD (assumes current year
- *  when omitted). */
-function toIsoDate(value: string): string | null {
-  const v = value.trim()
-  if (!v) return null
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
-  const m = v.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/)
-  if (!m) return null
-  const year = m[3]
-    ? m[3].length === 2
-      ? 2000 + Number(m[3])
-      : Number(m[3])
-    : new Date().getFullYear()
-  return `${year}-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}`
-}
-
+// POST /api/kits/import
+//
+// Preview is the default and never writes. Commit requires the digest returned
+// by a preview of the same source against the same live rows. Blank cells mean
+// "leave unchanged", and exact header aliases prevent "Sub Notes" from being
+// mistaken for the workbook's separate Notes column.
 export async function POST(request: Request) {
   const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
   if (!auth.authorized) return auth.response
 
-  const body = await request.json().catch(() => null)
-  const csv = body?.csv ? String(body.csv) : ''
-  if (!csv.trim()) {
-    return NextResponse.json({ error: 'csv required' }, { status: 400 })
-  }
+  try {
+    const body = await request.json().catch(() => null)
+    const text = body?.csv ? String(body.csv) : ''
+    const mode: ImportMode = body?.mode === 'commit' ? 'commit' : 'preview'
+    const confirmDigest = body?.confirmDigest ? String(body.confirmDigest) : null
 
-  const rows = parseCsv(csv)
-  if (rows.length === 0) {
-    return NextResponse.json({ error: 'No data rows found' }, { status: 400 })
-  }
-
-  const sample = rows[0]
-  const orderKey = findKey(sample, 'order')
-  if (!orderKey) {
-    return NextResponse.json(
-      { error: 'Could not find an "Order#" column in the CSV headers' },
-      { status: 400 }
-    )
-  }
-  const earliestKey = findKey(sample, 'earliest need')
-  const absoluteKey = findKey(sample, 'absolute need')
-  const transitKey = findKey(sample, 'transit')
-  const repKey = findKey(sample, 'rep')
-  const tableKey = findKey(sample, 'table')
-  const notesKey = findKey(sample, 'note')
-
-  const supabase = createAdminClient()
-  // Verify only the SOs present in the CSV (the full -KIT history exceeds
-  // PostgREST's 1,000-row response cap).
-  const csvSos = [
-    ...new Set(
-      rows
-        .map((r) => r[orderKey]?.trim())
-        .filter((s): s is string => Boolean(s && /-KIT/i.test(s)))
-    ),
-  ]
-  const known = new Set<string>()
-  for (let i = 0; i < csvSos.length; i += 200) {
-    const batch = csvSos.slice(i, i + 200)
-    const { data, error } = await supabase
-      .from('fb_sales_orders')
-      .select('so_number')
-      .in('so_number', batch)
-    if (error) {
-      return NextResponse.json({ error: 'SO lookup failed' }, { status: 500 })
+    if (!text.trim()) {
+      return NextResponse.json({ error: 'csv required' }, { status: 400 })
     }
-    for (const r of data ?? []) known.add(r.so_number as string)
-  }
 
-  let imported = 0
-  const skipped: string[] = []
-  const nowIso = new Date().toISOString()
+    const soNumbers = extractKitImportOrderNumbers(text)
+    const supabase = createAdminClient()
+    const { knownOrders, existingOverlays } = await loadImportContext(supabase, soNumbers)
+    const preview = buildKitImportPreview({
+      text,
+      knownOrders,
+      existingOverlays,
+    })
 
-  for (const row of rows) {
-    const soNumber = row[orderKey]?.trim()
-    if (!soNumber || !/-KIT/i.test(soNumber)) continue
-    if (!known.has(soNumber)) {
-      skipped.push(soNumber)
-      continue
+    if (mode === 'preview') {
+      return NextResponse.json({ mode, preview })
     }
-    const transitRaw = transitKey ? row[transitKey] : ''
-    const transit = transitRaw && /^\d+$/.test(transitRaw) ? Number(transitRaw) : null
-    const { error } = await supabase.from('kit_orders').upsert(
+
+    if (!confirmDigest || confirmDigest !== preview.digest) {
+      return NextResponse.json(
+        {
+          error: 'The import preview is stale. Preview the workbook again before applying it.',
+          mode: 'preview',
+          preview,
+        },
+        { status: 409 }
+      )
+    }
+
+    if (preview.blockingErrors.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Resolve the import validation errors before applying changes.',
+          mode: 'preview',
+          preview,
+        },
+        { status: 422 }
+      )
+    }
+
+    if (preview.changes.length === 0) {
+      return NextResponse.json({
+        mode,
+        applied: 0,
+        auditLogged: true,
+        preview,
+      })
+    }
+
+    const { data: appliedCount, error: applyError } = await supabase.rpc(
+      'apply_kit_import',
       {
-        so_number: soNumber,
-        earliest_need_by: earliestKey ? toIsoDate(row[earliestKey]) : null,
-        absolute_need_by: absoluteKey ? toIsoDate(row[absoluteKey]) : null,
-        transit_days: transit !== null && transit <= 30 ? transit : null,
-        rep: repKey && row[repKey] ? row[repKey].toUpperCase().slice(0, 8) : null,
-        table_location: tableKey && row[tableKey] ? row[tableKey].slice(0, 16) : null,
-        notes: notesKey && row[notesKey] ? row[notesKey].slice(0, 2000) : null,
-        updated_at: nowIso,
-        updated_by: auth.user?.id ?? null,
-      },
-      { onConflict: 'so_number' }
+        p_changes: preview.changes,
+        p_digest: preview.digest,
+        p_actor_user_id: auth.user?.id ?? null,
+        p_actor_email: auth.user?.email ?? null,
+      }
     )
-    if (!error) imported++
-  }
 
-  return NextResponse.json({
-    imported,
-    skipped,
-    recognizedColumns: {
-      order: orderKey,
-      earliestNeedBy: earliestKey,
-      absoluteNeedBy: absoluteKey,
-      transitDays: transitKey,
-      rep: repKey,
-      tableLocation: tableKey,
-      notes: notesKey,
-    },
-  })
+    if (applyError) {
+      throw new Error(`Kit import failed without completing: ${applyError.message}`)
+    }
+    if (Number(appliedCount) !== preview.changes.length) {
+      throw new Error(
+        `Kit import verification failed: expected ${preview.changes.length} rows, received ${Number(appliedCount)}.`
+      )
+    }
+
+    return NextResponse.json({
+      mode,
+      applied: preview.changes.length,
+      auditLogged: true,
+      preview,
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown kit import error' },
+      { status: 500 }
+    )
+  }
 }
