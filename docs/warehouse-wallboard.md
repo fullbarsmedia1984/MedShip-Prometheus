@@ -10,7 +10,11 @@ password invalidates every screen.
 
 **Kit Galaxy** (header toggle): a three.js orbital graph of `-KIT` orders —
 suns are schools (customers), planets are kit orders, moons are component
-lines (Sale/Kit types, capped at 20 rendered moons per kit). Colors: blue
+lines (Sale/Kit types, capped at 20 rendered moons per kit). Moons render as
+solid shaded spheres and receive distance-aware scale compensation so they
+remain legible when zoomed out. A small starship orbits any kit whose Fishbowl
+sales order has a customer PO on file; only the presence of the PO is sent to
+the client, not its number. Colors: blue
 waiting, amber assembling, green shipped (30-day window, shipment records
 included), red pulsing overdue; moons green/amber/slate by pick progress.
 Drag orbits, wheel zooms, right-drag pans (pan only — screen-space), click

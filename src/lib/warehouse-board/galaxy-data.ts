@@ -19,6 +19,8 @@ export type KitStatus = 'waiting' | 'assembling' | 'shipped'
 
 export interface GalaxyKit {
   soNumber: string
+  /** Fishbowl sales-order customer PO is populated; the PO number stays server-side. */
+  hasPo: boolean
   status: KitStatus
   ageDays: number
   /** ISO timestamp the SO was issued — drives the 24h "new order" beam */
@@ -77,6 +79,7 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
   type KitSoRow = {
     so_number: string
     customer_name: string | null
+    customer_po: string | null
     status: string
     date_issued: string | null
     date_completed: string | null
@@ -85,12 +88,16 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
   const [openRes, doneRes] = await Promise.all([
     supabase
       .from('fb_sales_orders')
-      .select('so_number, customer_name, status, date_issued, date_completed')
+      .select(
+        'so_number, customer_name, customer_po, status, date_issued, date_completed'
+      )
       .ilike('so_number', '%-KIT%')
       .in('status', ['Issued', 'In Progress']),
     supabase
       .from('fb_sales_orders')
-      .select('so_number, customer_name, status, date_issued, date_completed')
+      .select(
+        'so_number, customer_name, customer_po, status, date_issued, date_completed'
+      )
       .ilike('so_number', '%-KIT%')
       .in('status', ['Fulfilled', 'Closed Short'])
       .gte('date_completed', monthAgo),
@@ -222,6 +229,7 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
 
     const kit: GalaxyKit = {
       soNumber: row.so_number,
+      hasPo: Boolean(row.customer_po?.trim()),
       status,
       ageDays,
       issuedAt: row.date_issued,
