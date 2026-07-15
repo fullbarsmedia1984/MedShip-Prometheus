@@ -132,7 +132,7 @@ export async function getKitKpis(windowDays = 90): Promise<KitKpis> {
     supabase
       .from('fb_sales_orders')
       .select('so_number, customer_name, date_issued, date_completed')
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Fulfilled', 'Closed Short'])
       .gte('date_completed', since),
     supabase
@@ -232,12 +232,12 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     supabase
       .from('fb_sales_orders')
       .select('so_number, customer_name, status, date_issued, date_completed')
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Issued', 'In Progress']),
     supabase
       .from('fb_sales_orders')
       .select('so_number, customer_name, status, date_issued, date_completed')
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Fulfilled', 'Closed Short'])
       .gte('date_completed', monthAgo),
     supabase.from('kit_orders').select('*'),

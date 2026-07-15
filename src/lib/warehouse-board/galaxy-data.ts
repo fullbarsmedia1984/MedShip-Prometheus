@@ -91,14 +91,14 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
       .select(
         'so_number, customer_name, customer_po, status, date_issued, date_completed'
       )
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Issued', 'In Progress']),
     supabase
       .from('fb_sales_orders')
       .select(
         'so_number, customer_name, customer_po, status, date_issued, date_completed'
       )
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Fulfilled', 'Closed Short'])
       .gte('date_completed', monthAgo),
   ])

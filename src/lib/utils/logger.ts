@@ -12,6 +12,7 @@ export type Automation =
   | 'P7_FB_SO_SYNC'
   | 'P10_HERCULES_CATALOG_INGEST'
   | 'P8_INCENTIVE_RECOMPUTE'
+  | 'P14_RECEIPTS_SYNC'
 
 export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'prometheus' | 'inngest' | 'hercules'
 

@@ -1,4 +1,4 @@
-# Warehouse shipping wallboard
+# Warehouse operations wallboard
 
 Read-only TV board at **/warehouse-board** for a 16:9 HD screen on the
 warehouse floor. Public route, gated by a shared display password —
@@ -7,6 +7,10 @@ Entering it once stores a hashed 90-day cookie on the device; rotating the
 password invalidates every screen.
 
 ## What it shows (all derived from synced Fishbowl data)
+
+The header switches between three views: **Shipping**, **Receiving**, and
+**Kit Galaxy**. The board refreshes every 60 seconds, and all operating dates
+use the `America/Chicago` business day.
 
 **Kit Galaxy** (header toggle): a three.js orbital graph of `-KIT` orders —
 suns are schools (customers), planets are kit orders, moons are component
@@ -41,13 +45,95 @@ Lanes map to Fishbowl sales-order statuses:
 | Lane | Source | Notes |
 | --- | --- | --- |
 | **Ready to pick** | `Issued` | Committed, picking not started. Oldest first. |
-| **Picking** | `In Progress` | Line-level progress bar from `quantity_fulfilled / quantity`; partial-line badge. |
+| **Picking Sales** | `In Progress`, SO number does not end in `-KIT` | Line-level progress bar from `quantity_fulfilled / quantity`; partial-line badge. |
+| **Picking Kits** | `In Progress`, SO number ends exactly in `-KIT` (case-insensitive) | Same progress calculation, separated so kit assembly load is visible without changing the shared Ready queue. |
 | **Shipped · 7 days** | Shipment records (`ship`, statusId 30) in last 7d ∪ `Fulfilled` in window | Shipments are ground truth for "out the door" — an SO with a shipment counts even while still In Progress (shows a `PART` badge and stays in Picking too). Cache: `fb_recent_shipments` (migration 042), P12 Inngest cron every 15 min + `POST /api/sync/shipments`. |
+
+The Picking KPI remains the combined count and shows the Sales/Kits split in
+its note. Ready to Pick intentionally remains combined. The split changes
+presentation only; it does not change Fishbowl status or assign work.
+
+## Receiving operations
+
+The **Receiving** view groups today's receipt activity by PO. Each card shows:
+
+- PO number and vendor;
+- distinct PO lines received today;
+- total physical lines currently cached for the PO;
+- distinct Fishbowl deliveries received today;
+- units received today when the durable event feed is healthy; and
+- guarded cross-dock candidates, when any exist.
+
+"Lines received" means distinct Fishbowl PO line IDs with a positive receipt
+item event whose receipt/item status is not voided, cancelled, or rejected.
+Multiple deliveries of the same PO line count as one received line but remain
+separate deliveries and their quantities are summed. "Total lines" means
+distinct physical PO lines in the P11 cache with a part number and a positive
+ordered/fulfillable quantity; comments and non-item lines are excluded.
+
+### P14 durable receipt events
+
+P14 reads Fishbowl `receiptitem` records joined to receipt, PO, PO line,
+vendor, part, and status data. It upserts one immutable-source fact per
+Fishbowl receipt-item ID into `fb_receipt_events`, preserving the receive
+timestamp, quantity, source IDs, statuses, last-modified timestamp, and raw
+source row. The initial run backfills 45 days; later runs use the source
+last-modified watermark with a one-hour overlap.
+
+| Item | Value |
+| --- | --- |
+| Automation | `P14_RECEIPTS_SYNC` |
+| Schedule | `TZ=America/Chicago 11,26,41,56 6-18 * * 1-5` |
+| Manual trigger | `POST /api/sync/receipts` (admin) |
+| Reconciliation summary | `GET /api/sync/receipts` (staff) |
+| Durable table | `fb_receipt_events` (migration 047) |
+| Wallboard health | `RCV` pill: green only after a successful P14 run and while the feed is no more than 35 minutes old |
+
+The receipt table has RLS enabled. `anon` and `authenticated` have no Data API
+read access; only the server-side service role can read or write it.
+
+### Beta fallback and cutover
+
+Until P14 completes successfully, Receiving runs in **validation mode** using
+P11 `date_last_fulfillment` values. This fallback can prove that a PO line
+changed today, but it cannot prove per-delivery quantity. Therefore it shows
+POs and distinct lines only, renders units as unavailable, keeps the RCV pill
+amber, and never displays cross-dock candidates. After P14 succeeds, the view
+automatically switches to receipt-event data with no operator action.
+
+### Cross-dock guardrails
+
+A candidate appears only when a positively received part number matches an
+open, unfulfilled Sale/Kit demand line on an Issued or In Progress sales
+order. Candidates are sorted by operational urgency (kit ship deadline first,
+then scheduled date) and are explicitly **informational matches — not
+allocations**. The board does not reserve inventory, change Fishbowl, move an
+order, or promise the same received units to only one order. Warehouse staff
+must verify the part, quantity, and priority in Fishbowl before moving stock.
+
+### Receipt reconciliation checklist
+
+After a deploy, and whenever receipt logic changes:
+
+1. Confirm P14 reports `success` and the RCV pill is green.
+2. Choose at least three POs received today, including one split across more
+   than one delivery when available.
+3. Compare the card's distinct lines and deliveries with Fishbowl receiving
+   history. A repeated PO line counts once; its positive quantities sum.
+4. Confirm total lines against the physical lines on the PO, excluding
+   comments/non-item lines.
+5. Check that voided, cancelled, rejected, zero, and negative receipt items
+   do not count.
+6. For every cross-dock candidate, confirm the part exists on the listed open
+   SO and treat the result only as a prompt for human allocation.
+7. Record discrepancies before relying on the Receiving view for the huddle;
+   the Shipping view remains independent.
 
 **Closed short** (last 30d, slower-moving review data) lives in the right
 rail under "Longest waiting", off the main board. The header shows per-source
-sync ages — **SO / PO / INV** pills (green pulse = fresh; amber when SO >2h
-or PO/INV >26h) — plus an **SO search** box: typing dims non-matches,
+sync ages — **SO / SHIP / PO / INV / RCV** pills (green pulse = fresh; amber
+when each source exceeds its documented freshness threshold) — plus an
+**SO/PO search** box: typing dims non-matches,
 outlines hits in white, auto-expands the lane holding the first hit and
 scrolls to it. One-page, no popups; clearing restores the ambient board.
 
@@ -62,7 +148,8 @@ past-due in the data so it can't discriminate):
 - **Longest waiting** rail: the 6 oldest open SOs with big day counters —
   catches inventory sitting in the warehouse tied to SOs (incl. the >90d
   backlog, which is kept out of the lanes and counted in the KPI strip).
-- KPI strip: Ready / Picking / Late >7d / Stuck picks / Backlog >90d /
+- Shipping KPI strip: Ready / Picking (with Sales/Kits split) / Late >7d /
+  Stuck picks / Backlog >90d /
   Shipped 7d.
 - Header shows a **LIVE** dot with Fishbowl sync age (turns amber when the
   sync is >2h stale) and a clock.
