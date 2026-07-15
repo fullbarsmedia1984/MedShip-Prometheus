@@ -73,6 +73,19 @@ Workflow endpoints (admin, audited):
 - `POST /api/pricing/contract-migration/batches/[id]/publish` — requires `confirm: "PUBLISH"`, batch in `publishing` status
 - `POST /api/pricing/contract-migration/batches/[id]/rollback` — requires `confirm: "ROLLBACK"`, batch in `published` status
 
+Item matching (Phase B, migration `047_supplier_cost_item_matching.sql`):
+
+- `POST /api/pricing/item-matching/sync-spine` — seed/refresh the internal item spine
+  (`pricing_products` + `product_crosswalk`) from the Fishbowl part master in `inventory_snapshot`.
+- `GET/POST /api/pricing/contract-migration/batches/[id]/match-suggestions` — list / generate
+  deterministic suggest-only item matches (GTIN, SKU, MPN, model) against the internal spine
+  and the Hercules catalog. Suggest-only: nothing links without review.
+- `PATCH /api/pricing/item-matching/matches/[matchId]` — approve/reject. Approval sets
+  `internal_item_id` (internal target) or `hercules_catalog_item_id` (Hercules target) on the
+  cost line and supersedes the line's other open suggestions for that target type.
+
+Unmatched cost lines are allowed and never block staging, approval, or publish — matching is retroactive.
+
 Local/dev preflight endpoint:
 
 - `POST /api/pricing/contract-migration/preflight`

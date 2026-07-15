@@ -73,6 +73,28 @@ type PublishPreview = {
   blockers: string[]
 }
 
+type MatchStats = {
+  costLines: number
+  linkedToInternalItem: number
+  linkedToHerculesItem: number
+  openSuggestions: number
+  approvedMatches: number
+  rejectedMatches: number
+}
+
+type MatchSuggestion = {
+  id: string
+  target_type: 'pricing_product' | 'hercules_catalog_item'
+  match_method: string
+  match_confidence: number | null
+  matched_identifier_field: string | null
+  status: string
+  cost_line_source_row_number: number | null
+  cost_line_identifier: string | null
+  target_label: string | null
+  target_manufacturer: string | null
+}
+
 type PageProps = {
   params: Promise<{ id: string }>
 }
@@ -136,6 +158,8 @@ export default function PricingImportDetailPage({ params }: PageProps) {
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<'publish' | 'rollback' | null>(null)
   const [confirmText, setConfirmText] = useState('')
+  const [matchStats, setMatchStats] = useState<MatchStats | null>(null)
+  const [matchSuggestions, setMatchSuggestions] = useState<MatchSuggestion[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -249,6 +273,57 @@ export default function PricingImportDetailPage({ params }: PageProps) {
       setActionLoading(null)
     }
   }, [id, load, loadPreview])
+
+  const loadMatches = useCallback(async () => {
+    try {
+      const data = await fetchJson<{ stats: MatchStats; suggestions: MatchSuggestion[] }>(
+        `/api/pricing/contract-migration/batches/${id}/match-suggestions`
+      )
+      setMatchStats(data.stats)
+      setMatchSuggestions(data.suggestions)
+    } catch {
+      /* item matching not yet provisioned (migration 047) — card shows setup hint */
+    }
+  }, [id])
+
+  useEffect(() => {
+    loadMatches()
+  }, [loadMatches])
+
+  const generateMatches = useCallback(async () => {
+    setActionLoading('match-generate')
+    setError(null)
+    setNotice(null)
+    try {
+      const data = await fetchJson<{ run: { totalSuggestions: number } }>(
+        `/api/pricing/contract-migration/batches/${id}/match-suggestions`,
+        { method: 'POST' }
+      )
+      setNotice(`Generated ${data.run.totalSuggestions.toLocaleString()} new item match suggestions.`)
+      await loadMatches()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to generate match suggestions')
+    } finally {
+      setActionLoading(null)
+    }
+  }, [id, loadMatches])
+
+  const reviewMatch = useCallback(async (matchId: string, status: 'approved' | 'rejected') => {
+    setActionLoading(matchId)
+    setError(null)
+    try {
+      await fetchJson<{ matchReview: { status: string } }>(`/api/pricing/item-matching/matches/${matchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      await loadMatches()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to review match suggestion')
+    } finally {
+      setActionLoading(null)
+    }
+  }, [loadMatches])
 
   const publishBatch = useCallback(async () => {
     setActionLoading('publish')
@@ -503,6 +578,87 @@ export default function PricingImportDetailPage({ params }: PageProps) {
                   : 'Preview is clear. Approve and prepare costs to reach the final publish gate.'}
               </p>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4" /> Item Matching
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!matchStats ? (
+              <p className="text-sm text-muted-foreground">
+                Item matching is not provisioned yet (migration 047 pending) or no data is available.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                  <div className="rounded-md border p-3"><p className="text-lg font-semibold">{matchStats.costLines.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Cost Lines</p></div>
+                  <div className="rounded-md border p-3"><p className="text-lg font-semibold">{matchStats.linkedToInternalItem.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Internal Item</p></div>
+                  <div className="rounded-md border p-3"><p className="text-lg font-semibold">{matchStats.linkedToHerculesItem.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Hercules Item</p></div>
+                  <div className="rounded-md border p-3"><p className="text-lg font-semibold">{matchStats.openSuggestions.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Open Suggestions</p></div>
+                  <div className="rounded-md border p-3"><p className="text-lg font-semibold">{matchStats.approvedMatches.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Approved</p></div>
+                  <div className="rounded-md border p-3"><p className="text-lg font-semibold">{matchStats.rejectedMatches.toLocaleString()}</p><p className="text-xs uppercase text-muted-foreground">Rejected</p></div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    Deterministic suggest-only matching (GTIN, SKU, MPN, model). Every link requires reviewer approval;
+                    unmatched lines are allowed and never block publish.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={generateMatches} disabled={actionLoading !== null}>
+                    {actionLoading === 'match-generate' ? 'Generating...' : 'Generate Suggestions'}
+                  </Button>
+                </div>
+                {matchSuggestions.filter((match) => match.status === 'suggested').length > 0 && (
+                  <div className="mt-4 overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right">Source Row</TableHead>
+                          <TableHead>Line Identifier</TableHead>
+                          <TableHead>Suggested Item</TableHead>
+                          <TableHead>Target</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead className="text-right">Confidence</TableHead>
+                          <TableHead>Review</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {matchSuggestions.filter((match) => match.status === 'suggested').map((match) => (
+                          <TableRow key={match.id}>
+                            <TableCell className="text-right font-mono text-sm">{match.cost_line_source_row_number ?? '-'}</TableCell>
+                            <TableCell className="max-w-[160px] truncate font-mono text-xs">{match.cost_line_identifier ?? '-'}</TableCell>
+                            <TableCell className="max-w-[280px] truncate text-sm">
+                              {match.target_label ?? 'Unknown'}
+                              {match.target_manufacturer ? (
+                                <span className="ml-1 text-xs text-muted-foreground">({match.target_manufacturer})</span>
+                              ) : null}
+                            </TableCell>
+                            <TableCell className="text-xs">{match.target_type === 'pricing_product' ? 'Internal' : 'Hercules'}</TableCell>
+                            <TableCell className="text-xs">{match.match_method.replace(/_/g, ' ')}</TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {match.match_confidence === null ? '-' : `${Math.round(match.match_confidence * 100)}%`}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={() => reviewMatch(match.id, 'approved')} disabled={actionLoading !== null}>
+                                  Approve
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => reviewMatch(match.id, 'rejected')} disabled={actionLoading !== null}>
+                                  Reject
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
 
