@@ -97,9 +97,9 @@ export default function PricingImportsPage() {
                 <Button variant="outline" size="sm" onClick={loadBatches} disabled={loading}>
                   Refresh
                 </Button>
-                <Link href="/dashboard/pricing/imports/upload">
-                  <Button size="sm">Upload Workbook</Button>
-                </Link>
+                <Button size="sm" render={<Link href="/dashboard/pricing/imports/upload" />}>
+                  Upload Workbook
+                </Button>
               </div>
             </div>
           </CardContent>
