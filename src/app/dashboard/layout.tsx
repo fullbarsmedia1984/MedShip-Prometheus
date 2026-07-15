@@ -1,5 +1,6 @@
 import { SidebarProvider } from '@/components/layout/SidebarContext'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { ChangelogDialog } from '@/components/help/ChangelogDialog'
 import { requireDashboardAuth } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,7 @@ export default async function DashboardLayout({
           {children}
         </main>
       </div>
+      <ChangelogDialog />
     </SidebarProvider>
   )
 }

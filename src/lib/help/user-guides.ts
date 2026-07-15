@@ -1,0 +1,185 @@
+/**
+ * Per-page user guides, shown from the question-mark button in the header.
+ * Guides are matched by route pattern; pages without a guide hide the button.
+ * Keep copy plain-English and task-oriented — these double as the operating
+ * instructions for non-technical staff.
+ */
+
+export type GuideSection = {
+  heading: string
+  text?: string
+  steps?: string[]
+}
+
+export type PageGuide = {
+  title: string
+  intro: string
+  sections: GuideSection[]
+}
+
+type GuideRoute = {
+  pattern: RegExp
+  guide: PageGuide
+}
+
+const UUID = '[0-9a-fA-F-]{36}'
+
+const PRICING_LANDING: PageGuide = {
+  title: 'Pricing workspace',
+  intro:
+    'This page shows pricing readiness (how trustworthy our pricing data is) and links to the live pricing modules.',
+  sections: [
+    {
+      heading: 'What the gates mean',
+      text: 'Each readiness gate tracks one data foundation (product identity, contract costs, COGS, quote lines). Gates must pass before Zeus enforces pricing rules anywhere. Nothing on this page changes data — it is read-only.',
+    },
+    {
+      heading: 'Where to work',
+      steps: [
+        'Supplier Cost Imports (Live) — import distributor price lists and publish negotiated costs.',
+        'Supplier Cost Exceptions (Live) — work the review queue for imported rows that need attention.',
+        'Cards marked Coming Soon are planned modules and are not clickable yet.',
+      ],
+    },
+  ],
+}
+
+const IMPORTS_LIST: PageGuide = {
+  title: 'Supplier Cost Imports',
+  intro:
+    'Each row is one imported distributor price list (a batch). Batches move through: staged → approved → publishing → published. This is buy-side supplier cost data — customer prices are never touched here.',
+  sections: [
+    {
+      heading: 'Import a new price list',
+      steps: [
+        'Click Upload Workbook (top right).',
+        'Fill in the distributor, contract number, and effective date — these are required.',
+        'Follow the mapping and dry-run steps on the next screen, then stage the batch.',
+      ],
+    },
+    {
+      heading: 'Work an existing batch',
+      steps: [
+        'Click a batch row to open it.',
+        'Review rows and exceptions, approve, prepare costs, then publish (typed confirmation).',
+      ],
+    },
+  ],
+}
+
+const UPLOAD_FORM: PageGuide = {
+  title: 'Upload a pricing workbook',
+  intro:
+    'Upload the distributor’s Excel price list exactly as they sent it. The file is stored privately and analyzed automatically.',
+  sections: [
+    {
+      heading: 'Before you upload',
+      steps: [
+        'Have the contract number and effective date ready — rows cannot stage without them.',
+        'Use the original .xlsx file from the distributor. Do not edit or reformat it first.',
+      ],
+    },
+    {
+      heading: 'After you click Upload and Analyze',
+      text: 'You will land on the workbook page, where the system shows what it found in the file and suggests how columns map to our pricing fields. You confirm the mapping there.',
+    },
+  ],
+}
+
+const UPLOAD_DETAIL: PageGuide = {
+  title: 'Map, dry-run, and stage a workbook',
+  intro:
+    'This page turns an uploaded price list into a review batch. Three steps: confirm the column mapping, run a dry run, and stage.',
+  sections: [
+    {
+      heading: '1 — Confirm the column mapping',
+      steps: [
+        'Pick the sheet that holds the pricing table (usually pre-selected).',
+        'Check the header row number matches the row with column titles.',
+        'For each field, confirm the suggested column or pick the right one. Price is required; map every identifier column the file has (item #, part #, model, UPC).',
+        'If the file has no UOM column, type a default (for example EA) in the Default price UOM box.',
+        'Click Save Profile. The mapping is saved and reusable for this distributor’s future files.',
+      ],
+    },
+    {
+      heading: '2 — Run the dry run',
+      steps: [
+        'Select your saved profile and click Run Dry Run.',
+        'Check the counts: Valid rows will import; Warnings import but get flagged for review; Blocking rows stop staging.',
+        'If there are blocking reasons, the list tells you why — usually a mis-mapped column. Fix the mapping, save again (a new version is created), and re-run.',
+      ],
+    },
+    {
+      heading: '3 — Stage the batch',
+      text: 'When the dry run is clean, click Stage Batch. This creates a review batch — nothing is published or activated by staging. Use the link that appears to open the batch and continue with review and publish.',
+    },
+  ],
+}
+
+const BATCH_DETAIL: PageGuide = {
+  title: 'Review and publish an import batch',
+  intro:
+    'This page is the control room for one imported price list: review its rows, resolve exceptions, link items, and publish the costs. Everything is logged, and publishing is reversible.',
+  sections: [
+    {
+      heading: 'Review and approve',
+      steps: [
+        'Check the row counts and the staged row table. Work any open exceptions with Ack / Waive / Resolve.',
+        'Click Approve once there are no blocking rows and no open exceptions.',
+      ],
+    },
+    {
+      heading: 'Item matching (any time)',
+      steps: [
+        'In the Item Matching card, click Generate Suggestions.',
+        'Approve a suggestion only if you are confident it is the same product from the same manufacturer; otherwise Reject or leave it.',
+        'Unmatched lines are fine — they never block publishing.',
+      ],
+    },
+    {
+      heading: 'Publish (makes costs official)',
+      steps: [
+        'Click Prepare Costs, then check the Publish Preview numbers.',
+        'Click Publish, read the impact summary, type PUBLISH, and confirm.',
+        'The batch status changes to published — these are now the active negotiated costs in Zeus.',
+      ],
+    },
+    {
+      heading: 'If something is wrong after publishing',
+      text: 'Click Roll Back and type ROLLBACK. Everything the publish changed is restored, and you can publish again later. Customer sell pricing is never affected by anything on this page.',
+    },
+  ],
+}
+
+const EXCEPTIONS_QUEUE: PageGuide = {
+  title: 'Supplier cost exception queue',
+  intro:
+    'Batches with warning or blocking rows appear here so nothing needing review is missed.',
+  sections: [
+    {
+      heading: 'How to work the queue',
+      steps: [
+        'Open a batch to see its exceptions with row-level detail.',
+        'Acknowledge, waive, or resolve each one — notes are recorded for the audit trail.',
+        'Blocking exceptions must be cleared before the batch can be approved.',
+      ],
+    },
+  ],
+}
+
+const GUIDE_ROUTES: GuideRoute[] = [
+  { pattern: new RegExp(`^/dashboard/pricing/imports/upload/${UUID}$`), guide: UPLOAD_DETAIL },
+  { pattern: /^\/dashboard\/pricing\/imports\/upload$/, guide: UPLOAD_FORM },
+  { pattern: new RegExp(`^/dashboard/pricing/imports/${UUID}$`), guide: BATCH_DETAIL },
+  { pattern: /^\/dashboard\/pricing\/imports$/, guide: IMPORTS_LIST },
+  { pattern: /^\/dashboard\/pricing\/exceptions$/, guide: EXCEPTIONS_QUEUE },
+  { pattern: /^\/dashboard\/pricing$/, guide: PRICING_LANDING },
+]
+
+export function findGuideForPath(pathname: string): PageGuide | null {
+  const normalized = pathname.replace(/\/+$/, '') || '/'
+  for (const route of GUIDE_ROUTES) {
+    if (route.pattern.test(normalized)) return route.guide
+  }
+  return null
+}
