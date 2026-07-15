@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { Bell, Sun, Moon, Menu, Search, ChevronDown, LogOut } from 'lucide-react'
+import { PageHelpButton } from '@/components/help/PageHelpButton'
 
 interface HeaderProps {
   title: string
@@ -103,6 +104,9 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
           <Search className="h-4 w-4" />
           <span>Search here...</span>
         </div>
+
+        {/* Page guide (shown only on pages with a registered guide) */}
+        <PageHelpButton />
 
         {/* Dark/light mode toggle */}
         <button
