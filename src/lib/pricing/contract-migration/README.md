@@ -86,11 +86,30 @@ Item matching (Phase B, migration `047_supplier_cost_item_matching.sql`):
 
 Unmatched cost lines are allowed and never block staging, approval, or publish — matching is retroactive.
 
+Native workbook ingestion (Phase C, migration `048_native_workbook_ingestion.sql`,
+`src/lib/pricing/excel-ingestion/`):
+
+- `GET/POST /api/pricing/workbook-uploads` — list uploads / upload an .xlsx to the private
+  `pricing-workbooks` bucket with required contract metadata (contract number + effective date);
+  deterministic structure discovery runs on upload.
+- `GET /api/pricing/workbook-uploads/[id]` — upload detail with discovery + distributor profiles.
+- `POST /api/pricing/workbook-uploads/[id]/profiles` — save a reviewed native profile
+  (sheet, header row, column mappings; versions auto-increment).
+- `POST /api/pricing/workbook-uploads/[id]/dry-run` — deterministic extraction + staging plan,
+  aggregate output only, no writes to pricing rows.
+- `POST /api/pricing/workbook-uploads/[id]/stage` — stages through the same planner/validator/
+  staging pipeline as the CLI; refuses while the plan has blocking reasons.
+
+The TS engine (`native-engine.mjs`) follows the Python toolkit's rules: code extracts prices,
+mapping suggestions are deterministic header-synonym matches confirmed by a human, cell-level
+lineage is preserved, and no package conversions are inferred. The Python toolkit remains the
+reference implementation for the original three distributor profiles.
+
 Local/dev preflight endpoint:
 
 - `POST /api/pricing/contract-migration/preflight`
 
-Production should register uploaded artifacts instead of accepting arbitrary filesystem paths.
+Production uses the workbook-uploads flow above instead of filesystem paths.
 
 ## UI
 

@@ -28,6 +28,7 @@
     "@types/three": "^0.185.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "exceljs": "^4.4.0",
     "inngest": "^4.1.0",
     "jsforce": "^3.10.14",
     "kepler.gl": "^3.3.0-alpha.1",
