@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { planCostLineSupersedes, planRollbackRestores } from './publish-planner.mjs'
 import type {
   BatchApprovalInput,
   BatchApprovalResult,
@@ -12,8 +13,12 @@ import type {
   MigrationStageResult,
   PreparePublishInput,
   PreparePublishResult,
+  PublishBatchInput,
+  PublishBatchResult,
   PublishPreviewResult,
   ProposedPricingRow,
+  RollbackBatchInput,
+  RollbackBatchResult,
 } from './types'
 
 type DbRow = Record<string, unknown>
@@ -355,6 +360,8 @@ export async function buildMigrationPublishPreview(batchId: string): Promise<Pub
   if (!['approved', 'staged', 'publishing'].includes(String(row.status))) blockers.push('BATCH_STATUS_NOT_READY')
   if (rowCount === 0 || validRowCount === 0) blockers.push('NO_VALID_ROWS')
 
+  const publishReady = String(row.status) === 'publishing' && blockers.length === 0
+
   const supabase = createAdminClient()
   const { count: existingPendingCostLines, error: pendingError } = await supabase
     .from('supplier_contract_cost_lines')
@@ -383,7 +390,7 @@ export async function buildMigrationPublishPreview(batchId: string): Promise<Pub
     candidatePendingCostLines: validRowCount,
     existingPendingCostLines: existingPendingCostLines ?? 0,
     existingActiveCostLines: existingActiveCostLines ?? 0,
-    wouldCreateActiveCosts: false,
+    wouldCreateActiveCosts: publishReady,
     wouldTouchCustomerSellPricing: false,
     canProceedToPublishImplementation: blockers.length === 0,
     blockers,
@@ -577,6 +584,319 @@ export async function prepareMigrationBatchForPublish(
     blockerCount: preview.blockers.length,
     status: 'publishing',
     publishEnabled: false,
+  }
+}
+
+const COST_LINE_IDENTITY_SELECT =
+  'id, created_at, internal_item_id, distributor_sku, manufacturer_part_number, model_number, gtin, udi, ndc, normalized_price_uom, raw_price_uom, normalized_uom, raw_uom, tier, minimum_quantity'
+
+export const PUBLISH_CONFIRM_PHRASE = 'PUBLISH'
+export const ROLLBACK_CONFIRM_PHRASE = 'ROLLBACK'
+
+function assertConfirmPhrase(confirm: string | null | undefined, phrase: string, action: string) {
+  if (nonEmptyText(confirm) !== phrase) {
+    throw new Error(`${action} requires explicit confirmation. Pass confirm: "${phrase}".`)
+  }
+}
+
+async function countActiveContractLines(supplierContractId: string) {
+  const supabase = createAdminClient()
+  const { count, error } = await supabase
+    .from('supplier_contract_cost_lines')
+    .select('id', { count: 'exact', head: true })
+    .eq('supplier_contract_id', supplierContractId)
+    .eq('active', true)
+  assertNoError(error)
+  return count ?? 0
+}
+
+export async function publishMigrationBatch(
+  batchId: string,
+  input: PublishBatchInput = {}
+): Promise<PublishBatchResult> {
+  assertConfiguredForReview()
+  assertConfirmPhrase(input.confirm, PUBLISH_CONFIRM_PHRASE, 'Final publish')
+
+  const batch = await getMigrationBatch(batchId)
+  if (!batch) throw new Error('Batch not found.')
+  const batchStatus = String((batch as DbRow).status)
+  if (batchStatus === 'published') throw new Error('Batch is already published.')
+  if (batchStatus !== 'publishing') {
+    throw new Error('Only batches in publishing status (prepared pending costs) can be published.')
+  }
+
+  const preview = await buildMigrationPublishPreview(batchId)
+  if (preview.blockers.length > 0) {
+    throw new Error(`Batch has publish blockers: ${preview.blockers.join(', ')}`)
+  }
+
+  const supplierContractId = safeUuid(String((batch as DbRow).supplier_contract_id ?? ''))
+  if (!supplierContractId) {
+    throw new Error('Batch has no linked supplier contract. Run prepare-publish first.')
+  }
+
+  const supabase = createAdminClient()
+  const { data: pendingData, error: pendingError } = await supabase
+    .from('supplier_contract_cost_lines')
+    .select(COST_LINE_IDENTITY_SELECT)
+    .eq('source_batch_id', batchId)
+    .eq('approval_status', 'pending')
+    .eq('active', false)
+  assertNoError(pendingError)
+  const pendingLines = (pendingData ?? []) as DbRow[]
+
+  const { count: alreadyApprovedCount, error: approvedCountError } = await supabase
+    .from('supplier_contract_cost_lines')
+    .select('id', { count: 'exact', head: true })
+    .eq('source_batch_id', batchId)
+    .eq('approval_status', 'approved')
+  assertNoError(approvedCountError)
+
+  if (pendingLines.length === 0 && (alreadyApprovedCount ?? 0) === 0) {
+    throw new Error('No pending cost lines to publish. Run prepare-publish first.')
+  }
+
+  // Active lines on the same contract from earlier batches; these are the
+  // supersede candidates. Lines from this batch are excluded so a retried
+  // publish never supersedes its own partially-activated lines.
+  const { data: activeData, error: activeError } = await supabase
+    .from('supplier_contract_cost_lines')
+    .select(`${COST_LINE_IDENTITY_SELECT}, source_batch_id`)
+    .eq('supplier_contract_id', supplierContractId)
+    .eq('active', true)
+  assertNoError(activeError)
+  const activeLines = ((activeData ?? []) as DbRow[]).filter(
+    (line) => String(line.source_batch_id ?? '') !== batchId
+  )
+
+  const plan = planCostLineSupersedes(
+    pendingLines as Parameters<typeof planCostLineSupersedes>[0],
+    activeLines as Parameters<typeof planCostLineSupersedes>[1]
+  )
+
+  const now = new Date().toISOString()
+  const actorId = safeUuid(input.actorId)
+
+  // Activate new lines first, then deactivate superseded ones. A retry after a
+  // partial failure re-enters here: already-activated lines are no longer
+  // pending, and any leftover superseded targets are recomputed from the
+  // still-active set.
+  const assignmentByPendingId = new Map(
+    plan.assignments.map((entry) => [entry.pendingLineId, entry] as const)
+  )
+  const supersedesByTarget = new Map<string | null, string[]>()
+  for (const pending of pendingLines) {
+    const target = assignmentByPendingId.get(String(pending.id))?.supersedesCostLineId ?? null
+    const bucket = supersedesByTarget.get(target)
+    if (bucket) bucket.push(String(pending.id))
+    else supersedesByTarget.set(target, [String(pending.id)])
+  }
+
+  let activatedCostLines = 0
+  for (const [target, ids] of supersedesByTarget) {
+    const { data: activated, error: activateError } = await supabase
+      .from('supplier_contract_cost_lines')
+      .update({
+        active: true,
+        approval_status: 'approved',
+        approved_at: now,
+        approved_by: actorId,
+        supersedes_cost_line_id: target,
+      })
+      .in('id', ids)
+      .eq('approval_status', 'pending')
+      .select('id')
+    assertNoError(activateError)
+    activatedCostLines += (activated ?? []).length
+  }
+
+  // Deactivate superseded lines using the links just recorded on this batch's
+  // approved lines (not only this run's plan) so a retried publish that
+  // crashed between activation and supersede still deactivates its targets.
+  const { data: approvedLinks, error: approvedLinksError } = await supabase
+    .from('supplier_contract_cost_lines')
+    .select('supersedes_cost_line_id')
+    .eq('source_batch_id', batchId)
+    .eq('approval_status', 'approved')
+    .not('supersedes_cost_line_id', 'is', null)
+  assertNoError(approvedLinksError)
+  const supersedeTargetIds = new Set<string>(plan.supersededLineIds)
+  for (const link of (approvedLinks ?? []) as DbRow[]) {
+    const target = String(link.supersedes_cost_line_id ?? '').trim()
+    if (target) supersedeTargetIds.add(target)
+  }
+
+  let supersededCostLines = 0
+  if (supersedeTargetIds.size > 0) {
+    const { data: superseded, error: supersedeError } = await supabase
+      .from('supplier_contract_cost_lines')
+      .update({ active: false, approval_status: 'superseded' })
+      .in('id', [...supersedeTargetIds])
+      .eq('active', true)
+      .select('id')
+    assertNoError(supersedeError)
+    supersededCostLines = (superseded ?? []).length
+  }
+
+  const { error: contractError } = await supabase
+    .from('supplier_contracts')
+    .update({ status: 'active', updated_at: now })
+    .eq('id', supplierContractId)
+    .eq('status', 'draft')
+  assertNoError(contractError)
+
+  const { data: publishedBatch, error: batchError } = await supabase
+    .from('pricing_ingestion_batches')
+    .update({
+      status: 'published',
+      published_by: actorId,
+      published_at: now,
+      updated_at: now,
+    })
+    .eq('id', batchId)
+    .eq('status', 'publishing')
+    .select('id')
+  assertNoError(batchError)
+  if ((publishedBatch ?? []).length === 0) {
+    throw new Error('Batch status changed during publish; refresh and retry.')
+  }
+
+  const { error: eventError } = await supabase
+    .from('pricing_publish_events')
+    .insert({
+      batch_id: batchId,
+      action: 'publish_batch',
+      actor_id: actorId,
+      status: 'published',
+      summary_json: {
+        supplier_contract_id: supplierContractId,
+        active_cost_lines_created: activatedCostLines,
+        superseded_cost_lines: supersededCostLines,
+        lines_without_identity: plan.pendingWithoutIdentity.length,
+        duplicate_pending_identity_keys: plan.duplicatePendingKeys.length,
+        previously_activated_lines: alreadyApprovedCount ?? 0,
+        publish_enabled: true,
+        customer_sell_pricing_touched: false,
+      },
+      notes: nonEmptyText(input.notes),
+    })
+  assertNoError(eventError)
+
+  return {
+    batchId,
+    supplierContractId,
+    activatedCostLines,
+    supersededCostLines,
+    linesWithoutIdentity: plan.pendingWithoutIdentity.length,
+    status: 'published',
+    publishedAt: now,
+  }
+}
+
+export async function rollbackMigrationBatch(
+  batchId: string,
+  input: RollbackBatchInput = {}
+): Promise<RollbackBatchResult> {
+  assertConfiguredForReview()
+  assertConfirmPhrase(input.confirm, ROLLBACK_CONFIRM_PHRASE, 'Rollback')
+
+  const batch = await getMigrationBatch(batchId)
+  if (!batch) throw new Error('Batch not found.')
+  const batchStatus = String((batch as DbRow).status)
+  if (batchStatus === 'rolled_back') throw new Error('Batch is already rolled back.')
+  if (batchStatus !== 'published') throw new Error('Only published batches can be rolled back.')
+
+  const supplierContractId = safeUuid(String((batch as DbRow).supplier_contract_id ?? ''))
+
+  const supabase = createAdminClient()
+  const { data: batchLineData, error: batchLineError } = await supabase
+    .from('supplier_contract_cost_lines')
+    .select('id, approval_status, supersedes_cost_line_id')
+    .eq('source_batch_id', batchId)
+    .in('approval_status', ['approved', 'rolled_back'])
+  assertNoError(batchLineError)
+  const batchLines = (batchLineData ?? []) as DbRow[]
+  if (batchLines.length === 0) {
+    throw new Error('No published cost lines found for this batch.')
+  }
+
+  const now = new Date().toISOString()
+  const actorId = safeUuid(input.actorId)
+
+  const { data: deactivated, error: deactivateError } = await supabase
+    .from('supplier_contract_cost_lines')
+    .update({ active: false, approval_status: 'rolled_back' })
+    .eq('source_batch_id', batchId)
+    .eq('approval_status', 'approved')
+    .select('id')
+  assertNoError(deactivateError)
+  const deactivatedCostLines = (deactivated ?? []).length
+
+  // Restore the exact lines this batch superseded, using the linkage recorded
+  // at publish time.
+  const restoreIds = planRollbackRestores(
+    batchLines as Parameters<typeof planRollbackRestores>[0]
+  )
+  let restoredCostLines = 0
+  if (restoreIds.length > 0) {
+    const { data: restored, error: restoreError } = await supabase
+      .from('supplier_contract_cost_lines')
+      .update({ active: true, approval_status: 'approved' })
+      .in('id', restoreIds)
+      .eq('approval_status', 'superseded')
+      .select('id')
+    assertNoError(restoreError)
+    restoredCostLines = (restored ?? []).length
+  }
+
+  if (supplierContractId) {
+    const remainingActive = await countActiveContractLines(supplierContractId)
+    if (remainingActive === 0) {
+      const { error: contractError } = await supabase
+        .from('supplier_contracts')
+        .update({ status: 'draft', updated_at: now })
+        .eq('id', supplierContractId)
+        .eq('status', 'active')
+      assertNoError(contractError)
+    }
+  }
+
+  const { data: rolledBackBatch, error: batchError } = await supabase
+    .from('pricing_ingestion_batches')
+    .update({ status: 'rolled_back', updated_at: now })
+    .eq('id', batchId)
+    .eq('status', 'published')
+    .select('id')
+  assertNoError(batchError)
+  if ((rolledBackBatch ?? []).length === 0) {
+    throw new Error('Batch status changed during rollback; refresh and retry.')
+  }
+
+  const { error: eventError } = await supabase
+    .from('pricing_publish_events')
+    .insert({
+      batch_id: batchId,
+      action: 'rollback_batch',
+      actor_id: actorId,
+      status: 'rolled_back',
+      summary_json: {
+        supplier_contract_id: supplierContractId,
+        deactivated_cost_lines: deactivatedCostLines,
+        restored_cost_lines: restoredCostLines,
+        restore_candidates: restoreIds.length,
+        customer_sell_pricing_touched: false,
+      },
+      notes: nonEmptyText(input.notes),
+    })
+  assertNoError(eventError)
+
+  return {
+    batchId,
+    supplierContractId,
+    deactivatedCostLines,
+    restoredCostLines,
+    status: 'rolled_back',
+    rolledBackAt: now,
   }
 }
 
