@@ -79,12 +79,41 @@ type PageProps = {
 
 function statusBadge(status: string) {
   const className =
-    status === 'valid' || status === 'staged' || status === 'approved' || status === 'publishing'
+    status === 'valid' || status === 'staged' || status === 'approved' || status === 'publishing' || status === 'published'
       ? 'border-medship-success/30 bg-medship-success/10 text-medship-success'
-      : status === 'blocking' || status === 'needs_review'
+      : status === 'blocking' || status === 'needs_review' || status === 'rolled_back'
         ? 'border-medship-warning/30 bg-medship-warning/10 text-medship-warning'
         : 'border-border bg-muted/60 text-muted-foreground'
   return <Badge variant="outline" className={className}>{status.replace(/_/g, ' ')}</Badge>
+}
+
+function publishStateBadge(status: string | undefined) {
+  if (status === 'published') {
+    return (
+      <Badge variant="outline" className="border-medship-success/30 bg-medship-success/10 text-medship-success">
+        Published
+      </Badge>
+    )
+  }
+  if (status === 'rolled_back') {
+    return (
+      <Badge variant="outline" className="border-medship-warning/30 bg-medship-warning/10 text-medship-warning">
+        Rolled Back
+      </Badge>
+    )
+  }
+  if (status === 'publishing') {
+    return (
+      <Badge variant="outline" className="border-medship-primary/30 bg-medship-primary/10 text-medship-primary">
+        Ready For Final Publish
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="border-medship-warning/30 bg-medship-warning/10 text-medship-warning">
+      Publish Gated
+    </Badge>
+  )
 }
 
 function countBy<T extends Record<string, unknown>>(rows: T[], key: keyof T) {
@@ -105,6 +134,8 @@ export default function PricingImportDetailPage({ params }: PageProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'publish' | 'rollback' | null>(null)
+  const [confirmText, setConfirmText] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -128,6 +159,23 @@ export default function PricingImportDetailPage({ params }: PageProps) {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (!batch || preview || actionLoading) return
+    if (!['publishing', 'published'].includes(batch.status)) return
+    let cancelled = false
+    fetchJson<{ preview: PublishPreview }>(`/api/pricing/contract-migration/batches/${id}/publish-preview`)
+      .then((data) => {
+        if (!cancelled) setPreview(data.preview)
+      })
+      .catch(() => {
+        /* preview stays manual on failure */
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batch, id])
 
   const exceptionCounts = useMemo(() => countBy(exceptions, 'exception_code'), [exceptions])
   const openExceptions = exceptions.filter((exception) => exception.status === 'open').length
@@ -158,10 +206,10 @@ export default function PricingImportDetailPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reviewerIdentifier: 'pricing-manager',
-          notes: 'Approved from contract pricing import review UI. Publish remains disabled.',
+          notes: 'Approved from contract pricing import review UI.',
         }),
       })
-      setNotice('Batch approved. Publish remains disabled until the controlled publish phase is implemented.')
+      setNotice('Batch approved. Next: prepare pending costs, then final publish (typed confirmation required).')
       await load()
       await loadPreview()
     } catch (err) {
@@ -202,6 +250,71 @@ export default function PricingImportDetailPage({ params }: PageProps) {
     }
   }, [id, load, loadPreview])
 
+  const publishBatch = useCallback(async () => {
+    setActionLoading('publish')
+    setError(null)
+    setNotice(null)
+    try {
+      const data = await fetchJson<{
+        publish: {
+          activatedCostLines: number
+          supersededCostLines: number
+          linesWithoutIdentity: number
+        }
+      }>(`/api/pricing/contract-migration/batches/${id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirm: confirmText,
+          notes: 'Final publish confirmed from contract pricing import review UI.',
+        }),
+      })
+      setNotice(
+        `Published: ${data.publish.activatedCostLines.toLocaleString()} supplier cost lines are now active. Superseded prior lines: ${data.publish.supersededCostLines.toLocaleString()}. Lines without an item identifier: ${data.publish.linesWithoutIdentity.toLocaleString()}.`
+      )
+      setConfirmAction(null)
+      setConfirmText('')
+      setPreview(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to publish batch')
+    } finally {
+      setActionLoading(null)
+    }
+  }, [id, confirmText, load])
+
+  const rollbackBatch = useCallback(async () => {
+    setActionLoading('rollback')
+    setError(null)
+    setNotice(null)
+    try {
+      const data = await fetchJson<{
+        rollback: {
+          deactivatedCostLines: number
+          restoredCostLines: number
+        }
+      }>(`/api/pricing/contract-migration/batches/${id}/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirm: confirmText,
+          notes: 'Rollback confirmed from contract pricing import review UI.',
+        }),
+      })
+      setNotice(
+        `Rolled back: ${data.rollback.deactivatedCostLines.toLocaleString()} cost lines deactivated, ${data.rollback.restoredCostLines.toLocaleString()} previously superseded lines restored.`
+      )
+      setConfirmAction(null)
+      setConfirmText('')
+      setPreview(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to roll back batch')
+    } finally {
+      setActionLoading(null)
+    }
+  }, [id, confirmText, load])
+
   const reviewException = useCallback(async (exceptionId: string, status: string) => {
     setActionLoading(exceptionId)
     setError(null)
@@ -238,12 +351,12 @@ export default function PricingImportDetailPage({ params }: PageProps) {
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-semibold text-card-foreground">{batch?.dry_run_id ?? 'Import batch'}</h1>
                   {batch && statusBadge(batch.status)}
-                  <Badge variant="outline" className="border-medship-warning/30 bg-medship-warning/10 text-medship-warning">
-                    Publish Disabled
-                  </Badge>
+                  {publishStateBadge(batch?.status)}
                 </div>
                 <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                  Supplier cost review only. Approval records a gated review decision; publish and active cost creation remain disabled.
+                  Buy-side supplier costs only — customer sell pricing is never touched. Final publish activates
+                  this batch&apos;s prepared cost lines and supersedes prior active costs for the same item and UOM;
+                  it requires typed confirmation and can be rolled back.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -267,9 +380,82 @@ export default function PricingImportDetailPage({ params }: PageProps) {
                 >
                   Prepare Costs
                 </Button>
-                <Button size="sm" disabled>Publish</Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setConfirmAction('publish')
+                    setConfirmText('')
+                    setNotice(null)
+                    setError(null)
+                  }}
+                  disabled={
+                    actionLoading !== null ||
+                    confirmAction !== null ||
+                    batch?.status !== 'publishing' ||
+                    !preview?.canProceedToPublishImplementation ||
+                    (preview?.existingPendingCostLines ?? 0) === 0
+                  }
+                >
+                  Publish
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-medship-warning/40 text-medship-warning hover:bg-medship-warning/10"
+                  onClick={() => {
+                    setConfirmAction('rollback')
+                    setConfirmText('')
+                    setNotice(null)
+                    setError(null)
+                  }}
+                  disabled={actionLoading !== null || confirmAction !== null || batch?.status !== 'published'}
+                >
+                  Roll Back
+                </Button>
               </div>
             </div>
+            {confirmAction && (
+              <div className="mt-4 rounded-md border border-medship-warning/40 bg-medship-warning/5 p-4">
+                <p className="text-sm font-medium text-card-foreground">
+                  {confirmAction === 'publish'
+                    ? `Final publish will activate ${preview?.existingPendingCostLines?.toLocaleString() ?? '0'} pending supplier cost lines and supersede any prior active cost for the same item and UOM on this contract. Customer sell pricing is not touched. This action is audited and reversible via rollback.`
+                    : 'Rollback will deactivate every cost line published by this batch and restore the lines it superseded. Customer sell pricing is not touched. This action is audited.'}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={confirmText}
+                    onChange={(event) => setConfirmText(event.target.value)}
+                    placeholder={confirmAction === 'publish' ? 'Type PUBLISH to confirm' : 'Type ROLLBACK to confirm'}
+                    className="h-9 w-56 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={confirmAction === 'publish' ? publishBatch : rollbackBatch}
+                    disabled={
+                      actionLoading !== null ||
+                      confirmText !== (confirmAction === 'publish' ? 'PUBLISH' : 'ROLLBACK')
+                    }
+                  >
+                    {actionLoading === confirmAction
+                      ? confirmAction === 'publish' ? 'Publishing...' : 'Rolling back...'
+                      : confirmAction === 'publish' ? 'Confirm Publish' : 'Confirm Rollback'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setConfirmAction(null)
+                      setConfirmText('')
+                    }}
+                    disabled={actionLoading !== null}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
             {notice && (
               <p className="mt-4 rounded-md border border-medship-success/25 bg-medship-success/5 p-3 text-sm text-muted-foreground">
                 {notice}
@@ -311,7 +497,11 @@ export default function PricingImportDetailPage({ params }: PageProps) {
             {preview?.blockers?.length ? (
               <p className="mt-3 text-sm text-muted-foreground">Blockers: {preview.blockers.join(', ')}</p>
             ) : preview ? (
-              <p className="mt-3 text-sm text-muted-foreground">Preview is clear for the next implementation phase. Publish remains intentionally unavailable.</p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                {preview.wouldCreateActiveCosts
+                  ? 'Preview is clear. Final publish is available and will activate the pending cost lines above.'
+                  : 'Preview is clear. Approve and prepare costs to reach the final publish gate.'}
+              </p>
             ) : null}
           </CardContent>
         </Card>

@@ -161,7 +161,7 @@ export type PublishPreviewResult = {
   candidatePendingCostLines: number
   existingPendingCostLines: number
   existingActiveCostLines: number
-  wouldCreateActiveCosts: false
+  wouldCreateActiveCosts: boolean
   wouldTouchCustomerSellPricing: false
   canProceedToPublishImplementation: boolean
   blockers: string[]
@@ -182,6 +182,79 @@ export type PreparePublishResult = {
   blockerCount: number
   status: 'publishing'
   publishEnabled: false
+}
+
+export type PublishBatchInput = {
+  actorId?: string | null
+  notes?: string | null
+  confirm?: string | null
+}
+
+export type PublishBatchResult = {
+  batchId: string
+  supplierContractId: string
+  activatedCostLines: number
+  supersededCostLines: number
+  linesWithoutIdentity: number
+  status: 'published'
+  publishedAt: string
+}
+
+export type RollbackBatchInput = {
+  actorId?: string | null
+  notes?: string | null
+  confirm?: string | null
+}
+
+export type RollbackBatchResult = {
+  batchId: string
+  supplierContractId: string | null
+  deactivatedCostLines: number
+  restoredCostLines: number
+  status: 'rolled_back'
+  rolledBackAt: string
+}
+
+export type ActiveSupplierCostQuery = {
+  supplierContractId?: string | null
+  supplierName?: string | null
+  internalItemId?: string | null
+  distributorSku?: string | null
+  manufacturerPartNumber?: string | null
+  gtin?: string | null
+  priceUom?: string | null
+  asOfDate?: string | null
+  limit?: number | null
+}
+
+export type ActiveSupplierCost = {
+  id: string
+  supplier_contract_id: string | null
+  supplier_name: string | null
+  internal_item_id: string | null
+  distributor_sku: string | null
+  manufacturer_name: string | null
+  manufacturer_part_number: string | null
+  model_number: string | null
+  gtin: string | null
+  item_description_raw: string | null
+  cost: number
+  currency: string
+  raw_price_uom: string | null
+  normalized_price_uom: string | null
+  pack_size: number | null
+  tier: string | null
+  minimum_quantity: number | null
+  effective_date: string | null
+  expiration_date: string | null
+  source_batch_id: string | null
+  approved_at: string | null
+}
+
+export type ActiveSupplierCostResult = {
+  asOfDate: string
+  count: number
+  lines: ActiveSupplierCost[]
 }
 
 export type SupplierContractCostLineDraft = {
