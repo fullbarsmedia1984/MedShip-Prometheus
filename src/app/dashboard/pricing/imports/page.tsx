@@ -93,9 +93,14 @@ export default function PricingImportsPage() {
                   gated per batch with typed confirmation and rollback. Customer sell pricing is never touched.
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={loadBatches} disabled={loading}>
-                Refresh
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={loadBatches} disabled={loading}>
+                  Refresh
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href="/dashboard/pricing/imports/upload">Upload Workbook</Link>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
