@@ -606,10 +606,10 @@ function ReceivingView({
       <section className="flex min-h-0 flex-col rounded-xl border border-white/5 bg-white/[0.02] p-3">
         <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <div>
-            <h2 className="font-mono text-[13px] font-bold uppercase tracking-[0.16em] text-white">
+            <h2 className="font-sans text-[13px] font-bold uppercase tracking-[0.16em] text-white">
               Received today · {data.chicagoDate}
             </h2>
-            <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-slate-500">
+            <p className="mt-1 font-sans text-[9px] uppercase tracking-wider text-slate-500">
               {data.sourceLabel} · America/Chicago
             </p>
           </div>
