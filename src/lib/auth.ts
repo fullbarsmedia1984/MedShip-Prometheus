@@ -78,6 +78,13 @@ export const KITS_API_AUTH_OPTIONS = {
   roles: ['superadmin', 'admin', 'staff', 'warehouse'],
 } satisfies ApiAuthOptions
 
+// AskZeus chat assistant: every signed-in role. Data visibility is enforced
+// per-role inside the tool registry (src/lib/askzeus/tools.ts), mirroring the
+// migration-026 RLS tiers.
+export const ASKZEUS_API_AUTH_OPTIONS = {
+  roles: ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep', 'warehouse'],
+} satisfies ApiAuthOptions
+
 type AuthContext = {
   user: User | null
   role: AppRole | null
