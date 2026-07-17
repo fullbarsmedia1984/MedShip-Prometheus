@@ -29,11 +29,7 @@ export type CrawlBatchResult = {
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 
-/** Direct page fetches per batch; polite to the competitor's origin. */
-const DIRECT_FETCH_CONCURRENCY = 3
-const DIRECT_FETCH_TIMEOUT_MS = 30_000
 const SUITECOMMERCE_PAGE_SIZE = 50
-const MAX_URL_FAILS = 3
 
 // ------------------------------------------------------------------
 // Run lifecycle
@@ -63,105 +59,6 @@ export async function cancelCrawl(
 }
 
 // ------------------------------------------------------------------
-// URL filtering (pocketnurse)
-// ------------------------------------------------------------------
-
-const POCKETNURSE_NON_PRODUCT_SLUGS = new Set([
-  'catalog-request',
-  'email-subscribe',
-  'about-us',
-  'contact',
-  'contact-us',
-  'careers',
-  'search',
-  'cart',
-  'wishlist',
-  'login',
-  'logout',
-  'privacy-policy',
-  'terms-and-conditions',
-  'shipping-returns',
-  'sitemap',
-  'blog',
-  'news',
-  'faq',
-])
-
-/**
- * Magento product URLs on pocketnurse.com are single root-level slugs
- * under /default/ (e.g. /default/06-93-0056-demo-doser-...). Category
- * and account pages live under deeper paths and are excluded; slug
- * false-positives cost one free direct fetch and get marked
- * not_product by the parser.
- */
-export function filterPocketnurseProductUrls(urls: string[]): string[] {
-  const kept = new Set<string>()
-  for (const raw of urls) {
-    let parsed: URL
-    try {
-      parsed = new URL(raw)
-    } catch {
-      continue
-    }
-    if (!/(^|\.)pocketnurse\.com$/i.test(parsed.hostname)) continue
-
-    const match = parsed.pathname.match(/^\/default\/([a-z0-9][a-z0-9-]*)\/?$/i)
-    if (!match) continue
-    const slug = match[1].toLowerCase()
-    if (POCKETNURSE_NON_PRODUCT_SLUGS.has(slug)) continue
-
-    kept.add(`https://www.pocketnurse.com/default/${match[1]}`)
-  }
-  return [...kept]
-}
-
-// ------------------------------------------------------------------
-// Direct fetch with Firecrawl fallback (pocketnurse)
-// ------------------------------------------------------------------
-
-type PageFetchResult =
-  | { ok: true; html: string; viaFirecrawl: boolean }
-  | { ok: false; reason: 'blocked' | 'fetch_error'; detail: string }
-
-async function fetchPageDirect(
-  url: string,
-  fetchImpl: typeof fetch
-): Promise<PageFetchResult | null> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), DIRECT_FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetchImpl(url, {
-      headers: {
-        'User-Agent': BROWSER_USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      redirect: 'follow',
-      signal: controller.signal,
-    })
-
-    if (response.status === 403 || response.status === 429 || response.status === 503) {
-      return null // looks bot-blocked; caller may try Firecrawl
-    }
-    if (!response.ok) {
-      return { ok: false, reason: 'fetch_error', detail: `HTTP ${response.status}` }
-    }
-
-    const html = await response.text()
-    // A served-but-empty shell also signals blocking/JS-walling.
-    if (html.length < 5_000) return null
-    return { ok: true, html, viaFirecrawl: false }
-  } catch (error) {
-    return {
-      ok: false,
-      reason: 'fetch_error',
-      detail: error instanceof Error ? error.message : 'fetch failed',
-    }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-// ------------------------------------------------------------------
 // Batch crawling
 // ------------------------------------------------------------------
 
@@ -180,7 +77,7 @@ function bump(counters: Record<string, number>, key: string, by = 1) {
  */
 export async function crawlBatch(
   deps: CompetitorCrawlDeps,
-  input: { runId: string; maxUrls: number; dailyCreditBudget: number }
+  input: { runId: string; maxUrls: number; dailyCreditBudget: number; pocketnurseCrawlLimit: number }
 ): Promise<CrawlBatchResult> {
   const run = await deps.repository.getRun(input.runId)
   if (!run || run.status !== 'running') {
@@ -262,156 +159,139 @@ async function crawlDiamedicalBatch(
   return { status: 'in_progress', resumeAt: null, counters, creditsUsed: run.creditsUsed }
 }
 
+/** Wait this long between polls while the crawl job is still scraping. */
+const CRAWL_POLL_INTERVAL_MS = 45_000
+
 /**
- * Pocket Nurse: discover product URLs once per run via Firecrawl /map,
- * then drain the frontier with direct fetches (free) falling back to
- * Firecrawl /scrape (1 credit) only when the origin blocks us.
+ * Pocket Nurse (Magento, JS-walled, shallow sitemap): drive a Firecrawl
+ * /crawl job that follows links across the live site and returns each
+ * page's rawHtml. We parse the crawl results directly (the parser
+ * returns null for non-product pages), so discovery and content come
+ * from the one job — no separate /map or /scrape. The job id + a
+ * skip offset live in the run cursor, so polling resumes across Inngest
+ * executions. ~1 Firecrawl credit per page crawled, capped by
+ * pocketnurseCrawlLimit.
  */
 async function crawlPocketnurseBatch(
   deps: CompetitorCrawlDeps,
   run: EnrichmentRunRecord,
-  input: { maxUrls: number; dailyCreditBudget: number }
+  input: { pocketnurseCrawlLimit: number }
 ): Promise<CrawlBatchResult> {
-  const fetchImpl = deps.fetchImpl ?? fetch
   const counters = readCounters(run)
   let creditsUsed = run.creditsUsed
+  const cursor = run.cursorJson
+  const crawlId = typeof cursor.crawlId === 'string' ? cursor.crawlId : null
 
-  const spendCredits = async (n: number) => {
-    creditsUsed += n
-    await deps.repository.addCredits('competitor_crawl', n)
+  const firecrawlRetry = {
+    ...apiRetryOptions(),
+    retryOn: (e: unknown) =>
+      !(e instanceof FirecrawlInsufficientCreditsError) && isRetryableError(e),
   }
 
-  // Discovery once per run: /map the domain and seed the frontier.
-  if (!run.cursorJson.discovered) {
-    const spentToday = await deps.repository.getTodaysCredits('competitor_crawl')
-    if (spentToday + 1 > input.dailyCreditBudget) {
-      return { status: 'budget_exhausted', resumeAt: null, counters, creditsUsed }
-    }
-
+  // Start the crawl job once per run, then let the crawler accumulate
+  // pages before the first poll.
+  if (!crawlId) {
     try {
-      const mapped = await withRetry(
-        () => deps.getFirecrawl().map(`https://${COMPETITOR_DOMAINS.pocketnurse}`, { limit: 30_000 }),
-        { ...apiRetryOptions(), retryOn: (e) => !(e instanceof FirecrawlInsufficientCreditsError) && isRetryableError(e) }
+      const { id } = await withRetry(
+        () =>
+          deps.getFirecrawl().startCrawl(`https://${COMPETITOR_DOMAINS.pocketnurse}`, {
+            limit: input.pocketnurseCrawlLimit,
+            formats: ['rawHtml'],
+          }),
+        firecrawlRetry
       )
-      await spendCredits(1)
-
-      const productUrls = filterPocketnurseProductUrls(mapped.links.map((l) => l.url))
-      const inserted = await deps.repository.insertDiscoveredUrls('pocketnurse', productUrls)
-      bump(counters, 'urlsDiscovered', inserted)
-
       await deps.repository.checkpointRun(run.id, {
-        cursorJson: { ...run.cursorJson, discovered: true, mappedTotal: mapped.links.length },
+        cursorJson: { ...cursor, crawlId: id, pagesProcessed: 0 },
         countersJson: counters,
-        creditsUsed,
       })
     } catch (error) {
+      if (error instanceof FirecrawlInsufficientCreditsError) {
+        return { status: 'budget_exhausted', resumeAt: null, counters, creditsUsed }
+      }
       if (error instanceof FirecrawlRateLimitError) {
         const resumeAt = new Date(Date.now() + (error.retryAfterMs ?? 5 * 60 * 1000)).toISOString()
         return { status: 'rate_limited', resumeAt, counters, creditsUsed }
       }
-      if (error instanceof FirecrawlInsufficientCreditsError) {
-        return { status: 'budget_exhausted', resumeAt: null, counters, creditsUsed }
-      }
       throw error
     }
-  }
-
-  const claimed = await deps.repository.claimPendingUrls('pocketnurse', input.maxUrls)
-  if (claimed.length === 0) {
-    await deps.repository.completeRun(run.id, { status: 'completed' })
-    return { status: 'completed', resumeAt: null, counters, creditsUsed }
-  }
-
-  let budgetExhausted = false
-  let rateLimitedUntil: string | null = null
-
-  await mapWithConcurrency(claimed, DIRECT_FETCH_CONCURRENCY, async (claimedUrl) => {
-    try {
-      let page = await fetchPageDirect(claimedUrl.url, fetchImpl)
-
-      if (page === null) {
-        // Origin blocked the plain fetch; try Firecrawl within budget.
-        const spentToday = await deps.repository.getTodaysCredits('competitor_crawl')
-        if (budgetExhausted || spentToday + 1 > input.dailyCreditBudget) {
-          budgetExhausted = true
-          return // stays pending for a future budget window
-        }
-        try {
-          const scraped = await deps.getFirecrawl().scrape(claimedUrl.url, { formats: ['rawHtml'] })
-          await spendCredits(1)
-          bump(counters, 'firecrawlFallbacks')
-          page = scraped.rawHtml
-            ? { ok: true, html: scraped.rawHtml, viaFirecrawl: true }
-            : { ok: false, reason: 'fetch_error', detail: 'Firecrawl returned no rawHtml' }
-        } catch (error) {
-          if (error instanceof FirecrawlRateLimitError) {
-            rateLimitedUntil = new Date(
-              Date.now() + (error.retryAfterMs ?? 5 * 60 * 1000)
-            ).toISOString()
-            return // stays pending
-          }
-          if (error instanceof FirecrawlInsufficientCreditsError) {
-            budgetExhausted = true
-            return // stays pending
-          }
-          page = {
-            ok: false,
-            reason: 'fetch_error',
-            detail: error instanceof Error ? error.message : 'Firecrawl scrape failed',
-          }
-        }
-      }
-
-      if (!page.ok) {
-        bump(counters, 'failed')
-        await deps.repository.bumpUrlFailure(claimedUrl.id, page.detail, MAX_URL_FAILS)
-        return
-      }
-
-      const parsed = parseCompetitorProductHtml(page.html, claimedUrl.url, 'pocketnurse')
-      if (!parsed) {
-        bump(counters, 'notProduct')
-        await deps.repository.markUrl(claimedUrl.id, 'not_product')
-        return
-      }
-
-      const result = await deps.repository.upsertCompetitorProduct(
-        'pocketnurse',
-        claimedUrl.url,
-        parsed
-      )
-      bump(counters, 'urlsScraped')
-      bump(counters, 'productsUpserted')
-      if (result.isNew) bump(counters, 'productsNew')
-      if (result.priceChanged) bump(counters, 'pricePoints')
-      await deps.repository.markUrl(claimedUrl.id, 'scraped')
-    } catch (error) {
-      bump(counters, 'failed')
-      await deps.repository.bumpUrlFailure(
-        claimedUrl.id,
-        error instanceof Error ? error.message : 'unknown error',
-        MAX_URL_FAILS
-      )
+    return {
+      status: 'rate_limited',
+      resumeAt: new Date(Date.now() + CRAWL_POLL_INTERVAL_MS).toISOString(),
+      counters,
+      creditsUsed,
     }
-  })
+  }
 
+  // Poll the job from where we left off (stable append-only ordering).
+  const pagesProcessed = Number(cursor.pagesProcessed ?? 0)
+  let status
+  try {
+    status = await withRetry(
+      () => deps.getFirecrawl().getCrawlStatus(crawlId, { skip: pagesProcessed }),
+      firecrawlRetry
+    )
+  } catch (error) {
+    if (error instanceof FirecrawlInsufficientCreditsError) {
+      return { status: 'budget_exhausted', resumeAt: null, counters, creditsUsed }
+    }
+    if (error instanceof FirecrawlRateLimitError) {
+      const resumeAt = new Date(Date.now() + (error.retryAfterMs ?? 5 * 60 * 1000)).toISOString()
+      return { status: 'rate_limited', resumeAt, counters, creditsUsed }
+    }
+    throw error
+  }
+
+  // Record the job's cumulative credit spend as a delta into the ledger.
+  if (status.creditsUsed > creditsUsed) {
+    await deps.repository.addCredits('competitor_crawl', status.creditsUsed - creditsUsed)
+    creditsUsed = status.creditsUsed
+  }
+
+  for (const page of status.data) {
+    bump(counters, 'pagesCrawled')
+    if (!page.rawHtml) continue
+    const pageUrl = page.metadata.sourceURL ?? `https://${COMPETITOR_DOMAINS.pocketnurse}`
+    const parsed = parseCompetitorProductHtml(page.rawHtml, pageUrl, 'pocketnurse')
+    if (!parsed) {
+      bump(counters, 'notProduct')
+      continue
+    }
+    const result = await deps.repository.upsertCompetitorProduct('pocketnurse', pageUrl, parsed)
+    bump(counters, 'productsUpserted')
+    if (result.isNew) bump(counters, 'productsNew')
+    if (result.priceChanged) bump(counters, 'pricePoints')
+  }
+
+  const newProcessed = pagesProcessed + status.data.length
   await deps.repository.checkpointRun(run.id, {
+    cursorJson: { ...cursor, crawlId, pagesProcessed: newProcessed },
     countersJson: counters,
     creditsUsed,
-    itemsProcessed: (run.itemsProcessed ?? 0) + claimed.length,
+    itemsProcessed: newProcessed,
   })
 
-  if (rateLimitedUntil) {
-    return { status: 'rate_limited', resumeAt: rateLimitedUntil, counters, creditsUsed }
-  }
-  if (budgetExhausted) {
-    return { status: 'budget_exhausted', resumeAt: null, counters, creditsUsed }
-  }
-
-  const remaining = await deps.repository.countPendingUrls('pocketnurse')
-  if (remaining === 0) {
-    await deps.repository.completeRun(run.id, { status: 'completed' })
+  // Terminal: job finished and we've drained all its results.
+  if (
+    (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') &&
+    status.data.length === 0
+  ) {
+    await deps.repository.completeRun(run.id, {
+      status: 'completed',
+      lastError: status.status === 'completed' ? null : `crawl job ${status.status}`,
+    })
     return { status: 'completed', resumeAt: null, counters, creditsUsed }
   }
+
+  // Still scraping with nothing new yet: wait before re-polling.
+  if (status.data.length === 0) {
+    return {
+      status: 'rate_limited',
+      resumeAt: new Date(Date.now() + CRAWL_POLL_INTERVAL_MS).toISOString(),
+      counters,
+      creditsUsed,
+    }
+  }
+
+  // Got a page of results; more are likely ready — keep draining promptly.
   return { status: 'in_progress', resumeAt: null, counters, creditsUsed }
 }

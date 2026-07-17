@@ -1,4 +1,6 @@
 import type {
+  FirecrawlCrawlOptions,
+  FirecrawlCrawlStatus,
   FirecrawlImageSearchHit,
   FirecrawlMapLink,
   FirecrawlMapOptions,
@@ -207,18 +209,86 @@ export class FirecrawlClient {
     }
   }
 
+  /**
+   * Start an async crawl job. Firecrawl crawls the site following
+   * links and scrapes each page; returns a job id to poll. ~1 credit
+   * per page crawled.
+   */
+  async startCrawl(url: string, options: FirecrawlCrawlOptions = {}): Promise<{ id: string }> {
+    const envelope = await this.post('/crawl', {
+      url,
+      ...(options.limit !== undefined ? { limit: options.limit } : {}),
+      ...(options.includePaths ? { includePaths: options.includePaths } : {}),
+      ...(options.excludePaths ? { excludePaths: options.excludePaths } : {}),
+      scrapeOptions: { formats: options.formats ?? ['rawHtml'], onlyMainContent: false },
+    })
+    const id = isRecord(envelope) && typeof envelope.id === 'string' ? envelope.id : null
+    if (!id) throw new FirecrawlResponseValidationError('Firecrawl crawl did not return a job id')
+    return { id }
+  }
+
+  /**
+   * Poll a crawl job. Pass a full `next` cursor URL to follow
+   * pagination, or a job id with `{skip}` to read results from a
+   * given offset (stable append-only ordering).
+   */
+  async getCrawlStatus(
+    idOrCursor: string,
+    options: { skip?: number } = {}
+  ): Promise<FirecrawlCrawlStatus> {
+    let url: string
+    if (idOrCursor.startsWith('http')) {
+      url = idOrCursor
+    } else {
+      url = `${this.baseUrl}/crawl/${idOrCursor}`
+      if (options.skip !== undefined) url += `?skip=${options.skip}`
+    }
+    const envelope = await this.request('GET', url)
+    if (!isRecord(envelope)) {
+      throw new FirecrawlResponseValidationError('Firecrawl crawl status returned no object')
+    }
+
+    const rawData = Array.isArray(envelope.data) ? envelope.data : []
+    const data: FirecrawlScrapeResult[] = rawData.map((entry) => {
+      const rec = isRecord(entry) ? entry : {}
+      const metadata: FirecrawlScrapeMetadata = isRecord(rec.metadata) ? rec.metadata : {}
+      return {
+        rawHtml: typeof rec.rawHtml === 'string' ? rec.rawHtml : undefined,
+        markdown: typeof rec.markdown === 'string' ? rec.markdown : undefined,
+        metadata,
+      }
+    })
+
+    return {
+      status: (typeof envelope.status === 'string' ? envelope.status : 'scraping') as FirecrawlCrawlStatus['status'],
+      total: typeof envelope.total === 'number' ? envelope.total : 0,
+      completed: typeof envelope.completed === 'number' ? envelope.completed : 0,
+      creditsUsed: typeof envelope.creditsUsed === 'number' ? envelope.creditsUsed : 0,
+      next: typeof envelope.next === 'string' ? envelope.next : null,
+      data,
+    }
+  }
+
   private async post(path: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.request('POST', `${this.baseUrl}${path}`, body)
+  }
+
+  private async request(
+    method: 'GET' | 'POST',
+    url: string,
+    body?: Record<string, unknown>
+  ): Promise<unknown> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs)
 
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        method: 'POST',
+      const response = await this.fetchImpl(url, {
+        method,
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
+          ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
         },
-        body: JSON.stringify(body),
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: controller.signal,
       })
 

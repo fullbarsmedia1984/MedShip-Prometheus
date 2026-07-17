@@ -129,6 +129,59 @@ describe('FirecrawlClient', () => {
     await assert.rejects(client.scrape('https://example.com'), FirecrawlResponseValidationError)
   })
 
+  it('starts a crawl job and returns the id', async () => {
+    let capturedUrl = ''
+    let capturedBody: unknown = null
+    const client = createClient(async (input, init) => {
+      capturedUrl = String(input)
+      capturedBody = init?.body ? JSON.parse(String(init.body)) : null
+      return jsonResponse({ success: true, id: 'crawl-123', url: 'https://api.firecrawl.dev/v2/crawl/crawl-123' })
+    })
+    const result = await client.startCrawl('https://example.com', { limit: 500 })
+    assert.equal(capturedUrl, 'https://api.firecrawl.dev/v2/crawl')
+    assert.equal((capturedBody as { limit: number }).limit, 500)
+    assert.deepEqual((capturedBody as { scrapeOptions: { formats: string[] } }).scrapeOptions.formats, ['rawHtml'])
+    assert.equal(result.id, 'crawl-123')
+  })
+
+  it('polls crawl status via GET and normalizes data', async () => {
+    let method = ''
+    const client = createClient(async (input, init) => {
+      method = init?.method ?? 'GET'
+      assert.equal(String(input), 'https://api.firecrawl.dev/v2/crawl/crawl-123')
+      return jsonResponse({
+        success: true,
+        status: 'scraping',
+        total: 100,
+        completed: 20,
+        creditsUsed: 20,
+        next: 'https://api.firecrawl.dev/v2/crawl/crawl-123?skip=20',
+        data: [
+          { rawHtml: '<html>a</html>', metadata: { statusCode: 200, sourceURL: 'https://example.com/a' } },
+          { bogus: true },
+        ],
+      })
+    })
+    const status = await client.getCrawlStatus('crawl-123')
+    assert.equal(method, 'GET')
+    assert.equal(status.status, 'scraping')
+    assert.equal(status.completed, 20)
+    assert.equal(status.creditsUsed, 20)
+    assert.equal(status.next, 'https://api.firecrawl.dev/v2/crawl/crawl-123?skip=20')
+    assert.equal(status.data.length, 2)
+    assert.equal(status.data[0].rawHtml, '<html>a</html>')
+  })
+
+  it('follows a next-cursor URL directly for crawl status', async () => {
+    let capturedUrl = ''
+    const client = createClient(async (input) => {
+      capturedUrl = String(input)
+      return jsonResponse({ success: true, status: 'completed', total: 1, completed: 1, creditsUsed: 1, data: [] })
+    })
+    await client.getCrawlStatus('https://api.firecrawl.dev/v2/crawl/crawl-123?skip=20')
+    assert.equal(capturedUrl, 'https://api.firecrawl.dev/v2/crawl/crawl-123?skip=20')
+  })
+
   it('captures rate limit headers', async () => {
     const client = createClient(async () =>
       jsonResponse(
