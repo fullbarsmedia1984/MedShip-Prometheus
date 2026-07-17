@@ -50,6 +50,13 @@ NOTE (P15): SO lines carry PRODUCT numbers, inventory/POs carry PART numbers —
 only ~3% coincide. Any demand-vs-stock join MUST bridge through
 fb_product_parts (product_num → part_num × factor). See src/lib/inventory/.
 
+NOTE (availability): Fishbowl keeps PICKED units in qty-on-hand until the
+order SHIPS, so snapshot on-hand overstates what a pick can grab. Shortage
+math must subtract staged picks (src/lib/inventory/availability.ts). P2
+deletes snapshot rows for parts that fell to zero; rows older than the
+latest run are stale phantoms. Kit-type SO lines are the kit master (built
+by the floor) — never treat them as stock demand.
+
 NOTE: P2 runs 8a/12p/4p Mon–Fri (Chicago) as of 2026-07-09 (was every 15 min).
 After deploying new/changed Inngest functions, re-register the app
 (curl -X PUT <prod>/api/inngest) or new crons will not fire.
