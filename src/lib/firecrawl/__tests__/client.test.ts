@@ -38,15 +38,15 @@ describe('FirecrawlClient', () => {
     const client = createClient(async (input, init) => {
       capturedUrl = String(input)
       capturedAuth = new Headers(init?.headers).get('Authorization')
+      // v2 /map returns links at the TOP level (not under `data`).
       return jsonResponse({
         success: true,
-        data: {
-          links: [
-            'https://example.com/a.html',
-            { url: 'https://example.com/b.html', title: 'B' },
-            { bogus: true },
-          ],
-        },
+        id: 'map-1',
+        links: [
+          'https://example.com/a.html',
+          { url: 'https://example.com/b.html', title: 'B' },
+          { bogus: true },
+        ],
       })
     })
 
