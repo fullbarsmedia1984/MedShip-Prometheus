@@ -29,8 +29,16 @@ export interface ShortagePart {
   coverage: ShortageCoverage
 }
 
+export type InboundBucketKey =
+  | 'overdue'
+  | 'this_week'
+  | 'next_week'
+  | 'two_to_four'
+  | 'later'
+  | 'no_date'
+
 export interface InboundBucket {
-  key: 'overdue' | 'this_week' | 'next_week' | 'two_to_four' | 'later' | 'no_date'
+  key: InboundBucketKey
   label: string
   units: number
   lines: number
@@ -44,6 +52,10 @@ export interface OutboundDay {
   shipments: number
   cartons: number
   isToday: boolean
+  /** trailing 20-business-day moving average; null until 20 periods exist */
+  ma20: number | null
+  /** the shipments that went out that day (drill-down detail) */
+  ships: { so: string; cartons: number }[]
 }
 
 export interface InventoryAnalytics {
@@ -117,6 +129,43 @@ const DAY_LABEL = new Intl.DateTimeFormat('en-US', {
   month: 'numeric',
   day: 'numeric',
 })
+
+/** Bucket an open PO line's expected date relative to `today` (YYYY-MM-DD).
+ *  Shared by the analytics chart and the table's inbound-bucket filter so a
+ *  bar click filters to exactly the parts behind that bar. */
+export function classifyInboundBucket(
+  expectedDate: string | null,
+  today: string
+): InboundBucketKey {
+  if (!expectedDate) return 'no_date'
+  if (expectedDate < today) return 'overdue'
+  if (expectedDate <= addDaysIso(today, 6)) return 'this_week'
+  if (expectedDate <= addDaysIso(today, 13)) return 'next_week'
+  if (expectedDate <= addDaysIso(today, 27)) return 'two_to_four'
+  return 'later'
+}
+
+/** Part numbers with open PO lines landing in the given bucket. */
+export async function getInboundBucketParts(bucket: InboundBucketKey): Promise<Set<string>> {
+  const supabase = createAdminClient()
+  const today = chicagoTodayIso()
+  const rows = await pageAll<{ part_number: string; qty_open: number | string | null; expected_date: string | null }>(
+    (from, to) =>
+      supabase
+        .from('fb_open_po_lines')
+        .select('part_number, qty_open, expected_date')
+        .order('id')
+        .range(from, to)
+  )
+  const parts = new Set<string>()
+  for (const row of rows) {
+    if (Number(row.qty_open ?? 0) <= 0) continue
+    if (classifyInboundBucket(row.expected_date, today) === bucket) {
+      parts.add(row.part_number)
+    }
+  }
+  return parts
+}
 
 export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
   const supabase = createAdminClient()
@@ -307,9 +356,6 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
   const buckets = new Map<InboundBucket['key'], InboundBucket>(
     bucketDefs.map((b) => [b.key, { ...b, units: 0, lines: 0 }])
   )
-  const weekEnd = addDaysIso(today, 6)
-  const fortnightEnd = addDaysIso(today, 13)
-  const monthEnd = addDaysIso(today, 27)
 
   let inboundUnits = 0
   for (const row of poLines) {
@@ -325,18 +371,7 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
     }
     onOrder.set(row.part_number, cur)
 
-    const key: InboundBucket['key'] = !row.expected_date
-      ? 'no_date'
-      : row.expected_date < today
-        ? 'overdue'
-        : row.expected_date <= weekEnd
-          ? 'this_week'
-          : row.expected_date <= fortnightEnd
-            ? 'next_week'
-            : row.expected_date <= monthEnd
-              ? 'two_to_four'
-              : 'later'
-    const bucket = buckets.get(key)!
+    const bucket = buckets.get(classifyInboundBucket(row.expected_date, today))!
     bucket.units += qty
     bucket.lines += 1
   }
@@ -371,38 +406,44 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
   }
   shortages.sort((a, b) => b.short - a.short)
 
-  // ---- Outbound velocity: rolling shipments cache (30-day window) ---------
-  type ShipmentRow = { date_shipped: string; carton_count: number | null }
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+  // ---- Outbound velocity: rolling shipments cache (180-day window) --------
+  type ShipmentRow = { ship_number: string; so_number: string; date_shipped: string; carton_count: number | null }
+  const windowStart = new Date(Date.now() - 180 * 86400000).toISOString()
   const shipments = await pageAll<ShipmentRow>((from, to) =>
     supabase
       .from('fb_recent_shipments')
-      .select('date_shipped, carton_count')
-      .gte('date_shipped', thirtyDaysAgo)
+      .select('ship_number, so_number, date_shipped, carton_count')
+      .gte('date_shipped', windowStart)
       .order('date_shipped')
       .range(from, to)
   )
 
-  const perDay = new Map<string, { shipments: number; cartons: number }>()
+  const perDay = new Map<string, { shipments: number; cartons: number; ships: { so: string; cartons: number }[] }>()
   for (const row of shipments) {
     const day = CHICAGO_DAY.format(new Date(row.date_shipped))
-    const entry = perDay.get(day) ?? { shipments: 0, cartons: 0 }
+    const entry = perDay.get(day) ?? { shipments: 0, cartons: 0, ships: [] }
     entry.shipments += 1
     entry.cartons += Number(row.carton_count ?? 0)
+    entry.ships.push({ so: row.so_number, cartons: Number(row.carton_count ?? 0) })
     perDay.set(day, entry)
   }
 
   // Business days only (Mon–Fri): the dock is closed on weekends, so
   // zero-bars there are noise. The 7-day tile stays calendar-based and
-  // still counts the rare weekend shipment.
+  // still counts the rare weekend shipment. The client slices this series
+  // for its 30/90/180-day views; the trailing 20-business-day moving
+  // average is computed over the full series so every visible point has a
+  // fully-formed average.
   const daily: OutboundDay[] = []
   let shippedToday = 0
   let shipped7d = 0
   let cartons7d = 0
   const sevenDaysAgo = addDaysIso(today, -6)
-  for (let i = 29; i >= 0; i--) {
+  const maWindow: number[] = []
+  let maSum = 0
+  for (let i = 179; i >= 0; i--) {
     const date = addDaysIso(today, -i)
-    const entry = perDay.get(date) ?? { shipments: 0, cartons: 0 }
+    const entry = perDay.get(date) ?? { shipments: 0, cartons: 0, ships: [] }
     if (date === today) shippedToday = entry.shipments
     if (date >= sevenDaysAgo) {
       shipped7d += entry.shipments
@@ -410,12 +451,18 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
     }
     const weekday = new Date(`${date}T00:00:00Z`).getUTCDay()
     if (weekday === 0 || weekday === 6) continue
+
+    maWindow.push(entry.shipments)
+    maSum += entry.shipments
+    if (maWindow.length > 20) maSum -= maWindow.shift()!
     daily.push({
       date,
       label: DAY_LABEL.format(new Date(`${date}T12:00:00Z`)),
       shipments: entry.shipments,
       cartons: entry.cartons,
       isToday: date === today,
+      ma20: maWindow.length === 20 ? Math.round((maSum / 20) * 10) / 10 : null,
+      ships: entry.ships,
     })
   }
 

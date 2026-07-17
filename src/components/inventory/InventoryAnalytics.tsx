@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import {
   ResponsiveContainer,
   BarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -26,10 +28,19 @@ import type {
   InventoryAnalytics as Analytics,
   ShortagePart,
   InboundBucket,
+  InboundBucketKey,
   OutboundDay,
 } from '@/lib/inventory/analytics'
 
 const n = (value: number) => value.toLocaleString('en-US')
+
+/** A chart bar the user clicked — the page turns it into filters/detail. */
+export type ChartDrill =
+  | { type: 'part'; part: ShortagePart }
+  | { type: 'bucket'; key: InboundBucketKey; label: string }
+  | { type: 'day'; day: OutboundDay }
+
+type OnDrill = (drill: ChartDrill) => void
 
 // ---------------------------------------------------------------------------
 // Stat tiles
@@ -161,6 +172,11 @@ function OutboundTooltip({ active, payload }: {
       <p className="text-[0.75rem] text-[#576671]">
         Cartons: <span className="font-semibold text-[#1C3C6E]">{n(row.cartons)}</span>
       </p>
+      {row.ma20 !== null ? (
+        <p className="text-[0.75rem] text-[#576671]">
+          20-day avg: <span className="font-semibold text-[#1C3C6E]">{row.ma20}</span>
+        </p>
+      ) : null}
     </TooltipShell>
   )
 }
@@ -204,7 +220,7 @@ function ChartEmpty({ message }: { message: string }) {
   )
 }
 
-function ShortageChart({ data }: { data: ShortagePart[] }) {
+function ShortageChart({ data, onDrill }: { data: ShortagePart[]; onDrill?: OnDrill }) {
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
@@ -217,8 +233,8 @@ function ShortageChart({ data }: { data: ShortagePart[] }) {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Open SO demand exceeding on-hand stock — units short per part
-          (kit assemblies excluded)
+          Open SO demand exceeding on-hand stock (kit assemblies excluded) —
+          click a bar to inspect the part
         </p>
       </CardHeader>
       <CardContent>
@@ -244,7 +260,16 @@ function ShortageChart({ data }: { data: ShortagePart[] }) {
                 width={104}
               />
               <Tooltip content={<ShortageTooltip />} cursor={{ fill: 'rgba(30,152,213,0.04)' }} />
-              <Bar dataKey="short" radius={[0, 4, 4, 0]} barSize={16}>
+              <Bar
+                dataKey="short"
+                radius={[0, 4, 4, 0]}
+                barSize={16}
+                cursor="pointer"
+                onClick={(entry: unknown) => {
+                  const p = (entry as { payload?: ShortagePart })?.payload
+                  if (p) onDrill?.({ type: 'part', part: p })
+                }}
+              >
                 {data.map((entry) => (
                   <Cell key={entry.part} fill={COVERAGE_COLOR[entry.coverage]} />
                 ))}
@@ -257,14 +282,15 @@ function ShortageChart({ data }: { data: ShortagePart[] }) {
   )
 }
 
-function InboundChart({ buckets }: { buckets: InboundBucket[] }) {
+function InboundChart({ buckets, onDrill }: { buckets: InboundBucket[]; onDrill?: OnDrill }) {
   const hasInbound = buckets.some((b) => b.units > 0)
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Inbound Pipeline</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Units on open purchase orders by expected arrival
+          Units on open purchase orders by expected arrival — click a bar to
+          filter the table to those parts
         </p>
       </CardHeader>
       <CardContent>
@@ -283,7 +309,18 @@ function InboundChart({ buckets }: { buckets: InboundBucket[] }) {
               />
               <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} width={44} />
               <Tooltip content={<InboundTooltip />} cursor={{ fill: 'rgba(30,152,213,0.04)' }} />
-              <Bar dataKey="units" radius={[4, 4, 0, 0]} barSize={32}>
+              <Bar
+                dataKey="units"
+                radius={[4, 4, 0, 0]}
+                barSize={32}
+                cursor="pointer"
+                onClick={(entry: unknown) => {
+                  const b = (entry as { payload?: InboundBucket })?.payload
+                  if (b && b.units > 0) {
+                    onDrill?.({ type: 'bucket', key: b.key, label: b.label })
+                  }
+                }}
+              >
                 {buckets.map((entry) => (
                   <Cell key={entry.key} fill={BUCKET_COLOR[entry.key]} />
                 ))}
@@ -296,41 +333,94 @@ function InboundChart({ buckets }: { buckets: InboundBucket[] }) {
   )
 }
 
-function OutboundChart({ daily }: { daily: OutboundDay[] }) {
-  const hasShipments = daily.some((d) => d.shipments > 0)
+// Ranges slice the server's 180-day business-day series: ~22 business days
+// per month. The 20-period MA is precomputed over the full series, so even
+// the 30-day view shows a fully-formed average.
+const OUTBOUND_RANGES = [
+  { days: 30, points: 22, tickEvery: 5, barSize: 10 },
+  { days: 90, points: 64, tickEvery: 13, barSize: 4 },
+  { days: 180, points: 128, tickEvery: 26, barSize: 2 },
+] as const
+
+function OutboundChart({ daily, onDrill }: { daily: OutboundDay[]; onDrill?: OnDrill }) {
+  const [rangeDays, setRangeDays] = useState<30 | 90 | 180>(30)
+  const range = OUTBOUND_RANGES.find((r) => r.days === rangeDays)!
+  const visible = daily.slice(-range.points)
+  const hasShipments = visible.some((d) => d.shipments > 0)
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Outbound Velocity</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base">Outbound Velocity</CardTitle>
+          <div className="flex items-center gap-2">
+            <LegendChip color="#1C3C6E" label="20-day avg" />
+            <div className="flex overflow-hidden rounded-md border border-[#D6DEE3] dark:border-[rgba(255,255,255,0.1)]">
+              {OUTBOUND_RANGES.map((r) => (
+                <button
+                  key={r.days}
+                  type="button"
+                  onClick={() => setRangeDays(r.days)}
+                  className={cn(
+                    'px-2 py-0.5 text-[0.7rem] font-medium transition-colors',
+                    r.days === rangeDays
+                      ? 'bg-medship-primary text-white'
+                      : 'bg-transparent text-muted-foreground hover:bg-medship-primary/10'
+                  )}
+                >
+                  {r.days}d
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
         <p className="text-xs text-muted-foreground">
-          Shipments out the door per business day, last 30 days
+          Shipments out the door per business day — click a bar for that
+          day&apos;s SOs
         </p>
       </CardHeader>
       <CardContent>
         {!hasShipments ? (
-          <ChartEmpty message="No shipments recorded in the last 30 days" />
+          <ChartEmpty message={`No shipments recorded in the last ${rangeDays} days`} />
         ) : (
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <ComposedChart data={visible} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
               <XAxis
                 dataKey="label"
                 tick={{ ...AXIS_TICK, fontSize: 10 }}
                 axisLine={{ stroke: GRID_STROKE }}
                 tickLine={false}
-                interval={4}
+                interval={range.tickEvery - 1}
               />
               <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} width={36} />
               <Tooltip content={<OutboundTooltip />} cursor={{ fill: 'rgba(15,166,44,0.06)' }} />
-              <Bar dataKey="shipments" radius={[2, 2, 0, 0]} barSize={10}>
-                {daily.map((entry) => (
+              <Bar
+                dataKey="shipments"
+                radius={[2, 2, 0, 0]}
+                barSize={range.barSize}
+                cursor="pointer"
+                onClick={(entry: unknown) => {
+                  const d = (entry as { payload?: OutboundDay })?.payload
+                  if (d) onDrill?.({ type: 'day', day: d })
+                }}
+              >
+                {visible.map((entry) => (
                   <Cell
                     key={entry.date}
                     fill={entry.isToday ? '#0FA62C' : 'rgba(15,166,44,0.45)'}
                   />
                 ))}
               </Bar>
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="ma20"
+                stroke="#1C3C6E"
+                strokeWidth={2}
+                dot={false}
+                activeDot={false}
+                connectNulls
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </CardContent>
@@ -365,7 +455,7 @@ function SkeletonBand() {
   )
 }
 
-export function InventoryAnalytics() {
+export function InventoryAnalytics({ onDrill }: { onDrill?: OnDrill }) {
   const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -442,9 +532,9 @@ export function InventoryAnalytics() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <ShortageChart data={demand.topShortages} />
-        <InboundChart buckets={inbound.buckets} />
-        <OutboundChart daily={outbound.daily} />
+        <ShortageChart data={demand.topShortages} onDrill={onDrill} />
+        <InboundChart buckets={inbound.buckets} onDrill={onDrill} />
+        <OutboundChart daily={outbound.daily} onDrill={onDrill} />
       </div>
     </div>
   )
