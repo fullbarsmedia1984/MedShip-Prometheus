@@ -326,12 +326,19 @@ export class SupabaseEnrichmentRepository {
     assertNoError(error)
 
     const id = String((data as DbRow).id)
-    const previousPrice = existing ? toNumber((existing as DbRow).list_price_amount, NaN) : NaN
-    const newPrice = parsed.listPriceAmount ?? NaN
+    // Compare as number|null. Note Number(null) === 0, so a null price
+    // must be normalized to null explicitly — otherwise a null-price
+    // product looks like it changed (0 vs null) on every re-scrape and
+    // appends a redundant price point each time.
+    const previousAmount =
+      existing && (existing as DbRow).list_price_amount != null
+        ? Number((existing as DbRow).list_price_amount)
+        : null
+    const newAmount = parsed.listPriceAmount ?? null
     const priceChanged =
       !existing ||
       (existing as DbRow).price_status !== parsed.priceStatus ||
-      (Number.isNaN(previousPrice) ? !Number.isNaN(newPrice) : previousPrice !== newPrice)
+      previousAmount !== newAmount
 
     if (priceChanged) {
       const { error: priceError } = await this.supabase.from('competitor_price_points').insert({
