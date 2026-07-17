@@ -74,6 +74,16 @@ export const imageSearchSweep = inngest.createFunction(
       return { skipped: true, reason: 'FIRECRAWL_API_KEY is not configured' }
     }
 
+    // Continuation events only resume their own run; never start a
+    // fresh (billed) sweep from a stale post-completion continuation.
+    const isContinuation = /continuation|auto-resume/i.test(triggeredBy)
+    if (isContinuation) {
+      const active = await new SupabaseEnrichmentRepository().getActiveRun('search_sweep', null)
+      if (!active) {
+        return { skipped: true, reason: 'no active run to continue' }
+      }
+    }
+
     const start = await step.run('start-or-resume-run', async () => {
       const { run, resumed } = await startOrResumeSearchSweep(buildDeps(), { triggeredBy })
       await logSyncEvent({

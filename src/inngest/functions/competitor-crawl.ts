@@ -116,11 +116,27 @@ export const competitorCrawl = inngest.createFunction(
       return { skipped: true, reason: `Unknown competitor: ${String(event.data.competitor)}` }
     }
     // DiaMedical never spends credits; Pocket Nurse needs the key for
-    // /map discovery and blocked-page fallback.
+    // the Firecrawl /crawl discovery job.
     if (competitor === 'pocketnurse' && !isFirecrawlConfigured()) {
       return { skipped: true, reason: 'FIRECRAWL_API_KEY is not configured' }
     }
     const triggeredBy = event.data.triggeredBy ?? 'event'
+
+    // A continuation event only ever resumes the run it belongs to. If
+    // that run already finished (e.g. a continuation queued before a
+    // redeploy fires afterward), do nothing — otherwise we'd start a
+    // fresh full crawl, which for Pocket Nurse means a new billed
+    // Firecrawl /crawl job.
+    const isContinuation = /continuation|auto-resume/i.test(triggeredBy)
+    if (isContinuation) {
+      const active = await new SupabaseEnrichmentRepository().getActiveRun(
+        'competitor_crawl',
+        competitor
+      )
+      if (!active) {
+        return { skipped: true, reason: 'no active run to continue' }
+      }
+    }
 
     const start = await step.run('start-or-resume-run', async () => {
       const { run, resumed } = await startOrResumeCrawl(buildDeps(), { competitor, triggeredBy })

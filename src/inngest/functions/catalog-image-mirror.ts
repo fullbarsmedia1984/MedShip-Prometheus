@@ -86,6 +86,17 @@ export const catalogImageMirror = inngest.createFunction(
     const config = getEnrichmentConfig()
     const triggeredBy = event.data.triggeredBy ?? 'event'
 
+    // Continuation events only resume their own run; if it already
+    // finished (a continuation queued before a redeploy firing after),
+    // do nothing rather than start a redundant full pass.
+    const isContinuation = /continuation|auto-resume/i.test(triggeredBy)
+    if (isContinuation) {
+      const active = await new SupabaseEnrichmentRepository().getActiveRun('image_mirror', null)
+      if (!active) {
+        return { skipped: true, reason: 'no active run to continue' }
+      }
+    }
+
     const start = await step.run('start-or-resume-run', async () => {
       const deps = buildDeps()
       // Self-heals environments where the migration could not touch
