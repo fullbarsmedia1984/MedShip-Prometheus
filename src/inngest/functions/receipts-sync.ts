@@ -1,6 +1,11 @@
 import { inngest } from '../client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
+  FishbowlPriorityYieldError,
+  FishbowlSessionLockError,
+  withFishbowlSession,
+} from '@/lib/fishbowl/session'
+import {
   logSyncEvent,
   updateSyncEvent,
   updateSyncSchedule,
@@ -33,7 +38,12 @@ async function runReceiptsSync(respectSchedule: boolean) {
     status: 'running',
   })
   try {
-    const result = await syncReceiptEvents()
+    // One Fishbowl session per run, logged out in the helper's finally — an
+    // unclosed session holds a license seat until the server-side timeout.
+    const result = await withFishbowlSession(
+      { automation: AUTOMATION, sourceSystem: 'fishbowl', targetSystem: 'prometheus' },
+      (client) => syncReceiptEvents(client)
+    )
     const completedAt = new Date().toISOString()
     await updateSyncEvent(eventId, {
       status: 'success',
@@ -50,6 +60,27 @@ async function runReceiptsSync(respectSchedule: boolean) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const completedAt = new Date().toISOString()
+
+    // Another automation holds the Fishbowl session — skip; the next
+    // 15-minute tick catches up.
+    if (
+      error instanceof FishbowlSessionLockError ||
+      error instanceof FishbowlPriorityYieldError
+    ) {
+      await updateSyncEvent(eventId, {
+        status: 'dismissed',
+        errorMessage: message,
+        completedAt,
+      })
+      await updateSyncSchedule(AUTOMATION, {
+        lastRunAt: completedAt,
+        lastRunStatus: 'skipped',
+        lastRunDurationMs: Date.now() - startedAt,
+        recordsProcessed: 0,
+      })
+      return { skipped: true, reason: message }
+    }
+
     await updateSyncEvent(eventId, {
       status: 'failed',
       errorMessage: message,

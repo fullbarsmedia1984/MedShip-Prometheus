@@ -10,6 +10,7 @@ type FishbowlAutomation =
   | 'P7_FB_SO_SYNC'
   | 'P11_PO_SYNC'
   | 'P12_SHIPMENTS_SYNC'
+  | 'P14_RECEIPTS_SYNC'
 
 type FishbowlSessionOptions = {
   automation: FishbowlAutomation

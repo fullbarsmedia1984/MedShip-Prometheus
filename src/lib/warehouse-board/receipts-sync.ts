@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getFishbowlClient } from '@/lib/fishbowl/client'
+import type { FishbowlClient } from '@/lib/fishbowl/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const RECEIPT_PAGE = 500
@@ -61,8 +61,10 @@ export function receiptPageSql(where: string): string {
   `
 }
 
-export async function syncReceiptEvents(): Promise<ReceiptSyncResult> {
-  const client = getFishbowlClient()
+// Callers own the Fishbowl session (withFishbowlSession) so every login is
+// paired with a logout — an unclosed session holds a Fishbowl license seat
+// until the server-side timeout.
+export async function syncReceiptEvents(client: FishbowlClient): Promise<ReceiptSyncResult> {
   const supabase = createAdminClient()
 
   const { data: newest, error: newestError } = await supabase
