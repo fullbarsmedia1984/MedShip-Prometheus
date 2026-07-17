@@ -131,7 +131,7 @@ export function MessageList({
               transition={{ duration: 0.18 }}
               className="flex justify-end"
             >
-              <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-medship-primary px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm">
+              <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-medship-primary px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm">
                 {turn.text}
               </div>
             </motion.div>
