@@ -1,4 +1,5 @@
 import 'server-only'
+import { loadProductPartMap, toPartUnits } from '@/lib/inventory/product-parts'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { shipDeadline, workdaysBetween } from './workdays'
 
@@ -18,8 +19,10 @@ export interface KitOpsFields {
 }
 
 export interface KitBackorderLine {
+  /** stocked PART number (bridged from the SO line's product number) */
   part: string
   desc: string | null
+  /** part eaches still needed beyond on-hand */
   short: number
   onOrder: boolean
   eta: string | null
@@ -266,11 +269,15 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     ])
   )
 
-  // shipments (ground truth for shipped date)
+  // shipments (ground truth for shipped date). The cache holds 30 days
+  // (Outbound Velocity chart); keep this at 10 so an old partial shipment
+  // doesn't classify a still-open kit as shipped.
+  const shipCutoff = new Date(Date.now() - 10 * 86400000).toISOString()
   const { data: shipRows, error: shipErr } = await supabase
     .from('fb_recent_shipments')
     .select('so_number, date_shipped')
     .in('so_number', soRows.map((r) => r.so_number))
+    .gte('date_shipped', shipCutoff)
   if (shipErr) throw shipErr
   const latestShip = new Map<string, string>()
   for (const row of shipRows ?? []) {
@@ -313,10 +320,24 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     }
   }
 
-  // stock + open-PO facts for backorder computation
+  // stock + open-PO facts for backorder computation. SO line items are keyed
+  // by PRODUCT number; inventory_snapshot / fb_open_po_lines by PART number —
+  // bridge through fb_product_parts (P15) and compare in part eaches.
+  // A part absent from inventory_snapshot (only qty>0 parts are cached)
+  // correctly reads as 0 on hand.
+  const productMap = await loadProductPartMap(
+    supabase,
+    [...itemsBySo.values()].flat().map((r) => r.part_number as string)
+  )
   const parts = [
     ...new Set(
-      [...itemsBySo.values()].flat().map((r) => r.part_number as string)
+      [...itemsBySo.values()]
+        .flat()
+        .map(
+          (r) =>
+            productMap.get(r.part_number as string)?.part ??
+            (r.part_number as string)
+        )
     ),
   ]
   const onHand = new Map<string, number>()
@@ -386,13 +407,18 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
         it.quantity_picked ?? it.quantity_fulfilled ?? 0
       )
       if (remaining <= 0 || isShipped) continue
-      const avail = onHand.get(it.part_number as string) ?? 0
-      if (avail >= remaining) continue
-      const po = onOrder.get(it.part_number as string)
+      const { part, units: needed } = toPartUnits(
+        productMap,
+        it.part_number as string,
+        remaining
+      )
+      const avail = onHand.get(part) ?? 0
+      if (avail >= needed) continue
+      const po = onOrder.get(part)
       backorders.push({
-        part: it.part_number as string,
+        part,
         desc: it.prod_desc,
-        short: remaining - avail,
+        short: needed - avail,
         onOrder: Boolean(po && po.qty > 0),
         eta: po?.eta ?? null,
       })

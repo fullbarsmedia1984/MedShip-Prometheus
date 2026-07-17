@@ -1,5 +1,5 @@
 -- ============================================================
--- Item Enrichment (P15/P16/P17)
+-- Item Enrichment (P16/P17/P18)
 -- Competitor catalog crawl (Firecrawl), item matching, competitor
 -- price book, and mirrored catalog images in Supabase Storage.
 --
@@ -459,7 +459,7 @@ ON CONFLICT (id) DO NOTHING;
 -- inactive: ops flips them on after the first supervised runs.
 INSERT INTO sync_schedules (automation, cron_expression, is_active, records_processed)
 VALUES
-    ('P15_COMPETITOR_CRAWL', '0 4 * * 0', false, 0),
-    ('P16_CATALOG_IMAGE_MIRROR', '0 5 * * *', false, 0),
-    ('P17_IMAGE_SEARCH_SWEEP', '0 7 * * *', false, 0)
+    ('P16_COMPETITOR_CRAWL', '0 4 * * 0', false, 0),
+    ('P17_CATALOG_IMAGE_MIRROR', '0 5 * * *', false, 0),
+    ('P18_IMAGE_SEARCH_SWEEP', '0 7 * * *', false, 0)
 ON CONFLICT (automation) DO NOTHING;

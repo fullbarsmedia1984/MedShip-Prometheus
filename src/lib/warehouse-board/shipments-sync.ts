@@ -5,13 +5,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // Rolling shipments cache for the wallboard's Shipped lane. A shipment
 // leaving the dock counts as shipped even while the SO is still In
 // Progress (partial shipment) or before the cached SO status flips.
+// 30-day window: the wallboard only reads the last 7 days, but the
+// inventory analytics Outbound Velocity chart trends a full month.
 const RECENT_SHIPMENTS_SQL = `
   SELECT s.num AS shipNum, so.num AS soNum, s.statusId AS statusId,
          s.dateShipped AS dateShipped, s.cartonCount AS cartonCount
   FROM ship s
   JOIN so ON so.id = s.soId
   WHERE s.statusId = 30
-    AND s.dateShipped >= DATE_SUB(NOW(), INTERVAL 10 DAY)
+    AND s.dateShipped >= DATE_SUB(NOW(), INTERVAL 30 DAY)
 `
 
 type ShipRow = {

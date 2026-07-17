@@ -14,7 +14,7 @@ import {
   type SearchSweepDeps,
 } from '@/lib/enrichment/search-sweep'
 
-const AUTOMATION = 'P17_IMAGE_SEARCH_SWEEP' as const
+const AUTOMATION = 'P18_IMAGE_SEARCH_SWEEP' as const
 
 function buildDeps(): SearchSweepDeps {
   return {
@@ -23,7 +23,7 @@ function buildDeps(): SearchSweepDeps {
   }
 }
 
-async function isP17ScheduleActive() {
+async function isP18ScheduleActive() {
   const { data, error } = await createAdminClient()
     .from('sync_schedules')
     .select('is_active')
@@ -40,7 +40,7 @@ async function isP17ScheduleActive() {
 }
 
 /**
- * P17: Firecrawl image search for catalog items that P16 could not
+ * P18: Firecrawl image search for catalog items that P17 could not
  * cover from any known source. Strictly budget-capped per day; every
  * searched item's attempt counter bumps whether or not an image was
  * found, so the sweep converges over the long tail instead of
@@ -49,7 +49,7 @@ async function isP17ScheduleActive() {
 export const imageSearchSweep = inngest.createFunction(
   {
     id: 'enrichment-image-search-sweep',
-    name: 'P17: Image Search Sweep (Firecrawl -> Storage)',
+    name: 'P18: Image Search Sweep (Firecrawl -> Storage)',
     retries: 3,
     concurrency: [{ limit: 1 }],
     triggers: [{ event: 'enrichment/images.search' }],
@@ -59,7 +59,7 @@ export const imageSearchSweep = inngest.createFunction(
         sourceSystem: 'firecrawl',
         targetSystem: 'prometheus',
         status: 'failed',
-        errorMessage: `Search sweep paused after exhausting retries: ${error.message}. Send another P17 event to resume.`,
+        errorMessage: `Search sweep paused after exhausting retries: ${error.message}. Send another P18 event to resume.`,
       })
       // No auto-resume: the sweep is discretionary spend, and the
       // daily cron will pick the run back up tomorrow anyway.
@@ -159,13 +159,13 @@ export const imageSearchSweep = inngest.createFunction(
 )
 
 /**
- * P17 daily cron: resumes or starts the sweep each day under a fresh
+ * P18 daily cron: resumes or starts the sweep each day under a fresh
  * credit budget. Gated by sync_schedules (seeded inactive).
  */
 export const imageSearchSweepCron = inngest.createFunction(
   {
     id: 'enrichment-image-search-sweep-cron',
-    name: 'P17: Image Search Sweep (cron)',
+    name: 'P18: Image Search Sweep (cron)',
     retries: 1,
     triggers: [{ cron: '0 7 * * *' }],
   },
@@ -173,7 +173,7 @@ export const imageSearchSweepCron = inngest.createFunction(
     if (!isFirecrawlConfigured()) {
       return { skipped: true, reason: 'FIRECRAWL_API_KEY is not configured' }
     }
-    if (!(await isP17ScheduleActive())) {
+    if (!(await isP18ScheduleActive())) {
       return { skipped: true, reason: `${AUTOMATION} is disabled in sync_schedules` }
     }
 

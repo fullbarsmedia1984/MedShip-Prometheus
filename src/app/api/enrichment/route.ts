@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       })
 
       await logSyncEvent({
-        automation: 'P15_COMPETITOR_CRAWL',
+        automation: 'P16_COMPETITOR_CRAWL',
         sourceSystem: 'prometheus',
         targetSystem: 'inngest',
         sourceRecordId: body.runId,

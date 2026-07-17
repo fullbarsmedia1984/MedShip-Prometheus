@@ -31,6 +31,8 @@ import {
   shipmentsCacheSyncManual,
   receiptsSync,
   receiptsSyncManual,
+  productPartsSync,
+  productPartsSyncManual,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -94,5 +96,9 @@ export const { GET, POST, PUT } = serve({
     // P14: Immutable Fishbowl receipt facts (Receiving view + cross-dock candidates)
     receiptsSync,
     receiptsSyncManual,
+
+    // P15: Product-part mapping (inventory analytics demand/stock bridge)
+    productPartsSync,
+    productPartsSyncManual,
   ],
 })

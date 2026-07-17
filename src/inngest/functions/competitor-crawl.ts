@@ -16,7 +16,7 @@ import { runExactMatching, runFuzzyMatching } from '@/lib/enrichment/matching'
 import { SupabaseEnrichmentRepository } from '@/lib/enrichment/repository'
 import { COMPETITORS, type Competitor } from '@/lib/enrichment/types'
 
-const AUTOMATION = 'P15_COMPETITOR_CRAWL' as const
+const AUTOMATION = 'P16_COMPETITOR_CRAWL' as const
 
 function buildDeps(): CompetitorCrawlDeps {
   return {
@@ -25,7 +25,7 @@ function buildDeps(): CompetitorCrawlDeps {
   }
 }
 
-async function isP15ScheduleActive() {
+async function isP16ScheduleActive() {
   const { data, error } = await createAdminClient()
     .from('sync_schedules')
     .select('is_active')
@@ -50,7 +50,7 @@ function nextBudgetResetIso(): string {
 }
 
 /**
- * P15: competitor catalogs -> competitor_products + price history.
+ * P16: competitor catalogs -> competitor_products + price history.
  *
  * Pocket Nurse is discovered via Firecrawl /map and scraped page by
  * page (direct fetch first, Firecrawl fallback, budget-capped).
@@ -63,7 +63,7 @@ function nextBudgetResetIso(): string {
 export const competitorCrawl = inngest.createFunction(
   {
     id: 'enrichment-competitor-crawl',
-    name: 'P15: Competitor Catalog Crawl (web -> Prometheus)',
+    name: 'P16: Competitor Catalog Crawl (web -> Prometheus)',
     retries: 3,
     // One crawl per competitor at a time; the run cursor is single-writer.
     concurrency: [{ limit: 1, key: 'event.data.competitor' }],
@@ -228,18 +228,18 @@ export const competitorCrawl = inngest.createFunction(
 )
 
 /**
- * P15 weekly cron: re-crawl both competitor catalogs for price and
+ * P16 weekly cron: re-crawl both competitor catalogs for price and
  * assortment freshness. Gated by sync_schedules (seeded inactive).
  */
 export const competitorCrawlCron = inngest.createFunction(
   {
     id: 'enrichment-competitor-crawl-cron',
-    name: 'P15: Competitor Catalog Crawl (cron)',
+    name: 'P16: Competitor Catalog Crawl (cron)',
     retries: 1,
     triggers: [{ cron: '0 4 * * 0' }],
   },
   async ({ step }) => {
-    if (!(await isP15ScheduleActive())) {
+    if (!(await isP16ScheduleActive())) {
       return { skipped: true, reason: `${AUTOMATION} is disabled in sync_schedules` }
     }
 

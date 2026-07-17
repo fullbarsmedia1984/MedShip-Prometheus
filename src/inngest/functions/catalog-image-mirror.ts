@@ -10,13 +10,13 @@ import {
 } from '@/lib/enrichment/image-mirror'
 import { SupabaseEnrichmentRepository } from '@/lib/enrichment/repository'
 
-const AUTOMATION = 'P16_CATALOG_IMAGE_MIRROR' as const
+const AUTOMATION = 'P17_CATALOG_IMAGE_MIRROR' as const
 
 function buildDeps(): ImageMirrorDeps {
   return { repository: new SupabaseEnrichmentRepository() }
 }
 
-async function isP16ScheduleActive() {
+async function isP17ScheduleActive() {
   const { data, error } = await createAdminClient()
     .from('sync_schedules')
     .select('is_active')
@@ -33,7 +33,7 @@ async function isP16ScheduleActive() {
 }
 
 /**
- * P16: mirror known product-image URLs into the catalog-images
+ * P17: mirror known product-image URLs into the catalog-images
  * Storage bucket. Sources per item: the Hercules image_urls_json
  * (330k+ items, mostly medline.com) and images of linked competitor
  * products from P15. Spends no Firecrawl credits — downloads are
@@ -43,7 +43,7 @@ async function isP16ScheduleActive() {
 export const catalogImageMirror = inngest.createFunction(
   {
     id: 'enrichment-catalog-image-mirror',
-    name: 'P16: Catalog Image Mirror (web -> Storage)',
+    name: 'P17: Catalog Image Mirror (web -> Storage)',
     retries: 3,
     concurrency: [{ limit: 1 }],
     triggers: [{ event: 'enrichment/images.mirror' }],
@@ -53,7 +53,7 @@ export const catalogImageMirror = inngest.createFunction(
         sourceSystem: 'web',
         targetSystem: 'prometheus',
         status: 'failed',
-        errorMessage: `Image mirror paused after exhausting retries: ${error.message}. Send another P16 event to resume from the checkpoint.`,
+        errorMessage: `Image mirror paused after exhausting retries: ${error.message}. Send another P17 event to resume from the checkpoint.`,
       })
 
       const active = await new SupabaseEnrichmentRepository().getActiveRun('image_mirror', null)
@@ -161,18 +161,18 @@ export const catalogImageMirror = inngest.createFunction(
 )
 
 /**
- * P16 daily cron: keep mirroring as new items and competitor links
+ * P17 daily cron: keep mirroring as new items and competitor links
  * appear. Gated by sync_schedules (seeded inactive).
  */
 export const catalogImageMirrorCron = inngest.createFunction(
   {
     id: 'enrichment-catalog-image-mirror-cron',
-    name: 'P16: Catalog Image Mirror (cron)',
+    name: 'P17: Catalog Image Mirror (cron)',
     retries: 1,
     triggers: [{ cron: '0 5 * * *' }],
   },
   async ({ step }) => {
-    if (!(await isP16ScheduleActive())) {
+    if (!(await isP17ScheduleActive())) {
       return { skipped: true, reason: `${AUTOMATION} is disabled in sync_schedules` }
     }
 

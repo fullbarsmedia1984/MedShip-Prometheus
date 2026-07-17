@@ -129,10 +129,15 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
   )
 
   // Recent shipments make an open kit "shipped" even before status flips.
+  // The cache now holds 30 days (Outbound Velocity chart); keep this
+  // signal at 10 days so an old partial shipment doesn't mark a
+  // still-open kit as shipped.
+  const shipCutoff = new Date(Date.now() - 10 * 86400000).toISOString()
   const { data: shipRows } = await supabase
     .from('fb_recent_shipments')
     .select('so_number, date_shipped')
     .in('so_number', soRows.map((r) => r.so_number))
+    .gte('date_shipped', shipCutoff)
   const latestShip = new Map<string, string>()
   for (const row of shipRows ?? []) {
     const cur = latestShip.get(row.so_number as string)
