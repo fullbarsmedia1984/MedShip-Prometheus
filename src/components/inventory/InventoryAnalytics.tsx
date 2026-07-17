@@ -122,7 +122,7 @@ function ShortageTooltip({ active, payload }: {
       ) : null}
       <p className="text-[0.75rem] text-[#576671]">
         Short: <span className="font-semibold text-[#D93025]">{n(row.short)}</span>
-        {' '}(demand {n(row.demand)} · on hand {n(row.onHand)})
+        {' '}(demand {n(row.demand)} · available {n(row.available)})
       </p>
       <p className="text-[0.75rem] text-[#576671]">
         On order:{' '}

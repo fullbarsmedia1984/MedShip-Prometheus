@@ -104,7 +104,7 @@ export default function InventoryPage() {
           ? `${p.onOrder.toLocaleString()} on order${p.eta ? `, ETA ${p.eta}` : ''}`
           : 'NO PO'
       setDrillChip(
-        `Shortage ${p.part}: ${p.short.toLocaleString()} short · ${p.onHand.toLocaleString()} on hand · ${coverage} · ${p.sos} SOs`
+        `Shortage ${p.part}: ${p.short.toLocaleString()} short · ${p.available.toLocaleString()} available · ${coverage} · ${p.sos} SOs`
       )
     } else if (drill.type === 'bucket') {
       setFilters((prev) => ({

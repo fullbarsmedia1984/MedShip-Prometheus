@@ -20,6 +20,9 @@ export interface ShortagePart {
   /** open remaining units across Sale lines */
   demand: number
   onHand: number
+  /** on hand minus units already staged on open picks (picked stock stays
+   *  in Fishbowl's qty-on-hand until the order ships) */
+  available: number
   short: number
   onOrder: number
   /** earliest expected date among covering open PO lines, YYYY-MM-DD */
@@ -186,18 +189,29 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
       .range(from, to)
   )
 
-  const onHand = new Map<string, number>()
   const descriptions = new Map<string, string | null>()
   let inventorySyncedAt: string | null = null
   for (const row of snapshot) {
-    const qty = Number(row.qty_on_hand ?? 0)
-    onHand.set(row.part_number, (onHand.get(row.part_number) ?? 0) + qty)
     if (!descriptions.has(row.part_number)) {
       descriptions.set(row.part_number, row.part_description)
     }
     if (row.last_synced_at && (!inventorySyncedAt || row.last_synced_at > inventorySyncedAt)) {
       inventorySyncedAt = row.last_synced_at
     }
+  }
+
+  // Rows older than the latest P2 run are stale drop-outs — the part fell to
+  // zero and stopped appearing in the Fishbowl pull, but P2 historically
+  // never deleted the leftover row. Ignore them (1h slack covers the run's
+  // own write window).
+  const freshCutoff = inventorySyncedAt
+    ? new Date(new Date(inventorySyncedAt).getTime() - 3600_000).toISOString()
+    : null
+  const onHand = new Map<string, number>()
+  for (const row of snapshot) {
+    if (freshCutoff && (!row.last_synced_at || row.last_synced_at < freshCutoff)) continue
+    const qty = Number(row.qty_on_hand ?? 0)
+    onHand.set(row.part_number, (onHand.get(row.part_number) ?? 0) + qty)
   }
 
   let skusOnHand = 0
@@ -254,6 +268,11 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
   // their component demand still flows through as regular Sale lines.
   const isKitProduct = (num: string) => /-kit$/i.test(num)
   const openLines: { so: string; product: string; remaining: number }[] = []
+  // Picked-but-not-shipped units per product: this stock still counts in
+  // Fishbowl's qty-on-hand but is staged on a pick, so it cannot cover
+  // anyone else's demand. Tallied across ALL Sale lines (kit components
+  // included) and subtracted from on-hand in the shortage math below.
+  const stagedByProduct = new Map<string, number>()
   const kitParts = new Set<string>()
   const kitSos = new Set<string>()
   let kitUnits = 0
@@ -272,6 +291,15 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
     for (const row of rows) {
       if (row.line_type !== 'Sale' || !row.part_number) continue
       const q = Number(row.quantity ?? 0)
+      const staged =
+        Math.min(Number(row.quantity_picked ?? 0), q) -
+        Number(row.quantity_fulfilled ?? 0)
+      if (staged > 0) {
+        stagedByProduct.set(
+          row.part_number,
+          (stagedByProduct.get(row.part_number) ?? 0) + staged
+        )
+      }
       const f = Number(row.quantity_picked ?? row.quantity_fulfilled ?? 0)
       const remaining = q - f
       if (remaining <= 0) continue
@@ -292,7 +320,9 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
   type MappingRow = { product_num: string; part_num: string; factor: number | string | null }
   const productToPart = new Map<string, { part: string; factor: number }>()
   {
-    const productNums = [...new Set(openLines.map((l) => l.product))]
+    const productNums = [
+      ...new Set([...openLines.map((l) => l.product), ...stagedByProduct.keys()]),
+    ]
     for (let i = 0; i < productNums.length; i += 100) {
       const batch = productNums.slice(i, i + 100)
       const rows = await pageAll<MappingRow>((from, to) =>
@@ -319,6 +349,15 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
     entry.units += line.remaining * mapping.factor
     entry.sos.add(line.so)
     demand.set(mapping.part, entry)
+  }
+
+  const pickedByPart = new Map<string, number>()
+  for (const [product, units] of stagedByProduct) {
+    const mapping = productToPart.get(product) ?? { part: product, factor: 1 }
+    pickedByPart.set(
+      mapping.part,
+      (pickedByPart.get(mapping.part) ?? 0) + units * mapping.factor
+    )
   }
 
   let committedUnits = 0
@@ -384,7 +423,8 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
   let noPoParts = 0
   for (const [part, entry] of demand) {
     const held = onHand.get(part) ?? 0
-    const short = entry.units - held
+    const available = Math.max(0, held - (pickedByPart.get(part) ?? 0))
+    const short = entry.units - available
     if (short <= 0) continue
     const po = onOrder.get(part)
     const coverage: ShortageCoverage =
@@ -397,6 +437,7 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
       description: descriptions.get(part) ?? null,
       demand: entry.units,
       onHand: held,
+      available,
       short,
       onOrder: po?.qty ?? 0,
       eta: po?.eta ?? null,
