@@ -371,14 +371,14 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
   }
   shortages.sort((a, b) => b.short - a.short)
 
-  // ---- Outbound velocity: rolling shipments cache -------------------------
+  // ---- Outbound velocity: rolling shipments cache (30-day window) ---------
   type ShipmentRow = { date_shipped: string; carton_count: number | null }
-  const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString()
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
   const shipments = await pageAll<ShipmentRow>((from, to) =>
     supabase
       .from('fb_recent_shipments')
       .select('date_shipped, carton_count')
-      .gte('date_shipped', tenDaysAgo)
+      .gte('date_shipped', thirtyDaysAgo)
       .order('date_shipped')
       .range(from, to)
   )
@@ -392,14 +392,24 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
     perDay.set(day, entry)
   }
 
+  // Business days only (Mon–Fri): the dock is closed on weekends, so
+  // zero-bars there are noise. The 7-day tile stays calendar-based and
+  // still counts the rare weekend shipment.
   const daily: OutboundDay[] = []
   let shippedToday = 0
   let shipped7d = 0
   let cartons7d = 0
   const sevenDaysAgo = addDaysIso(today, -6)
-  for (let i = 9; i >= 0; i--) {
+  for (let i = 29; i >= 0; i--) {
     const date = addDaysIso(today, -i)
     const entry = perDay.get(date) ?? { shipments: 0, cartons: 0 }
+    if (date === today) shippedToday = entry.shipments
+    if (date >= sevenDaysAgo) {
+      shipped7d += entry.shipments
+      cartons7d += entry.cartons
+    }
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay()
+    if (weekday === 0 || weekday === 6) continue
     daily.push({
       date,
       label: DAY_LABEL.format(new Date(`${date}T12:00:00Z`)),
@@ -407,11 +417,6 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
       cartons: entry.cartons,
       isToday: date === today,
     })
-    if (date === today) shippedToday = entry.shipments
-    if (date >= sevenDaysAgo) {
-      shipped7d += entry.shipments
-      cartons7d += entry.cartons
-    }
   }
 
   return {

@@ -303,20 +303,26 @@ function OutboundChart({ daily }: { daily: OutboundDay[] }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Outbound Velocity</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Shipments out the door per day, last 10 days
+          Shipments out the door per business day, last 30 days
         </p>
       </CardHeader>
       <CardContent>
         {!hasShipments ? (
-          <ChartEmpty message="No shipments recorded in the last 10 days" />
+          <ChartEmpty message="No shipments recorded in the last 30 days" />
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
-              <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: GRID_STROKE }} tickLine={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ ...AXIS_TICK, fontSize: 10 }}
+                axisLine={{ stroke: GRID_STROKE }}
+                tickLine={false}
+                interval={4}
+              />
               <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} width={36} />
               <Tooltip content={<OutboundTooltip />} cursor={{ fill: 'rgba(15,166,44,0.06)' }} />
-              <Bar dataKey="shipments" radius={[4, 4, 0, 0]} barSize={22}>
+              <Bar dataKey="shipments" radius={[2, 2, 0, 0]} barSize={10}>
                 {daily.map((entry) => (
                   <Cell
                     key={entry.date}

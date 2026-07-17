@@ -266,11 +266,15 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     ])
   )
 
-  // shipments (ground truth for shipped date)
+  // shipments (ground truth for shipped date). The cache holds 30 days
+  // (Outbound Velocity chart); keep this at 10 so an old partial shipment
+  // doesn't classify a still-open kit as shipped.
+  const shipCutoff = new Date(Date.now() - 10 * 86400000).toISOString()
   const { data: shipRows, error: shipErr } = await supabase
     .from('fb_recent_shipments')
     .select('so_number, date_shipped')
     .in('so_number', soRows.map((r) => r.so_number))
+    .gte('date_shipped', shipCutoff)
   if (shipErr) throw shipErr
   const latestShip = new Map<string, string>()
   for (const row of shipRows ?? []) {
