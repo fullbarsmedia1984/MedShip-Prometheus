@@ -195,6 +195,13 @@ const ASKZEUS_GUIDE: PageGuide = {
         'Click New chat to start fresh; hover a conversation to delete it.',
       ],
     },
+    {
+      heading: 'Help it improve',
+      steps: [
+        'Rate answers with the thumbs under each reply — especially the bad ones. A short note on what was wrong makes the feedback far more useful.',
+        'Admins can teach AskZeus standing facts (business rules, vocabulary) via "Teach AskZeus" in the left panel — changes apply to the very next question.',
+      ],
+    },
   ],
 }
 

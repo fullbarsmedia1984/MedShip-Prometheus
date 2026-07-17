@@ -54,6 +54,8 @@ export interface AgentRunParams {
   toolContext: ToolContext
   role: AppRole
   displayName: string | null
+  /** Admin-curated business facts (askzeus_knowledge), injected as context. */
+  knowledge: string[]
   conversationId: string
   signal?: AbortSignal
 }
@@ -352,6 +354,16 @@ export async function* runAskZeusAgent(
         text: SYSTEM_PROMPT,
         cache_control: { type: 'ephemeral' },
       },
+      ...(params.knowledge.length > 0
+        ? [
+            {
+              type: 'text' as const,
+              text:
+                'Curated business knowledge from admins (treat as authoritative):\n' +
+                params.knowledge.map((fact) => `- ${fact}`).join('\n'),
+            },
+          ]
+        : []),
       {
         type: 'text',
         text: buildDynamicContext({

@@ -13,6 +13,7 @@ import {
   getOwnedConversation,
   toChatHistory,
 } from '@/lib/askzeus/persistence'
+import { getActiveKnowledge } from '@/lib/askzeus/knowledge'
 import { toolsForRole, type ToolContext } from '@/lib/askzeus/tools'
 import type { AskZeusEvent } from '@/lib/askzeus/types'
 import { getRepAliases } from '@/lib/reps'
@@ -99,7 +100,10 @@ export async function POST(request: NextRequest) {
     const repAliases = role === 'sales_rep' && userId ? await getRepAliases(userId) : null
     const toolContext: ToolContext = { role, userId, repAliases }
     const tools = toolsForRole(role)
-    const displayName = await displayNameFor(userId, auth.user?.email ?? null)
+    const [displayName, knowledge] = await Promise.all([
+      displayNameFor(userId, auth.user?.email ?? null),
+      getActiveKnowledge(),
+    ])
 
     const agentHistory: ChatMessage[] = [...history, userMessage]
 
@@ -125,6 +129,7 @@ export async function POST(request: NextRequest) {
               toolContext,
               role,
               displayName,
+              knowledge,
               conversationId,
               signal: request.signal,
             },
