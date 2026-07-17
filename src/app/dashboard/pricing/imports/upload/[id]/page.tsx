@@ -272,10 +272,10 @@ export default function WorkbookUploadDetailPage({ params }: PageProps) {
             ) : (
               <>
                 <div className="flex flex-wrap items-end gap-4">
-                  <div>
+                  <div className="w-full min-w-0 max-w-full sm:w-auto">
                     <label className="text-sm font-medium">Sheet</label>
                     <div>
-                      <select className={SELECT_CLASS} value={selectedSheet} onChange={(event) => setSelectedSheet(event.target.value)}>
+                      <select className={`${SELECT_CLASS} w-full max-w-full sm:w-auto`} value={selectedSheet} onChange={(event) => setSelectedSheet(event.target.value)}>
                         {sheets.map((candidate) => (
                           <option key={candidate.name} value={candidate.name}>
                             {candidate.name} ({candidate.row_count.toLocaleString()} rows)
@@ -355,11 +355,11 @@ export default function WorkbookUploadDetailPage({ params }: PageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
-              <div>
+              <div className="w-full min-w-0 max-w-full sm:w-auto">
                 <label className="text-sm font-medium">Profile</label>
                 <div>
                   <select
-                    className={`${SELECT_CLASS} min-w-64`}
+                    className={`${SELECT_CLASS} w-full max-w-full sm:w-auto sm:min-w-64`}
                     value={selectedProfileId}
                     onChange={(event) => setSelectedProfileId(event.target.value)}
                   >

@@ -143,13 +143,15 @@ export default function MappingsPage() {
               </div>
             ) : (
               <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-                <TabsList>
-                  {MAPPING_AUTOMATIONS.map((automation) => (
-                    <TabsTrigger key={automation} value={automation}>
-                      {AUTOMATION_INFO[automation].name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+                <div className="max-w-full overflow-x-auto">
+                  <TabsList>
+                    {MAPPING_AUTOMATIONS.map((automation) => (
+                      <TabsTrigger key={automation} value={automation}>
+                        {AUTOMATION_INFO[automation].name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
 
                 {MAPPING_AUTOMATIONS.map((automation) => (
                   <TabsContent key={automation} value={automation} className="mt-4">

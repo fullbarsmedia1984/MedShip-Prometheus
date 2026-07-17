@@ -308,7 +308,7 @@ export default function SupplierCatalogPage() {
     <div className="flex h-full flex-col">
       <Header title="Supplier Catalog" />
 
-      <main className="flex-1 space-y-4 overflow-y-auto p-6">
+      <main className="flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
         {/* Search + filter toolbar */}
         <Card className="shadow-sm">
           <CardContent className="space-y-3 p-4">
@@ -343,7 +343,7 @@ export default function SupplierCatalogPage() {
                   setFilters((prev) => ({ ...prev, vendor: value ?? 'all' }))
                 }
               >
-                <SelectTrigger className="h-8 w-44 text-xs">
+                <SelectTrigger className="h-8 w-full text-xs sm:w-44">
                   <SelectValue placeholder="Vendor" />
                 </SelectTrigger>
                 <SelectContent>
@@ -361,7 +361,7 @@ export default function SupplierCatalogPage() {
                   setFilters((prev) => ({ ...prev, category: value ?? 'all' }))
                 }
               >
-                <SelectTrigger className="h-8 w-52 text-xs">
+                <SelectTrigger className="h-8 w-full text-xs sm:w-52">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -379,7 +379,7 @@ export default function SupplierCatalogPage() {
                   setFilters((prev) => ({ ...prev, manufacturer: value ?? 'all' }))
                 }
               >
-                <SelectTrigger className="h-8 w-56 text-xs">
+                <SelectTrigger className="h-8 w-full text-xs sm:w-56">
                   <SelectValue placeholder="Manufacturer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -392,7 +392,7 @@ export default function SupplierCatalogPage() {
                 </SelectContent>
               </Select>
 
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto">
                 <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
                 <Select
                   value={filters.sort}
@@ -400,7 +400,7 @@ export default function SupplierCatalogPage() {
                     setFilters((prev) => ({ ...prev, sort: value ?? 'relevance' }))
                   }
                 >
-                  <SelectTrigger className="h-8 w-44 text-xs">
+                  <SelectTrigger className="h-8 w-full text-xs sm:w-44">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

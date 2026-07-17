@@ -34,7 +34,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
       nodes.push(
         <code
           key={key}
-          className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
+          className="break-all rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
         >
           {token.slice(1, -1)}
         </code>
@@ -49,7 +49,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-medship-primary underline underline-offset-2 hover:opacity-80"
+          className="break-all text-medship-primary underline underline-offset-2 hover:opacity-80"
         >
           {label}
         </a>
@@ -243,5 +243,5 @@ export function Markdown({ text }: { text: string }) {
     )
   }
 
-  return <div className="space-y-2.5 text-sm">{blocks}</div>
+  return <div className="space-y-2.5 text-sm break-words">{blocks}</div>
 }
