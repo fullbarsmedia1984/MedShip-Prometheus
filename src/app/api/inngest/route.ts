@@ -29,6 +29,8 @@ import {
   purchaseOrdersSyncManual,
   shipmentsCacheSync,
   shipmentsCacheSyncManual,
+  receiptsSync,
+  receiptsSyncManual,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -88,5 +90,9 @@ export const { GET, POST, PUT } = serve({
     // P12: Recent shipments cache (wallboard Shipped lane)
     shipmentsCacheSync,
     shipmentsCacheSyncManual,
+
+    // P14: Immutable Fishbowl receipt facts (Receiving view + cross-dock candidates)
+    receiptsSync,
+    receiptsSyncManual,
   ],
 })

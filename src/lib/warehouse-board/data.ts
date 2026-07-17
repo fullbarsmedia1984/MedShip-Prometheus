@@ -1,5 +1,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { chicagoTodayIso } from '@/lib/business-days'
+import { isKitOrderNumber } from '@/lib/kits/order-number'
+import { shipDeadline, workdaysBetween } from '@/lib/kits/workdays'
 
 export type LaneSeverity = 'ok' | 'warn' | 'critical'
 
@@ -42,6 +45,10 @@ export interface WallboardOrder {
   partialShipment: boolean
   /** populated for ready-to-pick orders only */
   stock: StockInfo | null
+  /** kit orders with entered need-by dates: the real ship deadline */
+  kitShipBy: string | null
+  /** kit staging table (kit_orders.table_location) */
+  kitTable: string | null
 }
 
 export interface SyncAges {
@@ -61,6 +68,8 @@ export interface WallboardData {
   kpis: {
     readyCount: number
     pickingCount: number
+    pickingSalesCount: number
+    pickingKitsCount: number
     lateCount: number
     stuckPickCount: number
     noPoCount: number
@@ -70,7 +79,8 @@ export interface WallboardData {
   /** Full lists — the client caps the ambient lanes and offers an
    *  expanded, sortable view of everything. */
   ready: WallboardOrder[]
-  picking: WallboardOrder[]
+  pickingSales: WallboardOrder[]
+  pickingKits: WallboardOrder[]
   shipped: WallboardOrder[]
   closedShort: WallboardOrder[]
   longestWaiting: WallboardOrder[]
@@ -148,6 +158,8 @@ function toOrder(
   return {
     stock: null,
     partialShipment: false,
+    kitShipBy: null,
+    kitTable: null,
     soNumber: row.so_number,
     customer: row.customer_name ?? '—',
     shipTo:
@@ -252,7 +264,7 @@ export async function getWallboardData(): Promise<WallboardData> {
       supabase
         .from('fb_sales_order_items')
         .select(
-          'sales_order_number, part_number, quantity, quantity_fulfilled, line_type:raw_data->type->>name'
+          'sales_order_number, part_number, quantity, quantity_fulfilled, quantity_picked:raw_data->>quantityPicked, line_type:raw_data->type->>name'
         )
         .in('sales_order_number', batch)
         .order('id')
@@ -265,7 +277,11 @@ export async function getWallboardData(): Promise<WallboardData> {
         aggs.get(key) ??
         { lines: 0, qty: 0, fulfilled: 0, partial: 0, dropShip: 0 }
       const q = Number(row.quantity ?? 0)
-      const f = Number(row.quantity_fulfilled ?? 0)
+      const f = Number(
+        (row as { quantity_picked?: number | string | null }).quantity_picked ??
+          row.quantity_fulfilled ??
+          0
+      )
       if (lineType === 'Drop Ship') {
         agg.dropShip += 1
       } else if (lineType === 'Sale' || lineType === 'Kit') {
@@ -380,6 +396,46 @@ export async function getWallboardData(): Promise<WallboardData> {
     .filter((r) => r.status === 'Issued')
     .map((r) => ({ ...toO(r), stock: stockFor(r.so_number) }))
   const picking = openWh.filter((r) => r.status === 'In Progress').map(toO)
+  const pickingSales = picking.filter(
+    (order) => !isKitOrderNumber(order.soNumber)
+  )
+  const pickingKits = picking.filter((order) => isKitOrderNumber(order.soNumber))
+
+  // Kit orders with entered need-by dates get due-based urgency (Phase 2):
+  // the real ship deadline replaces the age heuristic on their cards.
+  {
+    const kitSos = [...ready, ...picking]
+      .map((o) => o.soNumber)
+      .filter(isKitOrderNumber)
+    if (kitSos.length > 0) {
+      const { data: kitOps } = await supabase
+        .from('kit_orders')
+        .select('so_number, absolute_need_by, transit_days, table_location')
+        .in('so_number', kitSos)
+      const today = chicagoTodayIso(now)
+      const bySo = new Map(
+        (kitOps ?? []).map((r) => [r.so_number as string, r])
+      )
+      for (const order of [...ready, ...picking]) {
+        const ops = bySo.get(order.soNumber)
+        if (!ops) continue
+        order.kitTable = (ops.table_location as string | null) ?? null
+        if (ops.absolute_need_by) {
+          const shipBy = shipDeadline(
+            String(ops.absolute_need_by),
+            Number(ops.transit_days ?? 0)
+          )
+          order.kitShipBy = shipBy
+          order.severity =
+            shipBy < today
+              ? 'critical'
+              : workdaysBetween(today, shipBy) <= 3
+                ? 'warn'
+                : 'ok'
+        }
+      }
+    }
+  }
   const shortO = closedShortWh.map(toO)
 
   // Shipped lane: SOs with a shipment in the last 7 days, unioned with
@@ -420,7 +476,8 @@ export async function getWallboardData(): Promise<WallboardData> {
 
   // Oldest first = most critical at the top of each lane.
   ready.sort((a, b) => b.ageDays - a.ageDays)
-  picking.sort((a, b) => b.ageDays - a.ageDays)
+  pickingSales.sort((a, b) => b.ageDays - a.ageDays)
+  pickingKits.sort((a, b) => b.ageDays - a.ageDays)
 
   const allOpen = [...ready, ...picking]
   const lateCount = allOpen.filter((o) => o.ageDays > 7).length
@@ -503,6 +560,8 @@ export async function getWallboardData(): Promise<WallboardData> {
     kpis: {
       readyCount: ready.length,
       pickingCount: picking.length,
+      pickingSalesCount: pickingSales.length,
+      pickingKitsCount: pickingKits.length,
       lateCount,
       stuckPickCount: stuck.length,
       noPoCount: noPo.length,
@@ -510,7 +569,8 @@ export async function getWallboardData(): Promise<WallboardData> {
       shippedThisWeek: shippedO.length,
     },
     ready,
-    picking,
+    pickingSales,
+    pickingKits,
     shipped: shippedO,
     closedShort: shortO,
     longestWaiting,

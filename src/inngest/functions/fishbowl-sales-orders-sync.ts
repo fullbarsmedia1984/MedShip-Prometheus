@@ -14,6 +14,7 @@ import {
   processSalesOrderPageBatch,
   refreshIssuedDatesFromSource,
   retryFailedSalesOrderBackfill,
+  refreshSalesOrderDetailSelection,
   discoverSalesOrdersByIdWindow,
   startSalesOrderBackfill,
 } from '@/lib/fishbowl/sales-order-completeness'
@@ -25,6 +26,7 @@ type P7Action =
   | 'backfill.start'
   | 'backfill.pages'
   | 'detail.hydrate'
+  | 'detail.refresh'
   | 'incremental'
   | 'pause'
   | 'retry.failed'
@@ -238,7 +240,11 @@ async function mirrorHydratedRowsToSalesforce(supabase: ReturnType<typeof create
   }
 }
 
-async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action = 'incremental') {
+async function runFishbowlSalesOrderSync(
+  triggeredBy: string,
+  action: P7Action = 'incremental',
+  options: { soNumbers?: string[] } = {}
+) {
   const startTime = Date.now()
   const connection = getFishbowlConnectionProfile()
   const supabase = createAdminClient()
@@ -265,6 +271,10 @@ async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action =
       result = await withP7FishbowlSession((client) => processSalesOrderPageBatch(supabase, client))
     } else if (action === 'detail.hydrate') {
       result = await withP7FishbowlSession((client) => hydrateSalesOrderDetailBatch(supabase, client))
+    } else if (action === 'detail.refresh') {
+      result = await withP7FishbowlSession((client) =>
+        refreshSalesOrderDetailSelection(supabase, client, options.soNumbers ?? [])
+      )
     } else if (action === 'salesforce.mirror') {
       const mirrorResult = await mirrorHydratedRowsToSalesforce(supabase)
       salesforceMirror = 'error' in mirrorResult ? null : mirrorResult
@@ -281,7 +291,7 @@ async function runFishbowlSalesOrderSync(triggeredBy: string, action: P7Action =
       sourceSystem: action === 'salesforce.mirror' ? 'prometheus' : 'fishbowl',
       targetSystem: action === 'salesforce.mirror' ? 'salesforce' : 'prometheus',
       status: 'success',
-      payload: { triggeredBy, action, connection },
+      payload: { triggeredBy, action, connection, soNumbers: options.soNumbers },
       response: { result, salesforceMirror },
     })
 
@@ -418,7 +428,8 @@ export const fishbowlSalesOrdersSyncManual = inngest.createFunction(
     return step.run('sync-fishbowl-sales-orders-manual', () =>
       runFishbowlSalesOrderSync(
         event.data.triggeredBy ?? 'manual',
-        event.data.action ?? (event.data.fullSync ? 'backfill.start' : 'incremental')
+        event.data.action ?? (event.data.fullSync ? 'backfill.start' : 'incremental'),
+        { soNumbers: event.data.soNumbers }
       )
     )
   }

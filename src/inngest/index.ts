@@ -48,6 +48,10 @@ export {
   shipmentsCacheSync,
   shipmentsCacheSyncManual,
 } from './functions/shipments-sync'
+export {
+  receiptsSync,
+  receiptsSyncManual,
+} from './functions/receipts-sync'
 
 // Re-export client for convenience
 export { inngest } from './client'

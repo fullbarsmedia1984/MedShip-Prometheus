@@ -15,6 +15,7 @@ import {
   DollarSign,
   FileText,
   GraduationCap,
+  Layers,
   MapPin,
   SquareKanban,
   Tv,
@@ -27,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Zap,
 } from 'lucide-react'
 
 const ADMIN_ROLES: AppRole[] = ['superadmin', 'admin']
@@ -48,6 +50,7 @@ type NavItem = {
 // the sales experience: Sales, Quotes, Orders).
 const mainNav: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: STAFF_ROLES },
+  { name: 'AskZeus', href: '/dashboard/askzeus', icon: Zap },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3, roles: SALES_ROLES },
   { name: 'Kanban', href: '/dashboard/kanban', icon: SquareKanban },
   { name: 'Incentives', href: '/dashboard/incentives', icon: Trophy, roles: MANAGER_ROLES },
@@ -58,6 +61,7 @@ const mainNav: NavItem[] = [
   { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart, roles: SALES_ROLES },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: STAFF_ROLES },
+  { name: 'Kit Assembly', href: '/dashboard/kits', icon: Layers, roles: WALLBOARD_ROLES },
   { name: 'Supplier Catalog', href: '/dashboard/catalog', icon: BookOpen },
   { name: 'Territory', href: '/dashboard/territory', icon: MapPin, roles: STAFF_ROLES },
   { name: 'Wallboard', href: '/warehouse-board', icon: Tv, roles: WALLBOARD_ROLES },

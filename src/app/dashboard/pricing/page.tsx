@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import NextLink from 'next/link'
 import {
   AlertTriangle,
   Calculator,
   CheckCircle2,
+  ClipboardCheck,
   Clock3,
   Database,
   DollarSign,
@@ -52,7 +54,8 @@ type PricingModule = {
   title: string
   description: string
   icon: React.ElementType
-  status: ReadinessStatus | 'coming-soon'
+  status: ReadinessStatus | 'coming-soon' | 'live'
+  href?: string
 }
 
 type PricingReadinessPayload = {
@@ -114,10 +117,18 @@ const MODULES: PricingModule[] = [
     status: 'coming-soon',
   },
   {
-    title: 'Contract Import Review',
-    description: 'Upload, preview, validation, and commit steps are planned for a later milestone.',
+    title: 'Supplier Cost Imports',
+    description: 'Review staged supplier contract cost batches, approve, match items, and run the gated final publish.',
     icon: Upload,
-    status: 'coming-soon',
+    status: 'live',
+    href: '/dashboard/pricing/imports',
+  },
+  {
+    title: 'Supplier Cost Exceptions',
+    description: 'Work the exception queue for imported supplier cost rows that need review.',
+    icon: ClipboardCheck,
+    status: 'live',
+    href: '/dashboard/pricing/exceptions',
   },
   {
     title: 'Margin Calculator',
@@ -318,8 +329,15 @@ function formatDateTime(value?: string): string {
   })
 }
 
-function getStatusBadge(status: ReadinessStatus | 'coming-soon') {
+function getStatusBadge(status: ReadinessStatus | 'coming-soon' | 'live') {
   if (status === 'coming-soon') return <ComingSoonBadge />
+  if (status === 'live') {
+    return (
+      <Badge variant="outline" className="border-medship-success/30 bg-medship-success/10 text-medship-success">
+        Live
+      </Badge>
+    )
+  }
 
   const config: Record<ReadinessStatus, { label: string; className: string }> = {
     ready: {
@@ -543,20 +561,32 @@ export default function PricingPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {MODULES.map((module) => (
-            <Card key={module.title} className="shadow-sm">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.625rem] bg-medship-primary/10 text-medship-primary">
-                    <module.icon className="h-5 w-5" />
+          {MODULES.map((module) => {
+            const card = (
+              <Card
+                key={module.title}
+                className={cn('shadow-sm', module.href && 'h-full transition-colors hover:border-medship-primary/50')}
+              >
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.625rem] bg-medship-primary/10 text-medship-primary">
+                      <module.icon className="h-5 w-5" />
+                    </div>
+                    {getStatusBadge(module.status)}
                   </div>
-                  {getStatusBadge(module.status)}
-                </div>
-                <h2 className="mt-4 text-base font-semibold text-card-foreground">{module.title}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{module.description}</p>
-              </CardContent>
-            </Card>
-          ))}
+                  <h2 className="mt-4 text-base font-semibold text-card-foreground">{module.title}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{module.description}</p>
+                </CardContent>
+              </Card>
+            )
+            return module.href ? (
+              <NextLink key={module.title} href={module.href} className="block">
+                {card}
+              </NextLink>
+            ) : (
+              card
+            )
+          })}
         </div>
 
         {!hasLiveData && (

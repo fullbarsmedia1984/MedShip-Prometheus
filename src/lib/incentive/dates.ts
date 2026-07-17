@@ -5,9 +5,8 @@
 
 const CHICAGO_TZ = 'America/Chicago'
 
-/** UTC offset (minutes east of UTC, e.g. -300 for CDT) at noon UTC on the given date. */
-function chicagoOffsetMinutes(isoDate: string): number {
-  const probe = new Date(`${isoDate}T12:00:00Z`)
+/** UTC offset (minutes east of UTC, e.g. -300 for CDT) at an exact instant. */
+function chicagoOffsetMinutesAt(probe: Date): number {
   const tzName = new Intl.DateTimeFormat('en-US', {
     timeZone: CHICAGO_TZ,
     timeZoneName: 'longOffset',
@@ -22,8 +21,17 @@ function chicagoOffsetMinutes(isoDate: string): number {
 
 /** The UTC instant of midnight America/Chicago on the given YYYY-MM-DD. */
 export function chicagoMidnightUtc(isoDate: string): Date {
-  const offsetMin = chicagoOffsetMinutes(isoDate)
-  return new Date(new Date(`${isoDate}T00:00:00Z`).getTime() - offsetMin * 60_000)
+  const localClockAsUtc = new Date(`${isoDate}T00:00:00Z`).getTime()
+  // Resolve the offset at the candidate instant, not at noon. This matters on
+  // the fall-back date: Chicago midnight is still CDT even though noon is CST.
+  let candidate = localClockAsUtc
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const next =
+      localClockAsUtc - chicagoOffsetMinutesAt(new Date(candidate)) * 60_000
+    if (next === candidate) break
+    candidate = next
+  }
+  return new Date(candidate)
 }
 
 /** Exclusive end bound: midnight Chicago of the day AFTER the given date. */
