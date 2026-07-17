@@ -3,13 +3,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
-import { KpiCard } from '@/components/dashboard/KpiCard'
 import { DataTable } from '@/components/dashboard/DataTable'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
+import { InventoryAnalytics } from '@/components/inventory/InventoryAnalytics'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
-import { Package, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
 import { fetchJson } from '@/lib/client-api'
 import type { PaginatedResult, InventoryKpis } from '@/lib/data'
 import type { Product } from '@/lib/seed-data'
@@ -69,7 +68,6 @@ export default function InventoryPage() {
   })
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [result, setResult] = useState<PaginatedResult<Product> | null>(null)
-  const [kpis, setKpis] = useState<InventoryKpis | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Debounce search
@@ -93,7 +91,6 @@ export default function InventoryPage() {
       })
       const data = await fetchJson<InventoryDashboardResponse>(`/api/dashboard/inventory?${params}`)
       setResult(data.result)
-      setKpis(data.kpis)
     } finally {
       setLoading(false)
     }
@@ -186,32 +183,9 @@ export default function InventoryPage() {
     <>
       <Header title="Inventory" />
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-        {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard
-            title="Total SKUs"
-            value={kpis?.totalSkus ?? 0}
-            icon={Package}
-          />
-          <KpiCard
-            title="In Stock"
-            value={kpis?.inStock ?? 0}
-            icon={CheckCircle}
-            iconColor="text-medship-success"
-          />
-          <KpiCard
-            title="Low Stock"
-            value={kpis?.lowStock ?? 0}
-            icon={AlertTriangle}
-            iconColor="text-medship-warning"
-          />
-          <KpiCard
-            title="Out of Stock"
-            value={kpis?.outOfStock ?? 0}
-            icon={XCircle}
-            iconColor="text-medship-danger"
-          />
-        </div>
+        {/* Warehouse analytics band: stock health, committed demand,
+            shortages w/ PO coverage, inbound pipeline, outbound velocity */}
+        <InventoryAnalytics />
 
         {/* Filters bar */}
         <Card className="shadow-sm">

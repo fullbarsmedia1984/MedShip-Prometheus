@@ -40,6 +40,12 @@ MedShip Prometheus is an integration hub for Medical Shipment LLC that automates
 | P11 | Purchase Orders Cache | Cron 8a–4p every 2h Mon–Fri (Chicago) | Fishbowl → fb_purchase_orders(+items, open lines) |
 | P12 | Recent Shipments Cache | Cron every 15 min | Fishbowl ship → fb_recent_shipments |
 | P13 | Kit Assembly | — (module, not a sync) | kit_orders overlay + /dashboard/kits |
+| P14 | Receipt Facts | Cron (see receipts-sync.ts) | Fishbowl receipts → fishbowl_receipt_events |
+| P15 | Product-Part Mapping | Cron 6:30a Mon–Fri (Chicago) | Fishbowl product/part → fb_product_parts |
+
+NOTE (P15): SO lines carry PRODUCT numbers, inventory/POs carry PART numbers —
+only ~3% coincide. Any demand-vs-stock join MUST bridge through
+fb_product_parts (product_num → part_num × factor). See src/lib/inventory/.
 
 NOTE: P2 runs 8a/12p/4p Mon–Fri (Chicago) as of 2026-07-09 (was every 15 min).
 After deploying new/changed Inngest functions, re-register the app

@@ -52,6 +52,10 @@ export {
   receiptsSync,
   receiptsSyncManual,
 } from './functions/receipts-sync'
+export {
+  productPartsSync,
+  productPartsSyncManual,
+} from './functions/product-parts-sync'
 
 // Re-export client for convenience
 export { inngest } from './client'
