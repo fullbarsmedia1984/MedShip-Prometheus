@@ -34,6 +34,8 @@ import {
 } from '@/lib/hercules/catalog-browse'
 import { getWallboardData, type WallboardOrder } from '@/lib/warehouse-board/data'
 import { getReceivingData } from '@/lib/warehouse-board/receiving-data'
+import { getKitKpis, getKitWorkbench, type KitRow } from '@/lib/kits/data'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface ToolContext {
   role: AppRole
@@ -657,6 +659,147 @@ const searchCatalog: AskZeusTool = {
   },
 }
 
+function compactKitRow(row: KitRow) {
+  return {
+    soNumber: row.soNumber,
+    school: row.school,
+    status: row.status,
+    urgency: row.urgency,
+    kits: row.kits,
+    units: row.units,
+    unitsDone: row.unitsDone,
+    pctDone: row.pct,
+    poReceived: row.poReceived,
+    earliestShipBy: row.earliestShipBy,
+    latestShipBy: row.latestShipBy,
+    shippedAt: row.shippedAt,
+    turnTimeDays: row.turnTimeDays,
+    onTime: row.onTime,
+    rep: row.ops.rep,
+    tableLocation: row.ops.table_location,
+    notes: row.ops.notes,
+    backorderCount: row.backorders.length,
+    backordersNoPo: row.backordersNoPo,
+    backorders: row.backorders.slice(0, 5),
+  }
+}
+
+const getKitOrders: AskZeusTool = {
+  name: 'get_kit_orders',
+  description:
+    'Nursing-kit assembly workbench: every open kit order with school, need-by and ' +
+    'ship-by dates, assembly progress, staging table, backorders, and urgency ' +
+    '(overdue / due today / this week). view="performance" adds shipped-kit KPIs ' +
+    '(on-time %, median turn time, by rep and school). Call this for ANY question ' +
+    'about kit orders, kit assembly, kit deadlines, or kit performance.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      view: {
+        type: 'string',
+        enum: ['workbench', 'performance'],
+        description: 'workbench = open kit orders (default); performance = shipped KPIs',
+      },
+      urgency: {
+        type: 'string',
+        enum: ['overdue', 'due_today', 'this_week', 'on_track', 'no_dates', 'shipped'],
+        description: 'Filter workbench rows by urgency',
+      },
+      search: { type: 'string', description: 'SO number or school name fragment' },
+      limit: { type: 'number', description: 'Max rows (default 25, max 50)' },
+    },
+    additionalProperties: false,
+  },
+  roles: WAREHOUSE_TIER,
+  activityLabel: 'Checking kit orders…',
+  execute: async (input) => {
+    if (str(input, 'view') === 'performance') {
+      const kpis = await getKitKpis()
+      return {
+        data: {
+          windowDays: kpis.windowDays,
+          shipped: kpis.shipped,
+          onTimePct: kpis.onTimePct,
+          medianTurnDays: kpis.medianTurnDays,
+          byRep: kpis.byRep.slice(0, 15),
+          bySchool: kpis.bySchool.slice(0, 15),
+        },
+        summary: `${kpis.shipped} kits shipped in ${kpis.windowDays}d`,
+      }
+    }
+    const workbench = await getKitWorkbench()
+    const urgency = str(input, 'urgency')
+    const search = str(input, 'search')?.toLowerCase()
+    let rows = workbench.rows
+    if (urgency) rows = rows.filter((row) => row.urgency === urgency)
+    if (search) {
+      rows = rows.filter(
+        (row) =>
+          row.soNumber.toLowerCase().includes(search) ||
+          row.school.toLowerCase().includes(search)
+      )
+    }
+    const limit = limitOf(input)
+    return {
+      data: {
+        totals: workbench.totals,
+        rows: rows.slice(0, limit).map(compactKitRow),
+        totalCount: rows.length,
+        truncated: rows.length > limit,
+      },
+      summary: `${rows.length} kit order${rows.length === 1 ? '' : 's'}`,
+    }
+  },
+}
+
+const getRecentShipments: AskZeusTool = {
+  name: 'get_recent_shipments',
+  description:
+    'Shipments that left the warehouse in the last ~10 days (Fishbowl ship records: ' +
+    'ship number, sales order, ship date, carton count). Call this for questions ' +
+    'about what shipped recently or whether a specific order has shipped.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      so_number: { type: 'string', description: 'Filter to one sales order number' },
+      limit: { type: 'number', description: 'Max rows (default 25, max 50)' },
+    },
+    additionalProperties: false,
+  },
+  roles: WAREHOUSE_TIER,
+  activityLabel: 'Checking recent shipments…',
+  execute: async (input) => {
+    const supabase = createAdminClient()
+    let query = supabase
+      .from('fb_recent_shipments')
+      .select('ship_number, so_number, date_shipped, carton_count')
+      .order('date_shipped', { ascending: false })
+      .limit(limitOf(input))
+    const soNumber = str(input, 'so_number')
+    if (soNumber) query = query.eq('so_number', soNumber)
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    const rows = (data ?? []) as Array<{
+      ship_number: string
+      so_number: string
+      date_shipped: string
+      carton_count: number | null
+    }>
+    return {
+      data: {
+        rows: rows.map((row) => ({
+          shipNumber: row.ship_number,
+          soNumber: row.so_number,
+          dateShipped: row.date_shipped,
+          cartonCount: row.carton_count,
+        })),
+        note: 'Rolling ~10-day cache of outbound shipments.',
+      },
+      summary: `${rows.length} shipment${rows.length === 1 ? '' : 's'}`,
+    }
+  },
+}
+
 const REGISTRY: AskZeusTool[] = [
   searchOrders,
   getOrderDetail,
@@ -669,6 +812,8 @@ const REGISTRY: AskZeusTool[] = [
   getInventoryKpisTool,
   getWarehouseStatus,
   getReceivingStatus,
+  getKitOrders,
+  getRecentShipments,
   searchCatalog,
 ]
 

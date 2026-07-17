@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { TriangleAlert, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { FeedbackButtons } from './FeedbackButtons'
 import { Markdown } from './Markdown'
 import { ToolActivityChip } from './ToolActivityChip'
 import type { AssistantTurn, ChatTurn } from './useAskZeusChat'
@@ -38,7 +39,15 @@ function ThinkingDots() {
   )
 }
 
-function AssistantBubble({ turn }: { turn: AssistantTurn }) {
+function AssistantBubble({
+  turn,
+  conversationId,
+  question,
+}: {
+  turn: AssistantTurn
+  conversationId: string | null
+  question: string
+}) {
   const showThinking = turn.streaming && turn.thinking && !turn.text
   const showWaiting =
     turn.streaming && !turn.thinking && !turn.text && turn.activities.every((a) => a.done)
@@ -69,12 +78,25 @@ function AssistantBubble({ turn }: { turn: AssistantTurn }) {
             <span>{turn.error}</span>
           </div>
         )}
+        {!turn.streaming && turn.text && (
+          <FeedbackButtons
+            conversationId={conversationId}
+            question={question}
+            answerPreview={turn.text.slice(0, 1000)}
+          />
+        )}
       </div>
     </div>
   )
 }
 
-export function MessageList({ turns }: { turns: ChatTurn[] }) {
+export function MessageList({
+  turns,
+  conversationId,
+}: {
+  turns: ChatTurn[]
+  conversationId: string | null
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true)
 
@@ -114,7 +136,18 @@ export function MessageList({ turns }: { turns: ChatTurn[] }) {
               </div>
             </motion.div>
           ) : (
-            <AssistantBubble key={index} turn={turn} />
+            <AssistantBubble
+              key={index}
+              turn={turn}
+              conversationId={conversationId}
+              question={(() => {
+                for (let i = index - 1; i >= 0; i--) {
+                  const prev = turns[i]
+                  if (prev.kind === 'user') return prev.text
+                }
+                return ''
+              })()}
+            />
           )
         )}
       </div>

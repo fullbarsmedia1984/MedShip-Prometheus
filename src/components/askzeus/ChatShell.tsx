@@ -1,8 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { motion } from 'motion/react'
-import { History, MessageSquarePlus, Trash2, X, Zap } from 'lucide-react'
+import {
+  BookOpenCheck,
+  History,
+  MessageSquarePlus,
+  Trash2,
+  X,
+  Zap,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AppRole } from '@/lib/auth'
 import type { ConversationSummary, StoredMessage } from '@/lib/askzeus/types'
@@ -134,6 +142,15 @@ export function ChatShell({ role }: { role: AppRole }) {
         </button>
       </div>
       <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+        {(role === 'superadmin' || role === 'admin') && (
+          <Link
+            href="/dashboard/settings/askzeus"
+            className="mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <BookOpenCheck className="h-3.5 w-3.5" />
+            Teach AskZeus
+          </Link>
+        )}
         {conversations.length === 0 && (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
             No conversations yet
@@ -205,7 +222,7 @@ export function ChatShell({ role }: { role: AppRole }) {
         {chat.turns.length === 0 ? (
           <EmptyState role={role} onPick={(prompt) => void chat.send(prompt)} />
         ) : (
-          <MessageList turns={chat.turns} />
+          <MessageList turns={chat.turns} conversationId={chat.conversationId} />
         )}
 
         <Composer
