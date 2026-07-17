@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chicagoTodayIso } from '@/lib/business-days'
+import { loadProductPartMap, toPartUnits } from '@/lib/inventory/product-parts'
 import { isKitOrderNumber } from '@/lib/kits/order-number'
 import { shipDeadline, workdaysBetween } from '@/lib/kits/workdays'
 
@@ -302,6 +303,22 @@ export async function getWallboardData(): Promise<WallboardData> {
         list.push({ part: String(row.part_number), remaining: q - f })
         openSaleLines.set(key, list)
       }
+    }
+  }
+
+  // SO lines are keyed by PRODUCT number (selling SKU); inventory_snapshot
+  // and fb_open_po_lines are keyed by PART number (stocked SKU). Bridge
+  // through fb_product_parts (P15) and convert quantities to part eaches
+  // before any stock/PO comparison.
+  const productMap = await loadProductPartMap(
+    supabase,
+    [...openSaleLines.values()].flat().map((l) => l.part)
+  )
+  for (const lines of openSaleLines.values()) {
+    for (const line of lines) {
+      const mapped = toPartUnits(productMap, line.part, line.remaining)
+      line.part = mapped.part
+      line.remaining = mapped.units
     }
   }
 
