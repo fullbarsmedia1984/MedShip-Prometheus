@@ -29,6 +29,89 @@ function fmtDate(iso: string | null): string {
   return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
 }
 
+type SortKey =
+  | 'status'
+  | 'so'
+  | 'school'
+  | 'rep'
+  | 'kits'
+  | 'lines'
+  | 'picked'
+  | 'needByE'
+  | 'needByA'
+  | 'transit'
+  | 'shipWindow'
+  | 'table'
+  | 'kitList'
+  | 'subKits'
+  | 'backorders'
+
+type SortState = { key: SortKey; dir: 1 | -1 } | null
+
+// null/blank values always sort to the bottom regardless of direction.
+const SORT_VALUE: Record<SortKey, (r: KitRow) => string | number | null> = {
+  status: (r) => URGENCY_META[r.urgency].rank,
+  so: (r) => r.soNumber,
+  school: (r) => r.school.toLowerCase(),
+  rep: (r) => r.ops.rep?.trim().toLowerCase() || null,
+  kits: (r) => r.kits,
+  lines: (r) => r.lineItems,
+  picked: (r) => r.pct,
+  needByE: (r) => r.ops.earliest_need_by,
+  needByA: (r) => r.ops.absolute_need_by,
+  transit: (r) => r.ops.transit_days,
+  shipWindow: (r) => r.latestShipBy,
+  table: (r) => r.ops.table_location?.trim().toLowerCase() || null,
+  kitList: (r) => (r.ops.kit_list_printed ? 0 : 1),
+  subKits: (r) => r.ops.sub_kit_status,
+  // no-PO lines outrank total count so the riskiest kits float first
+  backorders: (r) => r.backordersNoPo * 10000 + r.backorders.length,
+}
+
+function compareRows(a: KitRow, b: KitRow, sort: NonNullable<SortState>): number {
+  const va = SORT_VALUE[sort.key](a)
+  const vb = SORT_VALUE[sort.key](b)
+  if (va === null && vb === null) return 0
+  if (va === null) return 1
+  if (vb === null) return -1
+  if (va < vb) return -1 * sort.dir
+  if (va > vb) return 1 * sort.dir
+  return 0
+}
+
+function SortableTh({
+  label,
+  k,
+  sort,
+  onSort,
+  className = 'px-2 py-2',
+}: {
+  label: string
+  k: SortKey
+  sort: SortState
+  onSort: (k: SortKey) => void
+  className?: string
+}) {
+  const active = sort?.key === k
+  return (
+    <th className={className}>
+      <button
+        onClick={() => onSort(k)}
+        className={`inline-flex items-center gap-0.5 uppercase tracking-wide transition-colors hover:text-foreground ${
+          active ? 'text-foreground' : ''
+        }`}
+        title="Sort"
+        data-testid={`kits-sort-${k}`}
+      >
+        {label}
+        <span className="w-2 text-[9px]">
+          {active && sort ? (sort.dir === 1 ? '▲' : '▼') : ''}
+        </span>
+      </button>
+    </th>
+  )
+}
+
 export function KitsWorkbench({
   initial,
   kpis,
@@ -52,17 +135,60 @@ export function KitsWorkbench({
   const [importPreview, setImportPreview] = useState<KitImportPreview | null>(null)
   const [importBusy, setImportBusy] = useState(false)
   const [savingSo, setSavingSo] = useState<string | null>(null)
+  const [sort, setSort] = useState<SortState>(null)
+  const [urgencyFilter, setUrgencyFilter] = useState('')
+  const [repFilter, setRepFilter] = useState('')
+  const [boFilter, setBoFilter] = useState('')
+  const [subKitFilter, setSubKitFilter] = useState('')
+  const [kitListFilter, setKitListFilter] = useState('')
 
   // keep server-refreshed data flowing in
   useEffect(() => setRows(initial.rows), [initial.generatedAt, initial.rows])
 
-  const visible = rows.filter(
-    (r) =>
-      (showShipped || r.status !== 'shipped') &&
-      (!filter ||
-        r.soNumber.toLowerCase().includes(filter.toLowerCase()) ||
-        r.school.toLowerCase().includes(filter.toLowerCase()))
-  )
+  // asc → desc → back to the default urgency ordering
+  function cycleSort(key: SortKey) {
+    setSort((prev) =>
+      prev?.key !== key ? { key, dir: 1 } : prev.dir === 1 ? { key, dir: -1 } : null
+    )
+  }
+
+  const reps = [
+    ...new Set(
+      rows
+        .map((r) => r.ops.rep?.trim().toUpperCase())
+        .filter((v): v is string => Boolean(v))
+    ),
+  ].sort()
+
+  const anyFilter =
+    urgencyFilter || repFilter || boFilter || subKitFilter || kitListFilter
+
+  const visible = rows.filter((r) => {
+    // an explicit "Shipped" status filter overrides the hide-shipped default
+    if (urgencyFilter) {
+      if (r.urgency !== urgencyFilter) return false
+    } else if (!showShipped && r.status === 'shipped') return false
+    if (
+      filter &&
+      !r.soNumber.toLowerCase().includes(filter.toLowerCase()) &&
+      !r.school.toLowerCase().includes(filter.toLowerCase())
+    )
+      return false
+    if (repFilter === '(none)') {
+      if (r.ops.rep?.trim()) return false
+    } else if (repFilter && r.ops.rep?.trim().toUpperCase() !== repFilter)
+      return false
+    if (boFilter === 'any' && r.backorders.length === 0) return false
+    if (boFilter === 'nopo' && r.backordersNoPo === 0) return false
+    if (boFilter === 'clear' && r.backorders.length > 0) return false
+    if (subKitFilter === '(none)') {
+      if (r.ops.sub_kit_status) return false
+    } else if (subKitFilter && r.ops.sub_kit_status !== subKitFilter) return false
+    if (kitListFilter === 'printed' && !r.ops.kit_list_printed) return false
+    if (kitListFilter === 'not_printed' && r.ops.kit_list_printed) return false
+    return true
+  })
+  const sorted = sort ? [...visible].sort((a, b) => compareRows(a, b, sort)) : visible
 
   async function patch(soNumber: string, body: Record<string, unknown>) {
     setSavingSo(soNumber)
@@ -187,6 +313,91 @@ export function KitsWorkbench({
       {tab === 'performance' && <PerformanceTab kpis={kpis} />}
       {tab === 'backorders' && <BackordersTab rows={rows} />}
 
+      {/* column filters */}
+      <div
+        className={`mb-3 flex flex-wrap items-center gap-2 text-sm ${
+          tab !== 'workbench' ? 'hidden' : ''
+        }`}
+      >
+        <select
+          value={urgencyFilter}
+          onChange={(e) => setUrgencyFilter(e.target.value)}
+          className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+          data-testid="kits-filter-status"
+        >
+          <option value="">Status: all</option>
+          {(Object.keys(URGENCY_META) as KitUrgency[]).map((u) => (
+            <option key={u} value={u}>
+              {URGENCY_META[u].label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={repFilter}
+          onChange={(e) => setRepFilter(e.target.value)}
+          className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+          data-testid="kits-filter-rep"
+        >
+          <option value="">Rep: all</option>
+          {reps.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+          <option value="(none)">(none)</option>
+        </select>
+        <select
+          value={boFilter}
+          onChange={(e) => setBoFilter(e.target.value)}
+          className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+          data-testid="kits-filter-bo"
+        >
+          <option value="">Backorders: all</option>
+          <option value="any">Has backorders</option>
+          <option value="nopo">No-PO backorders</option>
+          <option value="clear">Clear</option>
+        </select>
+        <select
+          value={subKitFilter}
+          onChange={(e) => setSubKitFilter(e.target.value)}
+          className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+          data-testid="kits-filter-subkit"
+        >
+          <option value="">Sub kits: all</option>
+          <option value="received">Received</option>
+          <option value="pack_as_needed">Pack as needed</option>
+          <option value="(none)">(not set)</option>
+        </select>
+        <select
+          value={kitListFilter}
+          onChange={(e) => setKitListFilter(e.target.value)}
+          className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+          data-testid="kits-filter-kitlist"
+        >
+          <option value="">Kit list: all</option>
+          <option value="printed">Printed</option>
+          <option value="not_printed">Not printed</option>
+        </select>
+        {anyFilter ? (
+          <button
+            onClick={() => {
+              setUrgencyFilter('')
+              setRepFilter('')
+              setBoFilter('')
+              setSubKitFilter('')
+              setKitListFilter('')
+            }}
+            className="text-xs font-medium text-primary hover:underline"
+            data-testid="kits-filter-clear"
+          >
+            Clear filters
+          </button>
+        ) : null}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {visible.length} of {rows.length} kits
+        </span>
+      </div>
+
       {/* totals */}
       <div className={`mb-4 flex flex-wrap gap-2 ${tab !== 'workbench' ? 'hidden' : ''}`}>
         {[
@@ -217,25 +428,25 @@ export function KitsWorkbench({
         <table className="w-full min-w-[1180px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Order #</th>
-              <th className="px-3 py-2">School</th>
-              <th className="px-2 py-2">Rep</th>
-              <th className="px-2 py-2 text-right">Kits</th>
-              <th className="px-2 py-2 text-right">Lines</th>
-              <th className="px-2 py-2">Picked</th>
-              <th className="px-2 py-2">Need-by (E)</th>
-              <th className="px-2 py-2">Need-by (A)</th>
-              <th className="px-2 py-2 text-right">Transit</th>
-              <th className="px-2 py-2">Ship window</th>
-              <th className="px-2 py-2">Table</th>
-              <th className="px-2 py-2 text-center">Kit list</th>
-              <th className="px-2 py-2">Sub kits</th>
-              <th className="px-2 py-2">Backorders</th>
+              <SortableTh label="Status" k="status" sort={sort} onSort={cycleSort} className="px-3 py-2" />
+              <SortableTh label="Order #" k="so" sort={sort} onSort={cycleSort} className="px-3 py-2" />
+              <SortableTh label="School" k="school" sort={sort} onSort={cycleSort} className="px-3 py-2" />
+              <SortableTh label="Rep" k="rep" sort={sort} onSort={cycleSort} />
+              <SortableTh label="Kits" k="kits" sort={sort} onSort={cycleSort} className="px-2 py-2 text-right" />
+              <SortableTh label="Lines" k="lines" sort={sort} onSort={cycleSort} className="px-2 py-2 text-right" />
+              <SortableTh label="Picked" k="picked" sort={sort} onSort={cycleSort} />
+              <SortableTh label="Need-by (E)" k="needByE" sort={sort} onSort={cycleSort} />
+              <SortableTh label="Need-by (A)" k="needByA" sort={sort} onSort={cycleSort} />
+              <SortableTh label="Transit" k="transit" sort={sort} onSort={cycleSort} className="px-2 py-2 text-right" />
+              <SortableTh label="Ship window" k="shipWindow" sort={sort} onSort={cycleSort} />
+              <SortableTh label="Table" k="table" sort={sort} onSort={cycleSort} />
+              <SortableTh label="Kit list" k="kitList" sort={sort} onSort={cycleSort} className="px-2 py-2 text-center" />
+              <SortableTh label="Sub kits" k="subKits" sort={sort} onSort={cycleSort} />
+              <SortableTh label="Backorders" k="backorders" sort={sort} onSort={cycleSort} />
             </tr>
           </thead>
           <tbody>
-            {visible.map((r) => {
+            {sorted.map((r) => {
               const u = URGENCY_META[r.urgency]
               const isOpen = expanded === r.soNumber
               return (
