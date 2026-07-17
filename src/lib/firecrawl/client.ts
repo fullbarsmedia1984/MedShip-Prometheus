@@ -157,23 +157,28 @@ export class FirecrawlClient {
 
   /** Discover URLs on a domain. ~1 credit per call. */
   async map(url: string, options: FirecrawlMapOptions = {}): Promise<FirecrawlMapResult> {
-    const data = await this.post('/map', {
+    const envelope = await this.post('/map', {
       url,
       ...(options.limit !== undefined ? { limit: options.limit } : {}),
       ...(options.sitemap ? { sitemap: options.sitemap } : {}),
       ...(options.search ? { search: options.search } : {}),
     })
-    return { links: normalizeMapLinks(isRecord(data) ? data.links : undefined) }
+    // v2 returns links at the top level; tolerate a nested `data.links` too.
+    const links = isRecord(envelope)
+      ? envelope.links ?? (isRecord(envelope.data) ? envelope.data.links : undefined)
+      : undefined
+    return { links: normalizeMapLinks(links) }
   }
 
   /** Scrape one page. 1 credit for plain formats like rawHtml. */
   async scrape(url: string, options: FirecrawlScrapeOptions = {}): Promise<FirecrawlScrapeResult> {
-    const data = await this.post('/scrape', {
+    const envelope = await this.post('/scrape', {
       url,
       formats: options.formats ?? ['rawHtml'],
       onlyMainContent: options.onlyMainContent ?? false,
       ...(options.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
     })
+    const data = isRecord(envelope) ? envelope.data : undefined
     if (!isRecord(data)) {
       throw new FirecrawlResponseValidationError('Firecrawl scrape returned no data object')
     }
@@ -187,11 +192,12 @@ export class FirecrawlClient {
 
   /** Web/image search. 2 credits per 10 results per source. */
   async search(query: string, options: FirecrawlSearchOptions = {}): Promise<FirecrawlSearchResult> {
-    const data = await this.post('/search', {
+    const envelope = await this.post('/search', {
       query,
       ...(options.limit !== undefined ? { limit: options.limit } : {}),
       ...(options.sources ? { sources: options.sources.map((type) => ({ type })) } : {}),
     })
+    const data = isRecord(envelope) ? envelope.data : undefined
     if (!isRecord(data)) {
       throw new FirecrawlResponseValidationError('Firecrawl search returned no data object')
     }
@@ -257,7 +263,10 @@ export class FirecrawlClient {
         throw new FirecrawlResponseValidationError(message)
       }
 
-      return parsed.data
+      // Return the whole envelope: v2 nests scrape/search payloads under
+      // `data`, but /map puts `links` at the top level. Each method picks
+      // the field it needs.
+      return parsed
     } finally {
       clearTimeout(timeout)
     }
