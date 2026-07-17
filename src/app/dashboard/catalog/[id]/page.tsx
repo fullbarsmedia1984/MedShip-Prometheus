@@ -84,7 +84,7 @@ export default function CatalogItemDetailPage({
     <div className="flex h-full flex-col">
       <Header title="Supplier Catalog" />
 
-      <main className="flex-1 space-y-6 overflow-y-auto p-6">
+      <main className="flex-1 space-y-6 overflow-y-auto p-4 md:p-6">
         <Link
           href="/dashboard/catalog"
           className="inline-flex items-center gap-1.5 text-sm text-medship-primary hover:underline"

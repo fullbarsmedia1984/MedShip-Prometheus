@@ -31,7 +31,7 @@ export function WinBackTracker({ count, revenue, orders }: WinBackTrackerProps) 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between gap-2.5 text-base">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2.5 text-base">
           <span className="flex items-center gap-2.5">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-warning/10">
               <RotateCcw className="h-4 w-4 text-medship-warning" />

@@ -123,7 +123,7 @@ export function KitsWorkbench({
   const t = initial.totals
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Kit Assembly</h1>
@@ -132,12 +132,12 @@ export function KitsWorkbench({
             Ship-by = need-by minus transit (workdays).
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter SO / school…"
-            className="h-9 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+            className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-primary sm:w-48"
             data-testid="kits-filter"
           />
           <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -161,7 +161,7 @@ export function KitsWorkbench({
       </div>
 
       {/* tabs */}
-      <div className="mb-4 flex gap-1 border-b border-border">
+      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border">
         {(
           [
             ['workbench', 'Workbench'],

@@ -105,11 +105,11 @@ export function FeedbackButtons({
             maxLength={1000}
             autoFocus
             placeholder="What was wrong? (optional)"
-            className="w-64 rounded-md border border-border bg-card px-2 py-1 text-xs outline-none placeholder:text-muted-foreground focus:border-medship-primary/60"
+            className="w-full min-w-0 max-w-64 flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs outline-none placeholder:text-muted-foreground focus:border-medship-primary/60"
           />
           <button
             type="submit"
-            className="rounded-md bg-medship-primary px-2 py-1 text-xs font-medium text-white hover:opacity-90"
+            className="shrink-0 rounded-md bg-medship-primary px-2 py-1 text-xs font-medium text-white hover:opacity-90"
           >
             Send
           </button>

@@ -144,8 +144,8 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
   ]
 
   return (
-    <main className="mx-auto max-w-3xl p-8 print:p-0">
-      <div className="mb-6 flex items-center justify-between print:hidden">
+    <main className="mx-auto max-w-3xl p-4 sm:p-8 print:p-0">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 print:hidden">
         <p className="text-sm text-muted-foreground">
           Review, then Print / Save as PDF. This statement is not sent to the rep automatically.
         </p>
@@ -159,7 +159,7 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
       </div>
 
       <header className="border-b-2 border-slate-900 pb-4">
-        <div className="flex items-end justify-between">
+        <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Commission Statement</h1>
             <p className="mt-1 text-sm text-slate-600">MedShip — Q3 New-Customer Incentive Program</p>
@@ -169,7 +169,7 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
             <p className="text-slate-600">{monthLabel(month)}</p>
           </div>
         </div>
-        <div className="mt-3 flex gap-2 text-xs">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
           {frozen ? (
             <span className="rounded border border-emerald-600 px-2 py-0.5 font-semibold text-emerald-700">
               FROZEN {new Date(frozen.frozen_at).toLocaleDateString('en-US')} — final payout figures
@@ -189,6 +189,7 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
 
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Revenue &amp; Commission</h2>
+        <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-slate-300 text-left text-xs uppercase text-slate-500">
@@ -220,6 +221,7 @@ export function StatementClient({ repKey, month }: { repKey: string | null; mont
             )}
           </tbody>
         </table>
+        </div>
       </section>
 
       <section className="mt-6 rounded border border-slate-300 p-4">
