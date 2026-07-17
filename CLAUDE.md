@@ -42,6 +42,9 @@ MedShip Prometheus is an integration hub for Medical Shipment LLC that automates
 | P13 | Kit Assembly | — (module, not a sync) | kit_orders overlay + /dashboard/kits |
 | P14 | Receipt Facts | Cron (see receipts-sync.ts) | Fishbowl receipts → fishbowl_receipt_events |
 | P15 | Product-Part Mapping | Cron 6:30a Mon–Fri (Chicago) | Fishbowl product/part → fb_product_parts |
+| P16 | Competitor Catalog Crawl | Cron weekly Sun 4a UTC | pocketnurse/diamedical → competitor_products(+price points, item links) |
+| P17 | Catalog Image Mirror | Cron daily 5a UTC | image URLs → Supabase Storage catalog-images + catalog_item_images |
+| P18 | Image Search Sweep | Cron daily 7a UTC (Firecrawl budget-capped) | Firecrawl search → catalog_item_images |
 
 NOTE (P15): SO lines carry PRODUCT numbers, inventory/POs carry PART numbers —
 only ~3% coincide. Any demand-vs-stock join MUST bridge through

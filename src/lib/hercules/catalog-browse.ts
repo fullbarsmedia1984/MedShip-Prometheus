@@ -100,6 +100,24 @@ export type CatalogOfferDetail = {
   uoms: CatalogUomDetail[]
 }
 
+export type CatalogStoredImage = {
+  url: string
+  source: string
+  isPrimary: boolean
+}
+
+export type CatalogCompetitorPrice = {
+  competitor: string
+  url: string
+  title: string | null
+  listPriceAmount: number | null
+  currency: string
+  priceStatus: string
+  lastScrapedAt: string | null
+  matchMethod: string
+  matchConfidence: number | null
+}
+
 export type CatalogItemDetail = {
   id: string
   herculesItemId: string
@@ -115,6 +133,10 @@ export type CatalogItemDetail = {
   countryOfOrigin: string | null
   status: string | null
   imageUrls: string[]
+  /** Images mirrored into the catalog-images Storage bucket (P16/P17). */
+  storedImages: CatalogStoredImage[]
+  /** Competitor price book rows (P15); null once stripped for the role. */
+  competitorPrices: CatalogCompetitorPrice[] | null
   createdAt: string | null
   updatedAt: string | null
   rawPayload: JsonObject
@@ -208,6 +230,7 @@ export function stripSearchPrices(result: CatalogSearchResult): CatalogSearchRes
 export function stripDetailPrices(detail: CatalogItemDetail): CatalogItemDetail {
   return {
     ...detail,
+    competitorPrices: null,
     offers: detail.offers.map((offer) => ({
       ...offer,
       uoms: offer.uoms.map((uom) => ({
@@ -265,6 +288,13 @@ export async function getCatalogItemDetail(
     ? (row.hercules_vendor_offers as DbRow[])
     : []
 
+  // Enrichment reads are separate queries so a failure there never
+  // breaks the core detail view.
+  const [storedImages, competitorPrices] = await Promise.all([
+    getStoredImages(supabase, id),
+    getCompetitorPrices(supabase, id),
+  ])
+
   return {
     id: String(row.id),
     herculesItemId: String(row.hercules_item_id),
@@ -280,6 +310,8 @@ export async function getCatalogItemDetail(
     countryOfOrigin: textOrNull(row.country_of_origin),
     status: textOrNull(row.status),
     imageUrls: Array.isArray(row.image_urls_json) ? (row.image_urls_json as string[]) : [],
+    storedImages,
+    competitorPrices,
     createdAt: textOrNull(row.created_at),
     updatedAt: textOrNull(row.updated_at),
     rawPayload: (row.raw_payload as JsonObject | null) ?? {},
@@ -324,6 +356,71 @@ export async function getCatalogItemDetail(
         })),
       }
     }),
+  }
+}
+
+async function getStoredImages(
+  supabase: ReturnType<typeof createAdminClient>,
+  itemId: string
+): Promise<CatalogStoredImage[]> {
+  try {
+    const { data, error } = await supabase
+      .from('catalog_item_images')
+      .select('storage_path, source, is_primary')
+      .eq('hercules_catalog_item_id', itemId)
+      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(6)
+    assertNoError(error)
+
+    return ((data ?? []) as DbRow[]).map((row) => ({
+      // getPublicUrl is a pure string concat; no network round-trip.
+      url: supabase.storage.from('catalog-images').getPublicUrl(String(row.storage_path)).data
+        .publicUrl,
+      source: String(row.source),
+      isPrimary: Boolean(row.is_primary),
+    }))
+  } catch (error) {
+    console.error('stored image lookup failed:', error)
+    return []
+  }
+}
+
+async function getCompetitorPrices(
+  supabase: ReturnType<typeof createAdminClient>,
+  itemId: string
+): Promise<CatalogCompetitorPrice[]> {
+  try {
+    const { data, error } = await supabase
+      .from('catalog_item_competitor_links')
+      .select(
+        'match_method, match_confidence, competitor_products(competitor, url, title, list_price_amount, currency, price_status, last_scraped_at)'
+      )
+      .eq('hercules_catalog_item_id', itemId)
+      .eq('status', 'active')
+      .limit(10)
+    assertNoError(error)
+
+    const prices: CatalogCompetitorPrice[] = []
+    for (const row of (data ?? []) as DbRow[]) {
+      const product = row.competitor_products as DbRow | null
+      if (!product) continue
+      prices.push({
+        competitor: String(product.competitor),
+        url: String(product.url),
+        title: textOrNull(product.title),
+        listPriceAmount: numberOrNull(product.list_price_amount),
+        currency: textOrNull(product.currency) ?? 'USD',
+        priceStatus: textOrNull(product.price_status) ?? 'unknown',
+        lastScrapedAt: textOrNull(product.last_scraped_at),
+        matchMethod: String(row.match_method),
+        matchConfidence: numberOrNull(row.match_confidence),
+      })
+    }
+    return prices
+  } catch (error) {
+    console.error('competitor price lookup failed:', error)
+    return []
   }
 }
 
