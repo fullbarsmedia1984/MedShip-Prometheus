@@ -1,5 +1,5 @@
 import 'server-only'
-import { getFishbowlClient } from '@/lib/fishbowl/client'
+import type { FishbowlClient } from '@/lib/fishbowl/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // Rolling shipments cache for the wallboard's Shipped lane. A shipment
@@ -22,8 +22,10 @@ type ShipRow = {
   cartonCount: number | null
 }
 
-export async function syncRecentShipments(): Promise<number> {
-  const client = getFishbowlClient()
+// Callers own the Fishbowl session (withFishbowlSession) so every login is
+// paired with a logout — an unclosed session holds a Fishbowl license seat
+// until the server-side timeout.
+export async function syncRecentShipments(client: FishbowlClient): Promise<number> {
   const rows = await client.dataQuery<ShipRow[]>(RECENT_SHIPMENTS_SQL)
   if (!Array.isArray(rows)) return 0
 

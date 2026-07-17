@@ -8,6 +8,8 @@ type FishbowlAutomation =
   | 'P1_OPP_TO_SO'
   | 'P2_INVENTORY_SYNC'
   | 'P7_FB_SO_SYNC'
+  | 'P11_PO_SYNC'
+  | 'P12_SHIPMENTS_SYNC'
 
 type FishbowlSessionOptions = {
   automation: FishbowlAutomation

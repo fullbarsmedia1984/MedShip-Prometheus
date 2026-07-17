@@ -1,5 +1,31 @@
 import { inngest } from '../client'
+import {
+  FishbowlPriorityYieldError,
+  FishbowlSessionLockError,
+  withFishbowlSession,
+} from '@/lib/fishbowl/session'
 import { syncRecentShipments } from '@/lib/warehouse-board/shipments-sync'
+
+// One Fishbowl session per run, logged out in the session helper's finally —
+// an unclosed session holds a license seat until Fishbowl's server-side
+// timeout. Skips quietly when another automation holds the session lock;
+// the next 15-minute tick catches up.
+async function runShipmentsSync() {
+  try {
+    return await withFishbowlSession(
+      { automation: 'P12_SHIPMENTS_SYNC', sourceSystem: 'fishbowl', targetSystem: 'prometheus' },
+      async (client) => ({ shipments: await syncRecentShipments(client), skipped: false })
+    )
+  } catch (error) {
+    if (
+      error instanceof FishbowlSessionLockError ||
+      error instanceof FishbowlPriorityYieldError
+    ) {
+      return { skipped: true, reason: error.message }
+    }
+    throw error
+  }
+}
 
 /**
  * P12: Fishbowl Shipments -> Supabase (rolling 10-day cache)
@@ -17,9 +43,7 @@ export const shipmentsCacheSync = inngest.createFunction(
     triggers: [{ cron: '7,22,37,52 * * * *' }],
   },
   async ({ step }) => {
-    return step.run('run-shipments-sync', async () => ({
-      shipments: await syncRecentShipments(),
-    }))
+    return step.run('run-shipments-sync', () => runShipmentsSync())
   }
 )
 
@@ -34,8 +58,6 @@ export const shipmentsCacheSyncManual = inngest.createFunction(
     triggers: [{ event: 'fishbowl/shipments.sync' }],
   },
   async ({ step }) => {
-    return step.run('run-shipments-sync-manual', async () => ({
-      shipments: await syncRecentShipments(),
-    }))
+    return step.run('run-shipments-sync-manual', () => runShipmentsSync())
   }
 )
