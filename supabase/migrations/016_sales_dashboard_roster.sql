@@ -27,6 +27,7 @@ SET show_on_sales_dashboard = true,
       WHEN 'Samantha' THEN 31
       WHEN 'svasic' THEN 40
       WHEN 'Leo' THEN 50
+      WHEN 'kdedvukaj' THEN 60
       ELSE dashboard_sort_order
     END
-WHERE fishbowl_salesperson IN ('MikeF', 'dtorres', 'selliott', 'Samantha', 'svasic', 'Leo');
+WHERE fishbowl_salesperson IN ('MikeF', 'dtorres', 'selliott', 'Samantha', 'svasic', 'Leo', 'kdedvukaj');
