@@ -65,3 +65,23 @@ export type FirecrawlSearchOptions = {
   limit?: number
   sources?: Array<'web' | 'images'>
 }
+
+export type FirecrawlCrawlOptions = {
+  /** Hard cap on pages crawled (each costs ~1 credit). */
+  limit?: number
+  /** Glob/regex path patterns to include (Firecrawl `includePaths`). */
+  includePaths?: string[]
+  excludePaths?: string[]
+  /** Formats for each crawled page; default ['rawHtml']. */
+  formats?: Array<'rawHtml' | 'markdown' | 'links'>
+}
+
+export type FirecrawlCrawlStatus = {
+  status: 'scraping' | 'completed' | 'failed' | 'cancelled'
+  total: number
+  completed: number
+  creditsUsed: number
+  /** Pagination cursor URL for the next page of results, if any. */
+  next: string | null
+  data: FirecrawlScrapeResult[]
+}

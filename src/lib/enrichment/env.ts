@@ -29,6 +29,8 @@ export type EnrichmentEnvConfig = {
   imageTimeoutMs: number
   /** Items handled per P17 step. */
   searchItemsPerStep: number
+  /** Max pages Firecrawl /crawl will fetch for Pocket Nurse (1 credit each). */
+  pocketnurseCrawlLimit: number
 }
 
 function intFromEnv(name: string, fallback: number, min: number, max: number) {
@@ -77,5 +79,6 @@ export function getEnrichmentConfig(): EnrichmentEnvConfig {
     imageMaxBytes: intFromEnv('ENRICHMENT_IMAGE_MAX_BYTES', 5_242_880, 1_024, 5_242_880),
     imageTimeoutMs: intFromEnv('ENRICHMENT_IMAGE_TIMEOUT_MS', 15_000, 1_000, 120_000),
     searchItemsPerStep: intFromEnv('ENRICHMENT_SEARCH_ITEMS_PER_STEP', 25, 1, 500),
+    pocketnurseCrawlLimit: intFromEnv('ENRICHMENT_POCKETNURSE_CRAWL_LIMIT', 5_000, 1, 50_000),
   }
 }

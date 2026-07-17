@@ -143,6 +143,7 @@ export const competitorCrawl = inngest.createFunction(
           runId: start.runId,
           maxUrls: config.crawlUrlsPerStep,
           dailyCreditBudget: config.crawlDailyCreditBudget,
+          pocketnurseCrawlLimit: config.pocketnurseCrawlLimit,
         })
       )
 
