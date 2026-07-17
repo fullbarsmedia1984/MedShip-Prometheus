@@ -40,6 +40,9 @@ MedShip Prometheus is an integration hub for Medical Shipment LLC that automates
 | P11 | Purchase Orders Cache | Cron 8a–4p every 2h Mon–Fri (Chicago) | Fishbowl → fb_purchase_orders(+items, open lines) |
 | P12 | Recent Shipments Cache | Cron every 15 min | Fishbowl ship → fb_recent_shipments |
 | P13 | Kit Assembly | — (module, not a sync) | kit_orders overlay + /dashboard/kits |
+| P15 | Competitor Catalog Crawl | Cron weekly Sun 4a UTC | pocketnurse/diamedical → competitor_products(+price points, item links) |
+| P16 | Catalog Image Mirror | Cron daily 5a UTC | image URLs → Supabase Storage catalog-images + catalog_item_images |
+| P17 | Image Search Sweep | Cron daily 7a UTC (Firecrawl budget-capped) | Firecrawl search → catalog_item_images |
 
 NOTE: P2 runs 8a/12p/4p Mon–Fri (Chicago) as of 2026-07-09 (was every 15 min).
 After deploying new/changed Inngest functions, re-register the app

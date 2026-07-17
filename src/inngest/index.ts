@@ -52,6 +52,18 @@ export {
   receiptsSync,
   receiptsSyncManual,
 } from './functions/receipts-sync'
+export {
+  competitorCrawl,
+  competitorCrawlCron,
+} from './functions/competitor-crawl'
+export {
+  catalogImageMirror,
+  catalogImageMirrorCron,
+} from './functions/catalog-image-mirror'
+export {
+  imageSearchSweep,
+  imageSearchSweepCron,
+} from './functions/image-search-sweep'
 
 // Re-export client for convenience
 export { inngest } from './client'
