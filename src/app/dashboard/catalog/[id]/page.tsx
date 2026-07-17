@@ -185,13 +185,15 @@ export default function CatalogItemDetailPage({
                 </CardContent>
               </Card>
 
-              {detail.imageUrls.length > 0 && (
+              {(detail.storedImages.length > 0 || detail.imageUrls.length > 0) && (
                 <Card className="lg:w-72">
                   <CardContent className="flex items-center justify-center p-4">
+                    {/* Prefer our mirrored copy (Supabase Storage);
+                        hotlink the source only until P16 catches up. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={detail.imageUrls[0]}
-                      alt={detail.description ?? 'Catalog item'}
+                      src={detail.storedImages[0]?.url ?? detail.imageUrls[0]}
+                      alt={detail.brand ?? detail.description ?? 'Catalog item'}
                       className="max-h-56 rounded-md object-contain"
                     />
                   </CardContent>
@@ -323,6 +325,72 @@ export default function CatalogItemDetailPage({
                 ))
               )}
             </div>
+
+            {canSeePrices && detail.competitorPrices && detail.competitorPrices.length > 0 && (
+              <div className="space-y-4">
+                <h2 className="text-base font-semibold">
+                  Competitor Prices{' '}
+                  <span className="font-normal text-muted-foreground">
+                    ({detail.competitorPrices.length})
+                  </span>
+                </h2>
+                <Card>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Competitor</TableHead>
+                          <TableHead>Product</TableHead>
+                          <TableHead className="text-right">List Price</TableHead>
+                          <TableHead>Match</TableHead>
+                          <TableHead>Last Checked</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detail.competitorPrices.map((price) => (
+                          <TableRow key={`${price.competitor}-${price.url}`}>
+                            <TableCell className="text-sm capitalize">
+                              {price.competitor}
+                            </TableCell>
+                            <TableCell className="max-w-[22rem] text-sm">
+                              <a
+                                href={price.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="line-clamp-2 text-medship-primary hover:underline"
+                              >
+                                {price.title ?? price.url}
+                              </a>
+                            </TableCell>
+                            <TableCell className="text-right text-sm tabular-nums">
+                              {price.listPriceAmount !== null ? (
+                                money(price.listPriceAmount, price.currency)
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {price.priceStatus === 'quote_only'
+                                    ? 'quote only'
+                                    : price.priceStatus}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {price.matchMethod.replace(/_/g, ' ')}
+                              {price.matchConfidence !== null &&
+                                ` · ${Math.round(price.matchConfidence * 100)}%`}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {price.lastScrapedAt
+                                ? new Date(price.lastScrapedAt).toLocaleDateString('en-US')
+                                : '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {canSeePrices && (
             <Card>
