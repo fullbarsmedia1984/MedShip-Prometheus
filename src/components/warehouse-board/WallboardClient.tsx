@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { motion } from 'motion/react'
 import type {
@@ -12,7 +13,23 @@ import type {
 import type { KitGalaxyData } from '@/lib/warehouse-board/galaxy-data'
 import type { ReceivingData } from '@/lib/warehouse-board/receiving-data'
 import type { ReceivingOrder } from '@/lib/warehouse-board/receiving-rules'
-import { KitGalaxy } from './KitGalaxy'
+
+// KitGalaxy pulls in the whole `three` stack — load it only when the galaxy
+// view is actually rendered, with a placeholder matching its root container
+// so the board layout doesn't jump while the chunk streams in.
+const KitGalaxy = dynamic(
+  () => import('./KitGalaxy').then((mod) => mod.KitGalaxy),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-[#070D1B]">
+        <div className="flex h-full min-h-[60vh] items-center justify-center font-mono text-[13px] text-slate-400">
+          Loading Kit Galaxy…
+        </div>
+      </div>
+    ),
+  }
+)
 
 const ease = [0.22, 1, 0.36, 1] as const
 

@@ -1,4 +1,6 @@
+import { revalidateTag } from 'next/cache'
 import { inngest } from '../client'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import {
   FishbowlPriorityYieldError,
   FishbowlSessionLockError,
@@ -24,14 +26,26 @@ import {
 // the next cron tick catches up.
 async function runPurchaseOrdersSync() {
   try {
-    return await withFishbowlSession(
+    const result = await withFishbowlSession(
       { automation: 'P11_PO_SYNC', sourceSystem: 'fishbowl', targetSystem: 'prometheus' },
       async (client) => {
-        const result = await syncPurchaseOrders(client)
+        const syncResult = await syncPurchaseOrders(client)
         const openLines = await syncOpenPoLines(client)
-        return { ...result, openLines, skipped: false }
+        return { ...syncResult, openLines, skipped: false }
       }
     )
+
+    // Open-PO lines feed the wallboard stock check and the inventory
+    // analytics inbound pipeline — bust both caches. Best-effort: a
+    // revalidation hiccup must never fail an otherwise successful sync.
+    try {
+      revalidateTag(CACHE_TAGS.wallboard, { expire: 0 })
+      revalidateTag(CACHE_TAGS.inventory, { expire: 0 })
+    } catch (revalidateError) {
+      console.warn('P11_PO_SYNC: cache revalidation failed (non-fatal)', revalidateError)
+    }
+
+    return result
   } catch (error) {
     if (
       error instanceof FishbowlSessionLockError ||

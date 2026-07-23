@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { unstable_cache } from 'next/cache'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import { chicagoTodayIso } from '@/lib/business-days'
 import {
   chicagoMidnightUtc,
@@ -256,7 +258,7 @@ async function readOpenDemandByPart(): Promise<Map<string, OpenDemandFact[]>> {
   return demandByPart
 }
 
-export async function getReceivingData(now: Date = new Date()): Promise<ReceivingData> {
+async function computeReceivingData(now: Date): Promise<ReceivingData> {
   const generatedAt = now.toISOString()
   const chicagoDate = chicagoTodayIso(now)
   const start = chicagoMidnightUtc(chicagoDate).toISOString()
@@ -368,5 +370,42 @@ export async function getReceivingData(now: Date = new Date()): Promise<Receivin
   } catch (error) {
     console.error('[wallboard] receiving data failed:', error)
     return empty('Receiving data is unavailable. Check the P14 sync and database logs.')
+  }
+}
+
+/** Carries the "unavailable" payload through the cache boundary without
+ *  writing it to the cache — a transient DB error must not stick to the
+ *  kiosk for a whole TTL window. */
+class ReceivingUnavailableError extends Error {
+  constructor(readonly data: ReceivingData) {
+    super(data.error ?? 'Receiving data unavailable')
+    this.name = 'ReceivingUnavailableError'
+  }
+}
+
+// Shares the wallboard tag/TTL with the other board views; P14 (and the
+// P11 PO cache behind the fallback path) bust the tag on completion.
+const getReceivingDataCached = unstable_cache(
+  async (): Promise<ReceivingData> => {
+    const data = await computeReceivingData(new Date())
+    if (data.error) throw new ReceivingUnavailableError(data)
+    return data
+  },
+  ['receiving-data'],
+  {
+    revalidate: CACHE_TTL.wallboard,
+    tags: [CACHE_TAGS.wallboard],
+  }
+)
+
+export async function getReceivingData(now?: Date): Promise<ReceivingData> {
+  // An explicit `now` is a caller pinning the business date — bypass the
+  // cache rather than serving whatever date the cached entry was built for.
+  if (now) return computeReceivingData(now)
+  try {
+    return await getReceivingDataCached()
+  } catch (error) {
+    if (error instanceof ReceivingUnavailableError) return error.data
+    throw error
   }
 }

@@ -42,6 +42,11 @@ type OrderDetailResponse = {
 
 interface OrderDetailClientProps {
   orderId: string
+  // Server-resolved record: an Order when found and in scope, null when the
+  // server determined "not found" (including rep scope misses), undefined
+  // when no server data is available — only then does the client fetch on
+  // mount.
+  initialOrder?: Order | null
 }
 
 function formatCurrency(value: number): string {
@@ -109,12 +114,18 @@ function SummaryMetric({
   )
 }
 
-export function OrderDetailClient({ orderId }: OrderDetailClientProps) {
-  const [order, setOrder] = useState<Order | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function OrderDetailClient({ orderId, initialOrder }: OrderDetailClientProps) {
+  const [order, setOrder] = useState<Order | null>(initialOrder ?? null)
+  const [loading, setLoading] = useState(initialOrder === undefined)
+  const [error, setError] = useState<string | null>(
+    initialOrder === null ? 'Order not found' : null
+  )
 
   useEffect(() => {
+    // The server already resolved this order (found, or a scoped not-found);
+    // keep the fetch path only for the no-server-data fallback.
+    if (initialOrder !== undefined) return
+
     let active = true
 
     async function fetchOrder() {
@@ -142,7 +153,7 @@ export function OrderDetailClient({ orderId }: OrderDetailClientProps) {
     return () => {
       active = false
     }
-  }, [orderId])
+  }, [orderId, initialOrder])
 
   const itemCount = useMemo(
     () => order?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0,

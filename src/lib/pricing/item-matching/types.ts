@@ -58,3 +58,8 @@ export type BatchItemMatchStats = {
   approvedMatches: number
   rejectedMatches: number
 }
+
+export type BatchItemMatchOverview = {
+  stats: BatchItemMatchStats
+  suggestions: ItemMatchSuggestion[]
+}

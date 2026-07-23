@@ -1,4 +1,6 @@
+import { revalidateTag } from 'next/cache'
 import { inngest } from '../client'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   FishbowlPriorityYieldError,
@@ -56,6 +58,15 @@ async function runReceiptsSync(respectSchedule: boolean) {
       lastRunDurationMs: Date.now() - startedAt,
       recordsProcessed: result.receiptItems,
     })
+
+    // Fresh receipt events feed the wallboard's Receiving view — bust its
+    // cache. Best-effort: a revalidation hiccup must never fail the sync.
+    try {
+      revalidateTag(CACHE_TAGS.wallboard, { expire: 0 })
+    } catch (revalidateError) {
+      console.warn(`${AUTOMATION}: cache revalidation failed (non-fatal)`, revalidateError)
+    }
+
     return result
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

@@ -1,4 +1,6 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chicagoTodayIso } from '@/lib/business-days'
 import { loadProductPartMap, toPartUnits } from '@/lib/inventory/product-parts'
@@ -183,7 +185,7 @@ function toOrder(
   }
 }
 
-export async function getWallboardData(): Promise<WallboardData> {
+async function computeWallboardData(): Promise<WallboardData> {
   const supabase = createAdminClient()
   const now = new Date()
   const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString()
@@ -594,3 +596,15 @@ export async function getWallboardData(): Promise<WallboardData> {
     alerts,
   }
 }
+
+// The kiosk re-renders constantly; one cached compute serves every screen.
+// P2/P7/P11/P12/P14 bust the wallboard tag on completion; the short TTL
+// keeps the board self-healing between crons without hammering the DB.
+export const getWallboardData = unstable_cache(
+  computeWallboardData,
+  ['wallboard-data'],
+  {
+    revalidate: CACHE_TTL.wallboard,
+    tags: [CACHE_TAGS.wallboard],
+  }
+)

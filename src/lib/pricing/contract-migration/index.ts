@@ -5,6 +5,7 @@ export {
   approveMigrationBatch,
   buildMigrationPublishPreview,
   getMigrationBatch,
+  getMigrationExceptionSummary,
   listMigrationBatches,
   listMigrationExceptions,
   listMigrationRows,
@@ -15,6 +16,7 @@ export {
   rollbackMigrationBatch,
   ROLLBACK_CONFIRM_PHRASE,
 } from './repository'
+export type { MigrationExceptionSummary } from './repository'
 export { resolveActiveSupplierCosts } from './resolver'
 export { stageContractMigrationDryRun } from './stage'
 export type {

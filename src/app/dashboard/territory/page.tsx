@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { ClientMap } from '@/components/dashboard/ClientMap'
 import { TerritoryList } from '@/components/dashboard/TerritoryList'
 import { ComingSoonPanel } from '@/components/dashboard/ComingSoon'
-import { RevenueByRegionChart } from '@/components/charts/RevenueByRegionChart'
+import { ChartSkeleton } from '@/components/charts/ChartSkeleton'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -26,17 +27,20 @@ import {
   ArrowUpDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-} from 'recharts'
 import { fetchJson } from '@/lib/client-api'
 import type { ClientMapStats } from '@/lib/data'
 import type { Customer, SeedRegionSummary } from '@/lib/seed-data'
+
+// Both charts pull in recharts — load them lazily so the page shell paints
+// without the charting bundle. Fixed-height skeletons prevent layout shift.
+const RevenueByRegionChart = dynamic(
+  () => import('@/components/charts/RevenueByRegionChart').then((m) => m.RevenueByRegionChart),
+  { ssr: false, loading: () => <ChartSkeleton height={410} /> }
+)
+const RepDistributionDonut = dynamic(
+  () => import('@/components/charts/RepDistributionDonut').then((m) => m.RepDistributionDonut),
+  { ssr: false, loading: () => <ChartSkeleton height={410} /> }
+)
 
 const REP_COLORS: Record<string, string> = {
   'Sarah Mitchell': '#1E98D5',
@@ -53,25 +57,6 @@ type TerritoryDashboardResponse = {
   customers: Customer[]
   regions: SeedRegionSummary[]
   stats: ClientMapStats
-}
-
-function RepDonutTooltip({ active, payload }: {
-  active?: boolean
-  payload?: Array<{ name?: string; value?: number; payload?: { revenue?: number } }>
-}) {
-  if (!active || !payload || payload.length === 0) return null
-  const entry = payload[0]
-  return (
-    <div className="rounded-[0.625rem] border border-[#D6DEE3] bg-white px-4 py-3 shadow-[0_0_2.5rem_0_rgba(82,63,105,0.1)]">
-      <p className="text-[0.813rem] font-medium text-[#1C3C6E]">{entry.name}</p>
-      <p className="text-[0.75rem] text-[#576671]">
-        Clients: <span className="font-semibold text-[#1C3C6E]">{entry.value}</span>
-      </p>
-      <p className="text-[0.75rem] text-[#576671]">
-        Revenue: <span className="font-semibold text-[#1E98D5]">${(entry.payload?.revenue || 0).toLocaleString()}</span>
-      </p>
-    </div>
-  )
 }
 
 export default function TerritoryPage() {
@@ -289,36 +274,7 @@ export default function TerritoryPage() {
         {/* Row 3 — Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <RevenueByRegionChart data={regions} />
-          <Card>
-            <CardHeader>
-              <CardTitle>Client Distribution by Rep</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={repDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {repDistribution.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<RepDonutTooltip />} />
-                  <Legend
-                    iconType="circle"
-                    iconSize={8}
-                    wrapperStyle={{ fontSize: '0.75rem', fontFamily: 'Outfit' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <RepDistributionDonut data={repDistribution} />
         </div>
 
         {/* Row 4 — Region Breakdown Table */}

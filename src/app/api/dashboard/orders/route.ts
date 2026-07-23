@@ -1,48 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SALES_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
-import { getRepAliases } from '@/lib/reps'
-import { getOrders, getSalesReps } from '@/lib/data'
-import type { OrderFilters } from '@/lib/data'
-import type { Order } from '@/lib/seed-data'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { getSalesOrderCoverage, type SalesOrderCoverage } from '@/lib/fishbowl/sales-order-completeness'
-
-type OrderSummary = {
-  total: number
-  totalRevenue: number
-  avgOrderValue: number
-}
-
-type DataQualitySummary = {
-  totalCached: number
-  visibleRows: number
-  hiddenByScope: number
-  likelyTest: number
-  incompleteLines: number
-}
-
-function buildSummary(orders: Order[], total: number): OrderSummary {
-  const totalRevenue = orders.reduce((sum, order) => sum + order.subtotal, 0)
-
-  return {
-    total,
-    totalRevenue,
-    avgOrderValue: total > 0 ? Math.round(totalRevenue / total) : 0,
-  }
-}
-
-function buildDataQualitySummary(visibleOrders: Order[], allOrders: Order[]): DataQualitySummary {
-  const countFlag = (flag: string) =>
-    allOrders.filter((order) => order.dataQualityFlags?.includes(flag)).length
-
-  return {
-    totalCached: allOrders.length,
-    visibleRows: visibleOrders.length,
-    hiddenByScope: Math.max(0, allOrders.length - visibleOrders.length),
-    likelyTest: countFlag('likely_test'),
-    incompleteLines: countFlag('missing_line_items'),
-  }
-}
+import { resolveRepScope } from '@/lib/sales-scope'
+import { buildOrderFilters, getOrdersDashboardPayload } from '@/lib/orders-payload'
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,38 +10,23 @@ export async function GET(request: NextRequest) {
 
     const params = request.nextUrl.searchParams
     // Reps only ever see their own orders, regardless of requested filters.
-    const repScope =
-      auth.role === 'sales_rep' && auth.user
-        ? await getRepAliases(auth.user.id)
-        : undefined
-    const filters: OrderFilters = {
-      status: params.get('status') ?? 'all',
-      salesRepId: params.get('salesRepId') ?? 'all',
-      salespersonIn: repScope,
-      search: params.get('search') ?? '',
-      scope: params.get('scope') === 'all' ? 'all' : 'business',
-    }
-    const allScopeFilters = { ...filters, scope: 'all' as const }
-    const supabase = createAdminClient()
-    const [result, allFilteredOrders, allScopeOrders, salesReps, salesOrderCoverage] = await Promise.all([
-      getOrders({
-        ...filters,
-        page: Number(params.get('page') ?? 1),
-        pageSize: Number(params.get('pageSize') ?? 20),
-      }),
-      getOrders({ ...filters, page: 1, pageSize: 100000, includeItems: false }),
-      getOrders({ ...allScopeFilters, page: 1, pageSize: 100000, includeItems: false }),
-      getSalesReps(),
-      getSalesOrderCoverage(supabase).catch(() => null as SalesOrderCoverage | null),
-    ])
+    const repScope = await resolveRepScope(auth.role, auth.user)
+    const filters = buildOrderFilters(
+      {
+        status: params.get('status'),
+        salesRepId: params.get('salesRepId'),
+        search: params.get('search'),
+        scope: params.get('scope'),
+      },
+      repScope
+    )
+    const payload = await getOrdersDashboardPayload(
+      filters,
+      Number(params.get('page') ?? 1),
+      Number(params.get('pageSize') ?? 20)
+    )
 
-    return NextResponse.json({
-      result,
-      summary: buildSummary(allFilteredOrders.data, allFilteredOrders.total),
-      dataQuality: buildDataQualitySummary(allFilteredOrders.data, allScopeOrders.data),
-      salesReps,
-      salesOrderCoverage,
-    })
+    return NextResponse.json(payload)
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },

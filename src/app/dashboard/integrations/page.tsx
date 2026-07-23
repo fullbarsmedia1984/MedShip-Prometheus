@@ -269,6 +269,25 @@ export default function IntegrationsPage() {
     }
   }, [])
 
+  // Lightweight P7 coverage refresh for polling: hits a coverage-only
+  // endpoint instead of re-running the full integrations dashboard load
+  // (7-day event rollups, relationship counts, connection configs) every 5s.
+  const loadCoverage = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setRefreshingCoverage(true)
+    }
+
+    try {
+      const data = await fetchJson<{ salesOrderCoverage: SalesOrderCoverage | null }>(
+        '/api/dashboard/integrations/coverage'
+      )
+      setSalesOrderCoverage(data.salesOrderCoverage)
+      setLastCoverageRefreshAt(new Date().toISOString())
+    } finally {
+      setRefreshingCoverage(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadDashboard({ initial: true })
   }, [loadDashboard])
@@ -287,11 +306,11 @@ export default function IntegrationsPage() {
     if (!shouldPoll) return
 
     const interval = window.setInterval(() => {
-      loadDashboard({ silent: true })
+      loadCoverage({ silent: true })
     }, 5000)
 
     return () => window.clearInterval(interval)
-  }, [loadDashboard, p7MonitorUntil, salesOrderCoverage])
+  }, [loadCoverage, p7MonitorUntil, salesOrderCoverage])
 
   const handleRunNow = async (automation: string, name: string) => {
     setTriggeringMap((prev) => ({ ...prev, [automation]: true }))
@@ -325,7 +344,7 @@ export default function IntegrationsPage() {
         }),
       })
       toast.success(result.message ?? `Triggered ${action}`)
-      await loadDashboard({ silent: true })
+      await loadCoverage({ silent: true })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : `Unable to trigger ${action}`)
     } finally {

@@ -55,6 +55,13 @@ type ExceptionRow = {
   resolution_notes?: string | null
 }
 
+// Exact batch-wide counts from the API; the exceptions list itself is bounded.
+type ExceptionSummary = {
+  total: number
+  open: number
+  codes: Array<{ code: string; count: number }>
+}
+
 type PublishPreview = {
   batchId: string
   batchStatus: string
@@ -151,6 +158,7 @@ export default function PricingImportDetailPage({ params }: PageProps) {
   const [batch, setBatch] = useState<Batch | null>(null)
   const [rows, setRows] = useState<StagedRow[]>([])
   const [exceptions, setExceptions] = useState<ExceptionRow[]>([])
+  const [exceptionSummary, setExceptionSummary] = useState<ExceptionSummary | null>(null)
   const [preview, setPreview] = useState<PublishPreview | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -168,11 +176,12 @@ export default function PricingImportDetailPage({ params }: PageProps) {
       const [batchData, rowData, exceptionData] = await Promise.all([
         fetchJson<{ batch: Batch }>(`/api/pricing/contract-migration/batches/${id}`),
         fetchJson<{ rows: StagedRow[] }>(`/api/pricing/contract-migration/batches/${id}/rows?page=1&pageSize=25`),
-        fetchJson<{ exceptions: ExceptionRow[] }>(`/api/pricing/contract-migration/batches/${id}/exceptions`),
+        fetchJson<{ exceptions: ExceptionRow[]; summary?: ExceptionSummary }>(`/api/pricing/contract-migration/batches/${id}/exceptions`),
       ])
       setBatch(batchData.batch)
       setRows(rowData.rows)
       setExceptions(exceptionData.exceptions)
+      setExceptionSummary(exceptionData.summary ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load import batch')
     } finally {
@@ -201,11 +210,17 @@ export default function PricingImportDetailPage({ params }: PageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch, id])
 
+  // Prefer the server-side rollup (exact across the whole batch); derive from
+  // the bounded row list only if an older API omits the summary.
   const exceptionCounts = useMemo(() => countBy(exceptions, 'exception_code'), [exceptions])
-  const openExceptions = exceptions.filter((exception) => exception.status === 'open').length
-  const topExceptions = Object.entries(exceptionCounts)
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 5)
+  const openExceptions = exceptionSummary
+    ? exceptionSummary.open
+    : exceptions.filter((exception) => exception.status === 'open').length
+  const topExceptions: Array<[string, number]> = exceptionSummary
+    ? exceptionSummary.codes.slice(0, 5).map((entry) => [entry.code, entry.count])
+    : Object.entries(exceptionCounts)
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 5)
 
   const loadPreview = useCallback(async () => {
     setActionLoading('preview')

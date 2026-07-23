@@ -1,4 +1,6 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { shipDeadline, workdaysBetween } from '@/lib/kits/workdays'
 import type { LaneSeverity } from './data'
@@ -71,7 +73,7 @@ function dayDiff(from: Date, to: Date): number {
   return Math.max(0, Math.floor((to.getTime() - from.getTime()) / 86400000))
 }
 
-export async function getKitGalaxyData(): Promise<KitGalaxyData> {
+async function computeKitGalaxyData(): Promise<KitGalaxyData> {
   const supabase = createAdminClient()
   const now = new Date()
   const monthAgo = new Date(now.getTime() - 30 * 86400000).toISOString()
@@ -265,3 +267,14 @@ export async function getKitGalaxyData(): Promise<KitGalaxyData> {
 
   return { generatedAt: now.toISOString(), schools, totals }
 }
+
+// Shares the wallboard tag/TTL with getWallboardData — the same crons
+// (P7/P12) repopulate the tables behind both views.
+export const getKitGalaxyData = unstable_cache(
+  computeKitGalaxyData,
+  ['kit-galaxy-data'],
+  {
+    revalidate: CACHE_TTL.wallboard,
+    tags: [CACHE_TAGS.wallboard],
+  }
+)

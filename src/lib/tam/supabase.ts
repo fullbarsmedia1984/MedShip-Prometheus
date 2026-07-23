@@ -1,6 +1,8 @@
 import 'server-only'
 
+import { unstable_cache } from 'next/cache'
 import { Pool, type QueryResultRow } from 'pg'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 
 const TAM_SCHEMA = 'nursing_tam'
 
@@ -36,13 +38,6 @@ export type TamByTierRow = {
   consumable_tam: string
   equipment_tam: string
   total_tam: string
-}
-
-export type TamByStateRow = {
-  state: string
-  tier: TamProgramTier
-  n_programs: string
-  enrollment_data: string
 }
 
 export type TamByStateDollarsRow = {
@@ -247,7 +242,7 @@ function getTamPool() {
     ssl: databaseUrl.includes('sslmode=disable')
       ? false
       : { rejectUnauthorized: false },
-    max: 5,
+    max: 10,
   })
 
   return pool
@@ -293,16 +288,6 @@ export async function getTamByTier(
   return rows
 }
 
-export async function getTamByState(): Promise<TamByStateRow[]> {
-  const { rows } = await tamQuery<TamByStateRow>(`
-    select state, tier, n_programs, enrollment_data
-    from ${TAM_SCHEMA}.v_tam_by_state
-    order by state, tier
-  `)
-
-  return rows
-}
-
 export async function getTamByStateDollars(
   scenario: TamScenario = 'base'
 ): Promise<TamByStateDollarsRow[]> {
@@ -319,23 +304,32 @@ export async function getTamByStateDollars(
   return rows
 }
 
-export async function getTamOverview(scenario: TamScenario = 'base') {
-  const [summary, byTier, byState, byStateDollars] = await Promise.all([
-    getTamSummary(),
-    getTamByTier(scenario),
-    getTamByState(),
-    getTamByStateDollars(scenario),
-  ])
+// TAM data changes only on manual loads, so the overview aggregate is cached
+// hard behind the shared tam tag (busted by revalidateTag after a load).
+// Auth stays in the callers — nothing request-scoped may leak in here.
+const getCachedTamOverview = unstable_cache(
+  async (scenario: TamScenario) => {
+    const [summary, byTier, byStateDollars] = await Promise.all([
+      getTamSummary(),
+      getTamByTier(scenario),
+      getTamByStateDollars(scenario),
+    ])
 
-  return {
-    scenario,
-    summary,
-    selectedSummary:
-      summary.find((row) => row.scenario === scenario) ?? summary[0] ?? null,
-    byTier,
-    byState,
-    byStateDollars,
-  }
+    return {
+      scenario,
+      summary,
+      selectedSummary:
+        summary.find((row) => row.scenario === scenario) ?? summary[0] ?? null,
+      byTier,
+      byStateDollars,
+    }
+  },
+  ['tam-overview'],
+  { revalidate: CACHE_TTL.tam, tags: [CACHE_TAGS.tam] }
+)
+
+export async function getTamOverview(scenario: TamScenario = 'base') {
+  return getCachedTamOverview(scenario)
 }
 
 export async function listTamInstitutions(
@@ -448,7 +442,7 @@ export async function getTamInstitution(
   return rows[0] ?? null
 }
 
-export async function listTamGeo(params: TamInstitutionFilters = {}) {
+async function queryTamGeo(params: TamInstitutionFilters) {
   const builder = createSqlBuilder()
   const whereSql = buildInstitutionWhere(
     { ...params, geocodedOnly: true },
@@ -457,6 +451,8 @@ export async function listTamGeo(params: TamInstitutionFilters = {}) {
   const tierSql = programFilterSql(params, builder)
   const contactSql = contactFilterSql(params, builder)
 
+  // One aggregation pass per institution over programs and contacts (lateral
+  // joins) instead of six correlated subqueries per row.
   const { rows } = await tamQuery<TamGeoRow>(
     `
       select
@@ -466,60 +462,52 @@ export async function listTamGeo(params: TamInstitutionFilters = {}) {
         i.state,
         i.lat,
         i.lng,
-        coalesce((
-          select json_agg(json_build_object(
+        coalesce(prog.programs, '[]'::json) as programs,
+        coalesce(prog.program_count, 0) as program_count,
+        coalesce(prog.accredited_program_count, 0) as accredited_program_count,
+        coalesce(prog.accreditation_rate, 0) as accreditation_rate,
+        coalesce(cont.contacts, '[]'::json) as contacts
+      from ${TAM_SCHEMA}.institutions i
+      left join lateral (
+        select
+          json_agg(json_build_object(
             'id', p.id,
             'tier', p.tier,
             'accreditor', p.accreditor,
             'state_board_approved', p.state_board_approved,
             'annual_completions', p.annual_completions,
             'est_annual_enrollment', p.est_annual_enrollment
-          ) order by p.tier)
-          from ${TAM_SCHEMA}.programs p
-          where p.institution_id = i.id
-          ${tierSql}
-        ), '[]'::json) as programs,
-        coalesce((
-          select count(*)::int
-          from ${TAM_SCHEMA}.programs p
-          where p.institution_id = i.id
-          ${tierSql}
-        ), 0) as program_count,
-        coalesce((
-          select count(*)::int
-          from ${TAM_SCHEMA}.programs p
-          where p.institution_id = i.id
-            and (p.accreditor <> 'none' or p.state_board_approved is true)
-          ${tierSql}
-        ), 0) as accredited_program_count,
-        coalesce((
-          select round(
+          ) order by p.tier) as programs,
+          count(*)::int as program_count,
+          (count(*) filter (
+            where p.accreditor <> 'none' or p.state_board_approved is true
+          ))::int as accredited_program_count,
+          round(
             (
-              count(*) filter (
+              (count(*) filter (
                 where p.accreditor <> 'none' or p.state_board_approved is true
-              )::numeric
+              ))::numeric
               / nullif(count(*)::numeric, 0)
             ) * 100,
             1
-          )::float
-          from ${TAM_SCHEMA}.programs p
-          where p.institution_id = i.id
-          ${tierSql}
-        ), 0) as accreditation_rate,
-        coalesce((
-          select json_agg(json_build_object(
-            'id', c.id,
-            'name', c.name,
-            'title', c.title,
-            'email', c.email,
-            'phone', c.phone,
-            'role_category', c.role_category
-          ) order by c.role_category, c.name)
-          from ${TAM_SCHEMA}.contacts c
-          where c.institution_id = i.id
-          ${contactSql}
-        ), '[]'::json) as contacts
-      from ${TAM_SCHEMA}.institutions i
+          )::float as accreditation_rate
+        from ${TAM_SCHEMA}.programs p
+        where p.institution_id = i.id
+        ${tierSql}
+      ) prog on true
+      left join lateral (
+        select json_agg(json_build_object(
+          'id', c.id,
+          'name', c.name,
+          'title', c.title,
+          'email', c.email,
+          'phone', c.phone,
+          'role_category', c.role_category
+        ) order by c.role_category, c.name) as contacts
+        from ${TAM_SCHEMA}.contacts c
+        where c.institution_id = i.id
+        ${contactSql}
+      ) cont on true
       ${whereSql}
       order by i.state, i.name
     `,
@@ -527,6 +515,18 @@ export async function listTamGeo(params: TamInstitutionFilters = {}) {
   )
 
   return rows
+}
+
+// Keyed by the serialized filter args (unstable_cache hashes its arguments);
+// shorter TTL than the overview because the geo payload is the largest one.
+const getCachedTamGeo = unstable_cache(
+  async (params: TamInstitutionFilters) => queryTamGeo(params),
+  ['tam-geo'],
+  { revalidate: 1800, tags: [CACHE_TAGS.tam] }
+)
+
+export async function listTamGeo(params: TamInstitutionFilters = {}) {
+  return getCachedTamGeo(params)
 }
 
 export async function listTamContacts(params: TamContactListParams = {}) {

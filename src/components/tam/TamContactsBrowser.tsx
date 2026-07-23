@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Mail, Search } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ import {
 import { fetchJson } from '@/lib/client-api'
 import type { TamMailingContactRow } from '@/lib/tam/supabase'
 
-type ContactsPayload = {
+export type TamContactsPayload = {
   data: TamMailingContactRow[]
   totalItems: number
   page: number
@@ -56,7 +56,17 @@ function buildQuery(filters: {
   return params
 }
 
-export function TamContactsBrowser() {
+export function TamContactsBrowser({
+  initialData = null,
+}: {
+  /**
+   * First-paint payload the server page fetched with this component's
+   * default filter state (lab_sim role, email required, page 1, 25 rows).
+   * When provided, the mount fetch is skipped — the initial filter state
+   * below is always the default (no URL-param seeding on this page).
+   */
+  initialData?: TamContactsPayload | null
+}) {
   const [search, setSearch] = useState('')
   const [state, setState] = useState('')
   const [tier, setTier] = useState('')
@@ -64,9 +74,10 @@ export function TamContactsBrowser() {
   const [contactHasEmail, setContactHasEmail] = useState(true)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  const [payload, setPayload] = useState<ContactsPayload | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [payload, setPayload] = useState<TamContactsPayload | null>(initialData)
+  const [loading, setLoading] = useState(!initialData)
   const [error, setError] = useState<string | null>(null)
+  const skipInitialFetchRef = useRef(initialData !== null)
 
   const query = useMemo(
     () =>
@@ -86,7 +97,7 @@ export function TamContactsBrowser() {
     setLoading(true)
     setError(null)
     try {
-      setPayload(await fetchJson<ContactsPayload>(`/api/tam/contacts?${query}`))
+      setPayload(await fetchJson<TamContactsPayload>(`/api/tam/contacts?${query}`))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load contacts')
     } finally {
@@ -95,6 +106,13 @@ export function TamContactsBrowser() {
   }, [query])
 
   useEffect(() => {
+    // Server-rendered first paint: the default-state rows arrived as a prop,
+    // so skip the very first fetch. Any filter/page change reruns this effect
+    // (new loadData identity) and fetches normally.
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false
+      return
+    }
     loadData()
   }, [loadData])
 

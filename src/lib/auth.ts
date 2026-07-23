@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
@@ -109,7 +110,7 @@ export function isLocalAuthBypassEnabled() {
   )
 }
 
-export async function getAuthContext(): Promise<AuthContext | null> {
+async function loadAuthContext(): Promise<AuthContext | null> {
   if (isLocalAuthBypassEnabled()) {
     return {
       user: null,
@@ -160,6 +161,11 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     pendingTwoFactor,
   }
 }
+
+// Request-memoized: the dashboard layout, nested layouts, the page, and any
+// route handler in the same request share one auth.getUser() + profiles
+// round-trip instead of repeating it per caller.
+export const getAuthContext = cache(loadAuthContext)
 
 export async function requireDashboardAuth(options?: ApiAuthOptions) {
   const auth = await getAuthContext()

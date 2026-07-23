@@ -1,4 +1,6 @@
+import { revalidateTag } from 'next/cache'
 import { inngest } from '../client'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import {
   FishbowlPriorityYieldError,
   FishbowlSessionLockError,
@@ -12,10 +14,22 @@ import { syncRecentShipments } from '@/lib/warehouse-board/shipments-sync'
 // the next 15-minute tick catches up.
 async function runShipmentsSync() {
   try {
-    return await withFishbowlSession(
+    const result = await withFishbowlSession(
       { automation: 'P12_SHIPMENTS_SYNC', sourceSystem: 'fishbowl', targetSystem: 'prometheus' },
       async (client) => ({ shipments: await syncRecentShipments(client), skipped: false })
     )
+
+    // Fresh shipments flip orders to Shipped on the wallboard and mark kits
+    // shipped on the workbench — bust both caches. Best-effort: a
+    // revalidation hiccup must never fail an otherwise successful sync.
+    try {
+      revalidateTag(CACHE_TAGS.wallboard, { expire: 0 })
+      revalidateTag(CACHE_TAGS.kits, { expire: 0 })
+    } catch (revalidateError) {
+      console.warn('P12_SHIPMENTS_SYNC: cache revalidation failed (non-fatal)', revalidateError)
+    }
+
+    return result
   } catch (error) {
     if (
       error instanceof FishbowlSessionLockError ||

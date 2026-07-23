@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import type {
+  BatchItemMatchOverview,
   BatchItemMatchStats,
   ItemMatchReviewInput,
   ItemMatchReviewResult,
@@ -100,9 +101,8 @@ function costLineIdentifier(line: DbRow) {
   return null
 }
 
-export async function listItemMatchSuggestions(batchId: string): Promise<ItemMatchSuggestion[]> {
+async function listItemMatchSuggestionsForLines(lines: DbRow[]): Promise<ItemMatchSuggestion[]> {
   const supabase = createAdminClient()
-  const lines = await batchCostLineIds(batchId)
   if (lines.length === 0) return []
   const lineById = new Map(lines.map((line) => [String(line.id), line]))
 
@@ -174,9 +174,15 @@ export async function listItemMatchSuggestions(batchId: string): Promise<ItemMat
   })
 }
 
-export async function getBatchItemMatchStats(batchId: string): Promise<BatchItemMatchStats> {
-  const lines = await batchCostLineIds(batchId)
-  const suggestions = await listItemMatchSuggestions(batchId)
+export async function listItemMatchSuggestions(batchId: string): Promise<ItemMatchSuggestion[]> {
+  return listItemMatchSuggestionsForLines(await batchCostLineIds(batchId))
+}
+
+function deriveBatchItemMatchStats(
+  batchId: string,
+  lines: DbRow[],
+  suggestions: ItemMatchSuggestion[]
+): BatchItemMatchStats {
   return {
     batchId,
     costLines: lines.length,
@@ -185,6 +191,27 @@ export async function getBatchItemMatchStats(batchId: string): Promise<BatchItem
     openSuggestions: suggestions.filter((match) => match.status === 'suggested').length,
     approvedMatches: suggestions.filter((match) => match.status === 'approved').length,
     rejectedMatches: suggestions.filter((match) => match.status === 'rejected').length,
+  }
+}
+
+export async function getBatchItemMatchStats(batchId: string): Promise<BatchItemMatchStats> {
+  const lines = await batchCostLineIds(batchId)
+  const suggestions = await listItemMatchSuggestionsForLines(lines)
+  return deriveBatchItemMatchStats(batchId, lines, suggestions)
+}
+
+/**
+ * Stats and suggestions in one pass. The GET route needs both, and stats are
+ * derived entirely from the cost-line and suggestion reads — fetching them
+ * separately used to run the cost-line query three times and the suggestion
+ * query (plus its enrichment lookups) twice per page load.
+ */
+export async function getBatchItemMatchOverview(batchId: string): Promise<BatchItemMatchOverview> {
+  const lines = await batchCostLineIds(batchId)
+  const suggestions = await listItemMatchSuggestionsForLines(lines)
+  return {
+    stats: deriveBatchItemMatchStats(batchId, lines, suggestions),
+    suggestions,
   }
 }
 

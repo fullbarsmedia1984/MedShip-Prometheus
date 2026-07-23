@@ -6,6 +6,8 @@
 
 import 'server-only'
 
+import { unstable_cache } from 'next/cache'
+
 import type {
   Product,
   Customer,
@@ -29,7 +31,7 @@ import type {
 } from '@/lib/seed-data'
 import { AUTOMATION_INFO } from '@/types'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
-import { getDataSourceMode } from '@/lib/utils/app-settings'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getInboundBucketParts, type InboundBucketKey } from '@/lib/inventory/analytics'
 
@@ -194,7 +196,7 @@ type SupabaseRangeQuery<T> = {
 }
 
 const PAGE_FETCH_SIZE = 1000
-export const SALES_DASHBOARD_CACHE_TAG = 'sales-dashboard'
+export const SALES_DASHBOARD_CACHE_TAG = CACHE_TAGS.salesDashboard
 const LIVE_AUTOMATIONS = new Set<AutomationType>([
   'SF_FULL_SYNC',
   'SF_INCREMENTAL_SYNC',
@@ -438,10 +440,6 @@ type SfProductCategoryRow = {
   family: string | null
 }
 
-function sortByCreatedDesc<T extends { created_at: string }>(items: T[]): T[] {
-  return [...items].sort((a, b) => b.created_at.localeCompare(a.created_at))
-}
-
 function applyInventoryFilters(items: Product[], filters: InventoryFilters): Product[] {
   let filtered = [...items]
 
@@ -494,65 +492,6 @@ async function fetchAllRows<T>(
   }
 
   return rows
-}
-
-function applyEventFilters(items: SyncEvent[], filters: EventFilters): SyncEvent[] {
-  let filtered = [...items]
-
-  if (filters.automation && filters.automation !== 'all') {
-    filtered = filtered.filter((e) => e.automation === filters.automation)
-  }
-  if (filters.status && filters.status !== 'all') {
-    filtered = filtered.filter((e) => e.status === filters.status)
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase()
-    filtered = filtered.filter(
-      (e) =>
-        e.source_record_id?.toLowerCase().includes(q) ||
-        e.target_record_id?.toLowerCase().includes(q) ||
-        e.error_message?.toLowerCase().includes(q)
-    )
-  }
-  if (filters.dateFrom) {
-    filtered = filtered.filter((e) => e.created_at >= filters.dateFrom!)
-  }
-  if (filters.dateTo) {
-    filtered = filtered.filter((e) => e.created_at <= filters.dateTo!)
-  }
-
-  return sortByCreatedDesc(filtered)
-}
-
-function isEventTelemetry(event: SyncEvent): boolean {
-  return Boolean(
-    event.payload?.circuitBreaker ||
-      (event.source_system === 'prometheus' && event.target_system === 'inngest') ||
-      event.status === 'dismissed' ||
-      event.status === 'pending'
-  )
-}
-
-function getEventKpisFromEvents(events: SyncEvent[], today: string): EventKpis {
-  const total = events.length
-  const outcomeEvents = events.filter((e) => !isEventTelemetry(e) && (e.status === 'success' || e.status === 'failed'))
-  const successes = outcomeEvents.filter((e) => e.status === 'success').length
-  const successRate = outcomeEvents.length > 0
-    ? Math.round((successes / outcomeEvents.length) * 1000) / 10
-    : 0
-
-  const completed = events.filter((e) => e.completed_at && !isEventTelemetry(e))
-  const totalDuration = completed.reduce((sum, e) => {
-    const dur = new Date(e.completed_at!).getTime() - new Date(e.created_at).getTime()
-    return sum + Math.max(dur, 0)
-  }, 0)
-  const avgDurationMs = completed.length > 0 ? Math.round(totalDuration / completed.length) : 0
-
-  const failuresToday = events.filter(
-    (e) => !isEventTelemetry(e) && e.status === 'failed' && e.created_at.startsWith(today)
-  ).length
-
-  return { total, successRate, avgDurationMs, failuresToday }
 }
 
 function toNumber(value: number | string | null | undefined): number {
@@ -659,7 +598,11 @@ function mapInventorySnapshotToProduct(
   }
 }
 
-async function getLiveInventoryProducts(): Promise<Product[]> {
+// Cached so getInventory / getInventoryKpis / getInventoryAlerts share one
+// inventory_snapshot + reorder_rules load per TTL window instead of scanning
+// per caller. P2 busts CACHE_TAGS.inventory when it repopulates the snapshot.
+const getLiveInventoryProducts = unstable_cache(
+  async (): Promise<Product[]> => {
   const supabase = createAdminClient()
 
   const inventory = await fetchAllRows<InventorySnapshotRow>(() =>
@@ -695,30 +638,10 @@ async function getLiveInventoryProducts(): Promise<Product[]> {
     const reorderPoint = rulesByPart.get(row.part_number) ?? 0
     return mapInventorySnapshotToProduct(row, reorderPoint)
   })
-}
-
-async function getLiveSyncEvents(limit = 1000): Promise<SyncEvent[]> {
-  const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('sync_events')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit)
-
-  if (error) throw error
-  return (data ?? []) as SyncEvent[]
-}
-
-async function getLiveSyncEventsSince(since: string): Promise<SyncEvent[]> {
-  const supabase = createAdminClient()
-  return fetchAllRows<SyncEvent>(() =>
-    supabase
-      .from('sync_events')
-      .select('*')
-      .gte('created_at', since)
-      .order('created_at', { ascending: false }) as unknown as SupabaseRangeQuery<SyncEvent>
-  )
-}
+  },
+  ['live-inventory-products'],
+  { revalidate: CACHE_TTL.inventory, tags: [CACHE_TAGS.inventory] }
+)
 
 async function getLiveFieldMappings(): Promise<FieldMapping[]> {
   const supabase = createAdminClient()
@@ -760,120 +683,114 @@ function cronToScheduleLabel(cronExpression: string | null | undefined): string 
   return map[cronExpression] ?? cronExpression
 }
 
-function getEventDurationMs(event: SyncEvent | undefined): number {
-  if (!event?.completed_at) return 0
-  const duration = new Date(event.completed_at).getTime() - new Date(event.created_at).getTime()
-  return Math.max(duration, 0)
+// Shape returned by the sync_event_automation_rollup() SQL function
+// (migration 054): a 7-day per-automation aggregate replacing the old
+// unbounded sync_events scan + JS aggregation.
+type SyncEventRollupRow = {
+  automation: AutomationType
+  observed_events: number
+  outcome_success: number
+  outcome_failed: number
+  failed_maxed: number
+  latest_created_at: string | null
+  latest_duration_ms: number | null
+  last7days: { date: string; success: number; failed: number }[] | null
 }
 
-function isIntegrationOutcomeEvent(event: SyncEvent): boolean {
-  return !isEventTelemetry(event) && (event.status === 'success' || event.status === 'failed')
-}
-
-function buildLast7Days(events: SyncEvent[]): { date: string; success: number; failed: number }[] {
+function buildEmptyLast7Days(): { date: string; success: number; failed: number }[] {
   const now = new Date()
   const days: { date: string; success: number; failed: number }[] = []
-
   for (let offset = 6; offset >= 0; offset--) {
     const day = new Date(now)
     day.setDate(now.getDate() - offset)
-    const date = day.toISOString().slice(0, 10)
-    const dayEvents = events.filter((event) => event.created_at.startsWith(date) && isIntegrationOutcomeEvent(event))
-    days.push({
-      date,
-      success: dayEvents.filter((event) => event.status === 'success').length,
-      failed: dayEvents.filter((event) => event.status === 'failed').length,
-    })
+    days.push({ date: day.toISOString().slice(0, 10), success: 0, failed: 0 })
   }
-
   return days
 }
 
 function getIntegrationHealth(
   schedule: SyncScheduleRow | undefined,
-  events: SyncEvent[],
+  rollup: SyncEventRollupRow | undefined,
   successRate: number
 ): IntegrationStatusData['status'] {
-  const outcomeEvents = events.filter(isIntegrationOutcomeEvent)
+  const outcomeTotal = (rollup?.outcome_success ?? 0) + (rollup?.outcome_failed ?? 0)
 
-  if (!schedule && events.length === 0) return 'warning'
+  if (!schedule && (rollup?.observed_events ?? 0) === 0) return 'warning'
   if (schedule?.is_active === false) return 'warning'
   if (schedule?.last_run_status === 'failed') return 'error'
   if (schedule?.last_run_status === 'partial') return 'warning'
   if (schedule?.last_run_status && schedule.last_run_status !== 'success') return 'warning'
-  if (outcomeEvents.some((event) => event.status === 'failed' && event.retry_count >= event.max_retries)) {
-    return 'error'
-  }
-  if (outcomeEvents.some((event) => event.status === 'failed')) {
-    return 'warning'
-  }
-  if (outcomeEvents.length > 0 && successRate < 80) return 'error'
-  if (outcomeEvents.length > 0 && successRate < 95) return 'warning'
+  if ((rollup?.failed_maxed ?? 0) > 0) return 'error'
+  if ((rollup?.outcome_failed ?? 0) > 0) return 'warning'
+  if (outcomeTotal > 0 && successRate < 80) return 'error'
+  if (outcomeTotal > 0 && successRate < 95) return 'warning'
   return 'healthy'
 }
 
-async function getLiveIntegrationStatus(): Promise<IntegrationStatusData[]> {
-  const supabase = createAdminClient()
-  const { data: schedules, error } = await supabase
-    .from('sync_schedules')
-    .select('*')
-    .order('automation')
+const getLiveIntegrationStatus = unstable_cache(
+  async (): Promise<IntegrationStatusData[]> => {
+    const supabase = createAdminClient()
+    const [schedulesRes, rollupRes] = await Promise.all([
+      supabase.from('sync_schedules').select('*').order('automation'),
+      supabase.rpc('sync_event_automation_rollup'),
+    ])
 
-  if (error) throw error
+    if (schedulesRes.error) throw schedulesRes.error
+    if (rollupRes.error) throw rollupRes.error
 
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6)
-  sevenDaysAgo.setUTCHours(0, 0, 0, 0)
+    const scheduleRows = (schedulesRes.data ?? []) as SyncScheduleRow[]
+    const rollups = (rollupRes.data ?? []) as SyncEventRollupRow[]
+    if (scheduleRows.length === 0 && rollups.length === 0) return []
 
-  const events = await getLiveSyncEventsSince(sevenDaysAgo.toISOString())
-  if ((!schedules || schedules.length === 0) && events.length === 0) return []
+    const schedulesByAutomation = new Map(
+      scheduleRows.map((schedule) => [schedule.automation, schedule])
+    )
+    const rollupsByAutomation = new Map(
+      rollups.map((rollup) => [rollup.automation, rollup])
+    )
+    const automationSet = new Set<AutomationType>([
+      ...scheduleRows.map((schedule) => schedule.automation),
+      ...rollups.map((rollup) => rollup.automation),
+    ])
 
-  const scheduleRows = ((schedules ?? []) as SyncScheduleRow[])
-  const schedulesByAutomation = new Map(
-    scheduleRows.map((schedule) => [schedule.automation, schedule])
-  )
-  const automationSet = new Set<AutomationType>([
-    ...scheduleRows.map((schedule) => schedule.automation),
-    ...events.map((event) => event.automation),
-  ])
+    return Array.from(automationSet).map((automation) => {
+      const schedule = schedulesByAutomation.get(automation)
+      const rollup = rollupsByAutomation.get(automation)
+      const outcomeTotal = (rollup?.outcome_success ?? 0) + (rollup?.outcome_failed ?? 0)
+      const successRate = outcomeTotal > 0
+        ? Math.round(((rollup?.outcome_success ?? 0) / outcomeTotal) * 1000) / 10
+        : schedule?.last_run_status === 'success'
+          ? 100
+          : 0
+      const info = AUTOMATION_INFO[automation]
+      const hasObservedData = Boolean(schedule || rollup)
+      const isComingSoon = !LIVE_AUTOMATIONS.has(automation)
 
-  return Array.from(automationSet).map((automation) => {
-    const schedule = schedulesByAutomation.get(automation)
-    const automationEvents = sortByCreatedDesc(events.filter((event) => event.automation === automation))
-    const completed = automationEvents.filter(isIntegrationOutcomeEvent)
-    const latestEvent = completed[0] ?? automationEvents[0]
-    const successful = completed.filter((event) => event.status === 'success').length
-    const successRate = completed.length > 0
-      ? Math.round((successful / completed.length) * 1000) / 10
-      : schedule?.last_run_status === 'success'
-        ? 100
-        : 0
-    const info = AUTOMATION_INFO[automation]
-    const hasObservedData = Boolean(schedule || latestEvent)
-    const isComingSoon = !LIVE_AUTOMATIONS.has(automation)
-
-    return {
-      automation,
-      name: info?.name ?? automation,
-      description: info?.description ?? 'Integration automation',
-      status: isComingSoon ? 'warning' : getIntegrationHealth(schedule, automationEvents, successRate),
-      lastRunAt: isComingSoon ? '' : schedule?.last_run_at ?? latestEvent?.created_at ?? '',
-      lastRunDurationMs: isComingSoon ? 0 : schedule?.last_run_duration_ms ?? getEventDurationMs(latestEvent),
-      recordsProcessed: isComingSoon ? 0 : schedule?.records_processed ?? completed.length,
-      successRate: isComingSoon ? 0 : successRate,
-      schedule: schedule
-        ? cronToScheduleLabel(schedule.cron_expression)
-        : latestEvent
-          ? 'Event-driven'
-          : 'Not scheduled',
-      isActive: isComingSoon ? false : schedule?.is_active ?? hasObservedData,
-      last7Days: isComingSoon ? [] : buildLast7Days(automationEvents),
-      isComingSoon,
-      observedEvents: automationEvents.length,
-      hasLiveSchedule: Boolean(schedule),
-    }
-  })
-}
+      return {
+        automation,
+        name: info?.name ?? automation,
+        description: info?.description ?? 'Integration automation',
+        status: isComingSoon ? 'warning' as const : getIntegrationHealth(schedule, rollup, successRate),
+        lastRunAt: isComingSoon ? '' : schedule?.last_run_at ?? rollup?.latest_created_at ?? '',
+        lastRunDurationMs: isComingSoon ? 0 : schedule?.last_run_duration_ms ?? rollup?.latest_duration_ms ?? 0,
+        recordsProcessed: isComingSoon ? 0 : schedule?.records_processed ?? outcomeTotal,
+        successRate: isComingSoon ? 0 : successRate,
+        schedule: schedule
+          ? cronToScheduleLabel(schedule.cron_expression)
+          : rollup
+            ? 'Event-driven'
+            : 'Not scheduled',
+        isActive: isComingSoon ? false : schedule?.is_active ?? hasObservedData,
+        last7Days: isComingSoon ? [] : rollup?.last7days ?? buildEmptyLast7Days(),
+        isComingSoon,
+        observedEvents: rollup?.observed_events ?? 0,
+        hasLiveSchedule: Boolean(schedule),
+      }
+    })
+  },
+  ['live-integration-status'],
+  { revalidate: CACHE_TTL.integrations, tags: [CACHE_TAGS.integrations] }
+)
 
 // ---------------------------------------------------------------------------
 // Revenue & KPIs
@@ -891,7 +808,6 @@ export interface RevenueMetrics {
 }
 
 export async function getRevenueMetrics(): Promise<RevenueMetrics> {
-  void await getDataSourceMode()
   return getLiveRevenueMetrics()
 }
 
@@ -995,7 +911,6 @@ export interface TerritoryQoQPayload {
  * prior-year quarter through the same day offset (apples to apples).
  */
 export async function getTerritoryQoQGrowth(): Promise<TerritoryQoQPayload> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const now = new Date()
   const dateKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -1111,7 +1026,6 @@ export async function getTerritoryQoQGrowth(): Promise<TerritoryQoQPayload> {
 // ---------------------------------------------------------------------------
 
 export async function getMonthlyRevenue(): Promise<MonthlyRevenue[]> {
-  void await getDataSourceMode()
   return getLiveMonthlyRevenue()
 }
 
@@ -1139,7 +1053,6 @@ export interface YoYRevenueComparison {
  * scoped, so it will read higher than the roster-scoped operational KPIs).
  */
 export async function getYoYRevenueComparison(): Promise<YoYRevenueComparison> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const now = new Date()
   const currentYear = now.getFullYear()
@@ -1469,7 +1382,6 @@ async function getLiveOrders(): Promise<Order[]> {
 // ---------------------------------------------------------------------------
 
 export async function getCategorySales(): Promise<CategorySales[]> {
-  void await getDataSourceMode()
   return getLiveCategorySales()
 }
 
@@ -1533,16 +1445,11 @@ async function getLiveCategorySales(): Promise<CategorySales[]> {
 // Orders
 // ---------------------------------------------------------------------------
 
-export async function getOrders(filters: OrderFilters = {}): Promise<PaginatedResult<Order>> {
-  void await getDataSourceMode()
-  const orderRows = await getLiveOrderRows()
-  const headerOrders = orderRows.map((row) => mapCanonicalOrderRow(row))
-  const filteredOrders = applyOrderFilters(headerOrders, filters)
-  const paginated = paginate(filteredOrders, filters.page, filters.pageSize)
-
-  if (filters.includeItems === false || paginated.data.length === 0) {
-    return paginated
-  }
+async function hydrateOrderPage(
+  paginated: PaginatedResult<Order>,
+  orderRows: CanonicalSalesOrderRow[]
+): Promise<PaginatedResult<Order>> {
+  if (paginated.data.length === 0) return paginated
 
   const itemsByOrder = await fetchSalesOrderItemsForNumbers(
     paginated.data.map((order) => order.orderNumber)
@@ -1562,11 +1469,71 @@ export async function getOrders(filters: OrderFilters = {}): Promise<PaginatedRe
   }
 }
 
-export async function getOrderById(id: string): Promise<Order | null> {
-  void await getDataSourceMode()
-  const decodedId = decodeURIComponent(id)
+export async function getOrders(filters: OrderFilters = {}): Promise<PaginatedResult<Order>> {
   const orderRows = await getLiveOrderRows()
-  const row = orderRows.find((order) => order.id === decodedId || order.so_number === decodedId)
+  const headerOrders = orderRows.map((row) => mapCanonicalOrderRow(row))
+  const filteredOrders = applyOrderFilters(headerOrders, filters)
+  const paginated = paginate(filteredOrders, filters.page, filters.pageSize)
+
+  if (filters.includeItems === false) return paginated
+  return hydrateOrderPage(paginated, orderRows)
+}
+
+export interface OrdersWorkingSet {
+  result: PaginatedResult<Order>
+  // Header-only rows (no line items) for summary / data-quality rollups.
+  filtered: Order[]
+  allScope: Order[]
+}
+
+/**
+ * One canonical_orders scan serving the paginated page, the filtered summary
+ * set, and the all-scope data-quality set. The orders API route previously
+ * called getOrders() three times, re-scanning the table per call.
+ */
+export async function getOrdersWorkingSet(filters: OrderFilters = {}): Promise<OrdersWorkingSet> {
+  const orderRows = await getLiveOrderRows()
+  const headerOrders = orderRows.map((row) => mapCanonicalOrderRow(row))
+  const filtered = applyOrderFilters(headerOrders, filters)
+  const allScope = filters.scope === 'all'
+    ? filtered
+    : applyOrderFilters(headerOrders, { ...filters, scope: 'all' })
+  const result = await hydrateOrderPage(
+    paginate(filtered, filters.page, filters.pageSize),
+    orderRows
+  )
+
+  return { result, filtered, allScope }
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export async function getOrderById(id: string): Promise<Order | null> {
+  const decodedId = decodeURIComponent(id)
+  const supabase = createAdminClient()
+  // The id column is a UUID; a non-UUID lookup value can only be an SO number
+  // (querying the uuid column with it would error, not return no-rows).
+  const columns = UUID_PATTERN.test(decodedId) ? ['id', 'so_number'] : ['so_number']
+
+  let row: CanonicalSalesOrderRow | undefined
+  for (const column of columns) {
+    const { data, error } = await supabase
+      .from('canonical_orders')
+      .select(SALES_ORDER_HEADER_SELECT)
+      .eq(column, decodedId)
+      .limit(1)
+
+    if (error) {
+      if (isMissingRelationError(error)) {
+        warnEmptyLiveTable('canonical_orders', 'order detail')
+        return null
+      }
+      throw error
+    }
+
+    row = ((data ?? []) as unknown as CanonicalSalesOrderRow[])[0]
+    if (row) break
+  }
   if (!row) return null
 
   const itemsByOrder = await fetchSalesOrderItemsForNumbers([row.so_number]).catch((error) => {
@@ -1578,13 +1545,11 @@ export async function getOrderById(id: string): Promise<Order | null> {
 }
 
 export async function getRecentOrders(limit = 10): Promise<Order[]> {
-  void await getDataSourceMode()
   const result = await getOrders({ page: 1, pageSize: limit })
   return result.data
 }
 
 export async function getSalesReps(): Promise<SalesRep[]> {
-  void await getDataSourceMode()
   return getLiveSalesRepOptions()
 }
 
@@ -1610,7 +1575,6 @@ async function getLiveSalesRepOptions(): Promise<SalesRep[]> {
 // ---------------------------------------------------------------------------
 
 export async function getInventory(filters: InventoryFilters = {}): Promise<PaginatedResult<Product>> {
-  void await getDataSourceMode()
   const products = await getLiveInventoryProducts()
   let items = applyInventoryFilters(products, filters)
 
@@ -1630,13 +1594,11 @@ export interface InventoryKpis {
 }
 
 export async function getInventoryKpis(): Promise<InventoryKpis> {
-  void await getDataSourceMode()
   const products = await getLiveInventoryProducts()
   return getInventoryKpisFromProducts(products)
 }
 
 export async function getInventoryAlerts(limit = 5): Promise<Product[]> {
-  void await getDataSourceMode()
   const products = await getLiveInventoryProducts()
 
   return products
@@ -1649,16 +1611,19 @@ export async function getInventoryAlerts(limit = 5): Promise<Product[]> {
 // Sync Events
 // ---------------------------------------------------------------------------
 
+const SYNC_EVENT_LIST_COLUMNS = 'id,created_at,automation,source_system,target_system,source_record_id,target_record_id,status,error_message,retry_count,max_retries,next_retry_at,completed_at,idempotency_key'
+
 export async function getSyncEvents(filters: EventFilters = {}): Promise<PaginatedResult<SyncEvent>> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const page = Math.max(1, filters.page ?? 1)
   const pageSize = Math.min(Math.max(1, filters.pageSize ?? 25), 100)
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
-  const columns = filters.includePayload === false
-    ? 'id,created_at,automation,source_system,target_system,source_record_id,target_record_id,status,error_message,retry_count,max_retries,next_retry_at,completed_at,idempotency_key'
-    : '*'
+  // The JSONB payload/response columns dwarf the rest of the row; only pull
+  // them when the caller explicitly asks (the events page detail expander).
+  const columns = filters.includePayload
+    ? `${SYNC_EVENT_LIST_COLUMNS},payload,response`
+    : SYNC_EVENT_LIST_COLUMNS
 
   let query = supabase
     .from('sync_events')
@@ -1705,11 +1670,60 @@ export interface EventKpis {
   failuresToday: number
 }
 
+// Shape returned by the sync_event_kpis() SQL function (migration 054),
+// which aggregates the latest 1,000 events server-side instead of shipping
+// full rows (including JSONB payloads) to compute four numbers.
+type SyncEventKpiRow = {
+  total: number
+  outcome_success: number
+  outcome_failed: number
+  avg_duration_ms: number
+  failures_today: number
+}
+
+const getCachedEventKpis = unstable_cache(
+  async (
+    automation: string | null,
+    status: string | null,
+    search: string | null,
+    dateFrom: string | null,
+    dateTo: string | null
+  ): Promise<EventKpis> => {
+    const supabase = createAdminClient()
+    const { data, error } = await supabase.rpc('sync_event_kpis', {
+      p_automation: automation,
+      p_status: status,
+      p_search: search,
+      p_date_from: dateFrom,
+      p_date_to: dateTo,
+    })
+    if (error) throw error
+
+    const row = ((data ?? []) as SyncEventKpiRow[])[0]
+    const outcomeTotal = (row?.outcome_success ?? 0) + (row?.outcome_failed ?? 0)
+
+    return {
+      total: row?.total ?? 0,
+      successRate: outcomeTotal > 0
+        ? Math.round(((row?.outcome_success ?? 0) / outcomeTotal) * 1000) / 10
+        : 0,
+      avgDurationMs: Math.round(row?.avg_duration_ms ?? 0),
+      failuresToday: row?.failures_today ?? 0,
+    }
+  },
+  ['sync-event-kpis'],
+  { revalidate: CACHE_TTL.integrations, tags: [CACHE_TAGS.integrations] }
+)
+
 export async function getEventKpis(filters: EventFilters = {}): Promise<EventKpis> {
-  void await getDataSourceMode()
-  const events = await getLiveSyncEvents(1000)
-  const items = applyEventFilters(events, filters)
-  return getEventKpisFromEvents(items, new Date().toISOString().slice(0, 10))
+  const search = filters.search ? filters.search.replace(/[%*,]/g, '').trim() : ''
+  return getCachedEventKpis(
+    filters.automation && filters.automation !== 'all' ? filters.automation : null,
+    filters.status && filters.status !== 'all' ? filters.status : null,
+    search || null,
+    filters.dateFrom ?? null,
+    filters.dateTo ?? null
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -1717,18 +1731,17 @@ export async function getEventKpis(filters: EventFilters = {}): Promise<EventKpi
 // ---------------------------------------------------------------------------
 
 export async function getFailedSyncs(): Promise<SyncEvent[]> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('sync_events')
-    .select('*')
+    .select(SYNC_EVENT_LIST_COLUMNS)
     .in('status', ['failed', 'retrying'])
     .order('created_at', { ascending: false })
     .limit(250)
 
   if (error) throw error
 
-  return (data ?? []) as SyncEvent[]
+  return (data ?? []) as unknown as SyncEvent[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1736,7 +1749,6 @@ export async function getFailedSyncs(): Promise<SyncEvent[]> {
 // ---------------------------------------------------------------------------
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusData[]> {
-  void await getDataSourceMode()
   return getLiveIntegrationStatus()
 }
 
@@ -1745,7 +1757,6 @@ export async function getIntegrationStatus(): Promise<IntegrationStatusData[]> {
 // ---------------------------------------------------------------------------
 
 export async function getFieldMappings(automation?: string): Promise<FieldMapping[]> {
-  void await getDataSourceMode()
   const mappings = await getLiveFieldMappings()
 
   if (automation && automation !== 'all') {
@@ -1759,7 +1770,6 @@ export async function getFieldMappings(automation?: string): Promise<FieldMappin
 // ---------------------------------------------------------------------------
 
 export async function getConnectionConfigs(): Promise<ConnectionConfig[]> {
-  void await getDataSourceMode()
   return getLiveConnectionConfigs()
 }
 
@@ -1768,7 +1778,6 @@ export async function getConnectionConfigs(): Promise<ConnectionConfig[]> {
 // ---------------------------------------------------------------------------
 
 export async function getCustomers(): Promise<Customer[]> {
-  void await getDataSourceMode()
   return []
 }
 
@@ -2498,13 +2507,11 @@ async function getOperationalSalesDashboardCore(): Promise<SalesDashboardCore> {
 }
 
 export async function getSalesDashboardCore(): Promise<SalesDashboardCore> {
-  void await getDataSourceMode()
   return getOperationalSalesDashboardCore()
 }
 
 
 export async function getSalesLeaderboard(): Promise<SeedSalesRep[]> {
-  void await getDataSourceMode()
   const liveReps = await getOperationalSalesDashboardCore().then((core) => core.reps)
   return liveReps.sort((a, b) => b.revenueMTD - a.revenueMTD)
 }
@@ -2515,7 +2522,6 @@ export interface SalesLeaderboardWithHistory {
 }
 
 export async function getSalesLeaderboardWithHistory(): Promise<SalesLeaderboardWithHistory> {
-  void await getDataSourceMode()
   const core = await getOperationalSalesDashboardCore()
   return {
     current: [...core.reps].sort((a, b) => b.revenueMTD - a.revenueMTD),
@@ -2524,7 +2530,6 @@ export async function getSalesLeaderboardWithHistory(): Promise<SalesLeaderboard
 }
 
 export async function getEnhancedSalesReps(): Promise<SalesRepPerformance[]> {
-  void await getDataSourceMode()
   return getOperationalSalesDashboardCore().then((core) => core.reps)
 }
 
@@ -2664,7 +2669,6 @@ async function getLiveSalesReps(): Promise<SeedSalesRep[]> {
 }
 
 export async function getPipelineSnapshot(): Promise<SeedPipelineStage[]> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const { data: opps } = await supabase
     .from('sf_opportunities')
@@ -2698,7 +2702,6 @@ export async function getPipelineSnapshot(): Promise<SeedPipelineStage[]> {
 
 export async function getSalesActivity(limit = 10): Promise<SeedSalesActivity[]> {
   void limit
-  void await getDataSourceMode()
   return []
 }
 
@@ -2768,12 +2771,7 @@ function mapCanonicalQuoteRow(
     }
 }
 
-export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedResult<SeedQuote>> {
-  void await getDataSourceMode()
-  const rows = await getLiveQuoteRows()
-  const now = Date.now()
-  const quotes = rows.map((row) => mapCanonicalQuoteRow(row, 0, now))
-
+function applyQuoteFilters(quotes: SeedQuote[], filters: QuoteFilters): SeedQuote[] {
   let filtered = quotes
   const scope = filters.scope ?? 'active'
   if (scope === 'active') {
@@ -2809,10 +2807,15 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
     )
   }
 
-  const paginated = paginate(filtered, filters.page, filters.pageSize)
-  if (filters.includeItems === false || paginated.data.length === 0) {
-    return paginated
-  }
+  return filtered
+}
+
+async function hydrateQuotePage(
+  paginated: PaginatedResult<SeedQuote>,
+  rows: CanonicalSalesOrderRow[],
+  now: number
+): Promise<PaginatedResult<SeedQuote>> {
+  if (paginated.data.length === 0) return paginated
 
   const lineItemCounts = await fetchLineItemCountsForNumbers(
     paginated.data.map((quote) => quote.id)
@@ -2832,6 +2835,80 @@ export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedRe
   }
 }
 
+export async function getQuotes(filters: QuoteFilters = {}): Promise<PaginatedResult<SeedQuote>> {
+  const rows = await getLiveQuoteRows()
+  const now = Date.now()
+  const quotes = rows.map((row) => mapCanonicalQuoteRow(row, 0, now))
+  const filtered = applyQuoteFilters(quotes, filters)
+  const paginated = paginate(filtered, filters.page, filters.pageSize)
+
+  if (filters.includeItems === false) return paginated
+  return hydrateQuotePage(paginated, rows, now)
+}
+
+export interface QuotesWorkingSet {
+  result: PaginatedResult<SeedQuote>
+  // Header-only rows (line item counts unset) for summary / data-quality rollups.
+  filtered: SeedQuote[]
+  allScope: SeedQuote[]
+}
+
+/**
+ * One canonical_quotes scan serving the paginated page, the filtered summary
+ * set, and the all-scope data-quality set. The quotes API route previously
+ * called getQuotes() three times, re-scanning the table per call.
+ */
+export async function getQuotesWorkingSet(filters: QuoteFilters = {}): Promise<QuotesWorkingSet> {
+  const rows = await getLiveQuoteRows()
+  const now = Date.now()
+  const quotes = rows.map((row) => mapCanonicalQuoteRow(row, 0, now))
+  const filtered = applyQuoteFilters(quotes, filters)
+  const allScope = filters.scope === 'all'
+    ? filtered
+    : applyQuoteFilters(quotes, { ...filters, scope: 'all' })
+  const result = await hydrateQuotePage(
+    paginate(filtered, filters.page, filters.pageSize),
+    rows,
+    now
+  )
+
+  return { result, filtered, allScope }
+}
+
+export async function getQuoteById(
+  id: string,
+  options: { salespersonIn?: string[] } = {}
+): Promise<SeedQuote | null> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('canonical_quotes')
+    .select(SALES_ORDER_HEADER_SELECT)
+    .eq('so_number', id)
+    .limit(1)
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      warnEmptyLiveTable('canonical_quotes', 'quote detail')
+      return null
+    }
+    throw error
+  }
+
+  const row = ((data ?? []) as unknown as CanonicalSalesOrderRow[])[0]
+  if (!row) return null
+
+  const lineItemCounts = await fetchLineItemCountsForNumbers([row.so_number]).catch((error) => {
+    console.warn('Live Fishbowl quote item detail query failed; quote will use cached quality flags:', error)
+    return new Map<string, number>()
+  })
+  const quote = mapCanonicalQuoteRow(row, lineItemCounts.get(row.so_number) ?? 0)
+
+  // Rep row-scoping: an empty allow-list matches nothing (same semantics as
+  // applyQuoteFilters.salespersonIn).
+  if (options.salespersonIn && !options.salespersonIn.includes(quote.repName)) return null
+  return quote
+}
+
 function mapFishbowlQuoteStatus(status: string): SeedQuote['status'] {
   const normalized = status.toLowerCase()
   if (['accepted', 'issued'].includes(normalized)) return 'accepted'
@@ -2842,12 +2919,10 @@ function mapFishbowlQuoteStatus(status: string): SeedQuote['status'] {
 }
 
 export async function getMonthlyRepRevenue(): Promise<SeedMonthlyRepRevenue[]> {
-  void await getDataSourceMode()
   return getOperationalSalesDashboardCore().then((core) => core.monthlyRevenue)
 }
 
 export async function getPipelineByRep(): Promise<SeedPipelineByRep[]> {
-  void await getDataSourceMode()
   return getLivePipelineByRep()
 }
 
@@ -2988,7 +3063,6 @@ export interface SalesKpis {
 }
 
 export async function getSalesKpis(): Promise<SalesKpis> {
-  void await getDataSourceMode()
   return getOperationalSalesDashboardCore().then((core) => core.kpis)
 }
 
@@ -2997,18 +3071,15 @@ export async function getSalesKpis(): Promise<SalesKpis> {
 // ---------------------------------------------------------------------------
 
 export async function getCustomersWithLocations(): Promise<Customer[]> {
-  void await getDataSourceMode()
   return []
 }
 
 export async function getRegionSummaries(): Promise<SeedRegionSummary[]> {
-  void await getDataSourceMode()
   return []
 }
 
 export async function getCustomersByRegion(region: string): Promise<Customer[]> {
   void region
-  void await getDataSourceMode()
   return []
 }
 
@@ -3020,7 +3091,6 @@ export interface ClientMapStats {
 }
 
 export async function getClientMapStats(): Promise<ClientMapStats> {
-  void await getDataSourceMode()
   return {
     totalClients: 0,
     activeClients: 0,
@@ -3048,7 +3118,6 @@ export interface ProfileCallFilters {
 }
 
 export async function getProfileCalls(filters: ProfileCallFilters = {}): Promise<PaginatedResult<SeedProfileCall>> {
-  void await getDataSourceMode()
   return getLiveProfileCalls(filters)
 }
 
@@ -3151,7 +3220,6 @@ export interface ProfileCallMetricsResult {
 }
 
 export async function getProfileCallMetrics(): Promise<ProfileCallMetricsResult> {
-  void await getDataSourceMode()
   return getLiveProfileCallMetrics()
 }
 
@@ -3432,7 +3500,6 @@ function makeMonthlyPeriods(now: Date): MutableCallActivityPeriod[] {
 }
 
 export async function getCallActivitySummary(): Promise<CallActivitySummary> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const now = new Date()
   const dailyPeriods = makeDailyPeriods(now)
@@ -3564,7 +3631,6 @@ export async function getCallActivitySummary(): Promise<CallActivitySummary> {
 }
 
 export async function getWeeklyCallVolume(): Promise<SeedWeeklyCallVolume[]> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const now = new Date()
   const weekStarts = Array.from({ length: 8 }, (_, index) => {
@@ -3635,7 +3701,6 @@ export async function getCallOutcomeBreakdown(): Promise<Array<{
   percentage: number
   color: string
 }>> {
-  void await getDataSourceMode()
   const supabase = createAdminClient()
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
@@ -3695,7 +3760,6 @@ export interface KeywordResult {
 }
 
 export async function getTopCompetitorKeywords(limit: number = 10): Promise<KeywordResult[]> {
-  void await getDataSourceMode()
   return getLiveTopKeywords(limit)
 }
 

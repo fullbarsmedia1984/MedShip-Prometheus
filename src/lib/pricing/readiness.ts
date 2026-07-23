@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { unstable_cache } from 'next/cache'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   calculateMinimumQuotePrice,
@@ -79,6 +81,17 @@ function isMissingRelationError(error: unknown) {
     candidate.code === 'PGRST205' ||
     message.includes('does not exist') ||
     message.includes('could not find the table')
+  )
+}
+
+function isMissingFunctionError(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: string; message?: string }
+  const message = candidate.message?.toLowerCase() ?? ''
+  return (
+    candidate.code === 'PGRST202' ||
+    candidate.code === '42883' ||
+    message.includes('could not find the function')
   )
 }
 
@@ -163,39 +176,13 @@ async function getActivePricingRule(): Promise<PricingRuleRow | null> {
   return data as PricingRuleRow | null
 }
 
-export async function getPricingReadinessReport(): Promise<PricingReadinessReport> {
+/**
+ * Legacy in-Node SKU cross-match, kept only as a fallback until migration 055
+ * (pricing_readiness_sku_match_counts) is applied — it pages every product
+ * code and part number into memory before matching with JS Sets.
+ */
+async function computeDirectSkuMatchesInNode(): Promise<number> {
   const supabase = createAdminClient()
-
-  const [
-    sfProducts,
-    sfProductsWithCode,
-    inventoryParts,
-    inventoryWithPartNumber,
-    inventoryWithSfProductId,
-    opportunityLines,
-    opportunityLinesWithProductCode,
-    fbSalesOrderItems,
-    productCrosswalkRows,
-    contractLines,
-    cogsRows,
-    pricingRules,
-    activePricingRule,
-  ] = await Promise.all([
-    safeCount('sf_products'),
-    safeCount('sf_products', (query) => query.not('product_code', 'is', null)),
-    safeCount('inventory_snapshot'),
-    safeCount('inventory_snapshot', (query) => query.not('part_number', 'is', null)),
-    safeCount('inventory_snapshot', (query) => query.not('sf_product_id', 'is', null)),
-    safeCount('sf_opportunity_line_items'),
-    safeCount('sf_opportunity_line_items', (query) => query.not('product_code', 'is', null)),
-    safeCount('fb_sales_order_items'),
-    safeCount('product_crosswalk'),
-    safeCount('contract_price_lines'),
-    safeCount('product_cogs'),
-    safeCount('pricing_rules'),
-    getActivePricingRule(),
-  ])
-
   const [productCodes, partNumbers] = await Promise.all([
     fetchAll<{ product_code: string | null }>(() =>
       supabase
@@ -216,10 +203,66 @@ export async function getPricingReadinessReport(): Promise<PricingReadinessRepor
       normalizeSalesforceProductCode(row.product_code).matchKeys
     )
   )
-  const directSkuMatches = partNumbers.filter((row) => {
+  return partNumbers.filter((row) => {
     const partNumber = normalizeFishbowlPartNumber(row.part_number)
     return !partNumber.isBlank && partNumber.matchKeys.some((key) => normalizedProductCodes.has(key))
   }).length
+}
+
+/**
+ * Inventory rows whose part number direct-matches a Salesforce product code
+ * (same predicate as src/lib/pricing/normalization.ts). Prefers the SQL
+ * rollup from migration 055; falls back to the in-Node cross-match until
+ * that migration is applied.
+ */
+async function getDirectSkuMatchCount(): Promise<number> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('pricing_readiness_sku_match_counts')
+
+  if (error) {
+    if (isMissingFunctionError(error) || isMissingRelationError(error)) {
+      return computeDirectSkuMatchesInNode()
+    }
+    throw error
+  }
+
+  const summary = (data ?? {}) as { direct_sku_matches?: number | string | null }
+  return toNumber(summary.direct_sku_matches) ?? 0
+}
+
+async function buildPricingReadinessReport(): Promise<PricingReadinessReport> {
+  const [
+    sfProducts,
+    sfProductsWithCode,
+    inventoryParts,
+    inventoryWithPartNumber,
+    inventoryWithSfProductId,
+    opportunityLines,
+    opportunityLinesWithProductCode,
+    fbSalesOrderItems,
+    productCrosswalkRows,
+    contractLines,
+    cogsRows,
+    pricingRules,
+    activePricingRule,
+    directSkuMatches,
+  ] = await Promise.all([
+    safeCount('sf_products'),
+    safeCount('sf_products', (query) => query.not('product_code', 'is', null)),
+    safeCount('inventory_snapshot'),
+    safeCount('inventory_snapshot', (query) => query.not('part_number', 'is', null)),
+    safeCount('inventory_snapshot', (query) => query.not('sf_product_id', 'is', null)),
+    safeCount('sf_opportunity_line_items'),
+    safeCount('sf_opportunity_line_items', (query) => query.not('product_code', 'is', null)),
+    safeCount('fb_sales_order_items'),
+    safeCount('product_crosswalk'),
+    safeCount('contract_price_lines'),
+    safeCount('product_cogs'),
+    safeCount('pricing_rules'),
+    getActivePricingRule(),
+    getDirectSkuMatchCount(),
+  ])
+
   const matchDenominator = Math.min(sfProductsWithCode.count, inventoryWithPartNumber.count)
   const targetMarginPct = toNumber(activePricingRule?.target_margin_pct)
   const minimumMarginPct = toNumber(activePricingRule?.minimum_margin_pct)
@@ -384,4 +427,18 @@ export async function getPricingReadinessReport(): Promise<PricingReadinessRepor
     },
     checks,
   }
+}
+
+// The underlying tables change on sync cadences, not per request; cache the
+// whole report (nothing per-request is captured — the admin client is
+// env-configured only). Tag invalidation via CACHE_TAGS.pricingReadiness
+// keeps it fresh, with the TTL as a self-healing fallback.
+const getCachedPricingReadinessReport = unstable_cache(
+  buildPricingReadinessReport,
+  ['pricing-readiness-report'],
+  { revalidate: CACHE_TTL.pricingReadiness, tags: [CACHE_TAGS.pricingReadiness] }
+)
+
+export async function getPricingReadinessReport(): Promise<PricingReadinessReport> {
+  return getCachedPricingReadinessReport()
 }

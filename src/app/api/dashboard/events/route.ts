@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
       pageSize: Number(params.get('pageSize') ?? 20),
     }
     const [result, kpis] = await Promise.all([
-      getSyncEvents(filters),
+      // The events table expands rows to show payload/response, so this
+      // page-sized query keeps the JSONB columns; KPIs aggregate in SQL.
+      getSyncEvents({ ...filters, includePayload: true }),
       getEventKpis(filters),
     ])
 

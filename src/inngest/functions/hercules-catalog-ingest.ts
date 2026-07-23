@@ -1,4 +1,6 @@
+import { revalidateTag } from 'next/cache'
 import { inngest } from '../client'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import { logger, logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -210,6 +212,16 @@ export const herculesCatalogIngest = inngest.createFunction(
         runType: start.runType,
         counters: finalResult.counters,
       })
+
+      // Bust the catalog DAL cache so browse/search pages pick up the new
+      // parts. Best-effort: a revalidation hiccup must never fail the run.
+      try {
+        revalidateTag(CACHE_TAGS.catalog, { expire: 0 })
+      } catch (revalidateError) {
+        logger.log('warn', AUTOMATION, 'Cache revalidation failed (non-fatal)', {
+          error: revalidateError instanceof Error ? revalidateError.message : String(revalidateError),
+        })
+      }
     })
 
     return {

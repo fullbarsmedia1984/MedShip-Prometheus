@@ -1,4 +1,7 @@
+import { unstable_cache } from 'next/cache'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { CACHE_TAGS } from '@/lib/cache-tags'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { FishbowlClient } from './client'
 import {
   getSalesOrderById,
@@ -813,7 +816,12 @@ export async function refreshIssuedDatesFromSource(
   return { strategy: 'issued_date_backfill', sinceDays, sourceRows: rows.length, updated }
 }
 
-export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<SalesOrderCoverage> {
+/**
+ * Uncached coverage computation (17 count/lookup queries). Dashboard routes
+ * should use getSalesOrderCoverage(); this direct form exists for the P7
+ * monitoring poll, which needs a live view of an in-flight sync.
+ */
+export async function computeSalesOrderCoverage(supabase: SupabaseClient): Promise<SalesOrderCoverage> {
   const [
     headersRes,
     linesRes,
@@ -944,3 +952,14 @@ export async function getSalesOrderCoverage(supabase: SupabaseClient): Promise<S
     backfillStatus,
   }
 }
+
+/**
+ * Cached coverage rollup for dashboard loads (orders / quotes / integrations
+ * all request it). The callback creates its own service-role client so no
+ * per-request state is captured; P7 busts CACHE_TAGS.orders on completion.
+ */
+export const getSalesOrderCoverage = unstable_cache(
+  async (): Promise<SalesOrderCoverage> => computeSalesOrderCoverage(createAdminClient()),
+  ['sales-order-coverage'],
+  { revalidate: 900, tags: [CACHE_TAGS.orders] }
+)
