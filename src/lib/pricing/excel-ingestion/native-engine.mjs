@@ -39,7 +39,9 @@ const HEADER_SYNONYMS = {
   manufacturer_name: ['MANUFACTURER', 'MFG', 'MFR', 'BRAND', 'VENDOR NAME'],
   item_description_raw: ['DESCRIPTION', 'ITEM DESCRIPTION', 'PRODUCT DESCRIPTION', 'PRODUCT NAME', 'DESC'],
   raw_price_uom: ['UOM', 'UNIT OF MEASURE', 'U/M', 'UM', 'SELL UOM', 'PRICE UOM', 'UNIT'],
-  price: ['CONTRACT PRICE', 'NET PRICE', 'UNIT PRICE', 'CONTRACT COST', 'NET COST', 'UNIT COST', 'YOUR PRICE', 'DEALER PRICE', 'PRICE', 'COST'],
+  // Deliberately NOT a synonym: 'LIST PRICE' (usually MSRP, not the negotiated
+  // cost) — a human must map that column consciously if it really is the price.
+  price: ['CONTRACT PRICE', 'NET PRICE', 'UNIT PRICE', 'CONTRACT COST', 'NET COST', 'UNIT COST', 'YOUR PRICE', 'YOUR COST', 'CUSTOMER PRICE', 'CUSTOMER COST', 'DEALER PRICE', 'DEALER COST', 'DISTRIBUTOR PRICE', 'DISTRIBUTOR COST', 'ACQUISITION COST', 'PRICE', 'COST'],
   pack_size: ['PACK SIZE', 'PACK', 'QTY PER', 'CASE QTY', 'QTY/UOM'],
   minimum_quantity: ['MIN QTY', 'MINIMUM QTY', 'MINIMUM', 'MOQ', 'MIN ORDER'],
   effective_date: ['EFFECTIVE DATE', 'EFFECTIVE', 'START DATE'],
@@ -166,6 +168,36 @@ export function suggestColumnMappings(headers) {
   }
 
   return suggestions
+}
+
+/**
+ * Pick the sheet that most looks like the pricing table, from discovered
+ * sheets that already carry their mapping suggestions. Workbooks often lead
+ * with a terms/cover sheet, so "first sheet" is a bad default. Ranking:
+ * a suggested price column beats everything, then suggestion count, then
+ * row count. Returns the sheet name, or null when no sheet suggested anything.
+ *
+ * @param {Array<{ name: string, row_count: number, suggested_mappings?: Array<{ canonical_field: string }> }>} sheets
+ * @returns {string | null}
+ */
+export function recommendSheet(sheets) {
+  let best = null
+  let bestKey = null
+  for (const sheet of sheets ?? []) {
+    const mappings = sheet.suggested_mappings ?? []
+    if (mappings.length === 0) continue
+    const hasPrice = mappings.some((mapping) => mapping.canonical_field === 'price') ? 1 : 0
+    const key = [hasPrice, mappings.length, sheet.row_count ?? 0]
+    if (
+      !bestKey ||
+      key[0] > bestKey[0] ||
+      (key[0] === bestKey[0] && (key[1] > bestKey[1] || (key[1] === bestKey[1] && key[2] > bestKey[2])))
+    ) {
+      best = sheet.name
+      bestKey = key
+    }
+  }
+  return best
 }
 
 export function parsePrice(text) {

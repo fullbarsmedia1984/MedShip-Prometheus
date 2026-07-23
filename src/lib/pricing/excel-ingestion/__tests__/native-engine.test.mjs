@@ -8,6 +8,7 @@ import {
   extractWorkbookRows,
   normalizeUom,
   parsePrice,
+  recommendSheet,
   suggestColumnMappings,
 } from '../native-engine.mjs'
 
@@ -156,6 +157,64 @@ describe('native excel ingestion engine', () => {
     const clean = result.proposedRows.find((row) => row.source_row_number === 4)
     assert.equal(clean.canonical_row.raw_price_uom, 'EA')
     assert.equal(clean.canonical_row.normalized_price_uom, 'EA')
+  })
+})
+
+describe('mapping suggestion synonyms', () => {
+  it('matches "Customer Price" exactly, beating a partial-match List Price column', () => {
+    const suggestions = suggestColumnMappings([
+      { column_letter: 'A', header: 'Item #' },
+      { column_letter: 'B', header: 'List Price' },
+      { column_letter: 'C', header: 'Customer Price' },
+    ])
+    const price = suggestions.find((entry) => entry.canonical_field === 'price')
+    assert.equal(price.column_letter, 'C')
+    assert.ok(price.confidence >= 0.9)
+  })
+
+  it('never suggests List Price with high confidence', () => {
+    const suggestions = suggestColumnMappings([
+      { column_letter: 'A', header: 'Item #' },
+      { column_letter: 'B', header: 'List Price' },
+    ])
+    const price = suggestions.find((entry) => entry.canonical_field === 'price')
+    assert.ok(!price || price.confidence < 0.9)
+  })
+})
+
+describe('recommendSheet', () => {
+  it('prefers the sheet with a suggested price column over an earlier terms sheet', () => {
+    const best = recommendSheet([
+      { name: 'Terms', row_count: 120, suggested_mappings: [] },
+      {
+        name: 'Price List',
+        row_count: 800,
+        suggested_mappings: [
+          { canonical_field: 'distributor_sku' },
+          { canonical_field: 'price' },
+        ],
+      },
+      { name: 'Notes', row_count: 10, suggested_mappings: [{ canonical_field: 'item_description_raw' }] },
+    ])
+    assert.equal(best, 'Price List')
+  })
+
+  it('breaks price ties by suggestion count, then row count', () => {
+    const best = recommendSheet([
+      { name: 'Small', row_count: 5, suggested_mappings: [{ canonical_field: 'price' }] },
+      {
+        name: 'Rich',
+        row_count: 5,
+        suggested_mappings: [{ canonical_field: 'price' }, { canonical_field: 'distributor_sku' }],
+      },
+      { name: 'Big', row_count: 900, suggested_mappings: [{ canonical_field: 'price' }] },
+    ])
+    assert.equal(best, 'Rich')
+  })
+
+  it('returns null when no sheet has any suggestions', () => {
+    assert.equal(recommendSheet([{ name: 'Terms', row_count: 120, suggested_mappings: [] }]), null)
+    assert.equal(recommendSheet([]), null)
   })
 })
 

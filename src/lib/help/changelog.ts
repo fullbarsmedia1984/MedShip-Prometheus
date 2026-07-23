@@ -20,6 +20,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-23-workbook-sheet-detection',
+    date: '2026-07-23',
+    title: 'Smarter workbook mapping suggestions',
+    summary:
+      'The workbook upload page now pre-selects the sheet that actually looks like the price table (instead of whatever sheet is first in the file), and warns you when the selected sheet has no recognizable pricing columns.',
+    details: [
+      'Many distributor files start with a terms or cover sheet — Zeus now skips past those automatically.',
+      'If you see "No pricing columns were detected on this sheet", you are on the wrong sheet; use the one-click switch or the Sheet dropdown.',
+      'More price column names are recognized, including "Customer Price". "List Price" is deliberately never auto-suggested — it usually means MSRP, not our negotiated cost.',
+    ],
+    areas: [{ label: 'Supplier Cost Imports', href: '/dashboard/pricing/imports' }],
+  },
+  {
     id: '2026-07-23-expiring-soon-and-search',
     date: '2026-07-23',
     title: 'Contract search and expiration warnings',
