@@ -70,7 +70,7 @@ const mainNav: NavItem[] = [
 
 const opsNav: NavItem[] = [
   { name: 'Integrations', href: '/dashboard/integrations', icon: RefreshCw, roles: STAFF_ROLES },
-  { name: 'Image Review', href: '/dashboard/enrichment', icon: Images, roles: STAFF_ROLES },
+  { name: 'Image Review', href: '/dashboard/enrichment', icon: Images, roles: ADMIN_ROLES },
   { name: 'Event Log', href: '/dashboard/events', icon: List, roles: STAFF_ROLES },
   { name: 'Failed Syncs', href: '/dashboard/failed', icon: AlertTriangle, roles: STAFF_ROLES },
 ]
