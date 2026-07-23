@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  ADMIN_API_AUTH_OPTIONS,
-  STAFF_API_AUTH_OPTIONS,
-  requireApiAuth,
-} from '@/lib/auth'
+import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import { SupabaseEnrichmentRepository } from '@/lib/enrichment/repository'
 import type { ImageSource } from '@/lib/enrichment/types'
 import { logSyncEvent } from '@/lib/utils/logger'
@@ -14,13 +10,14 @@ const SOURCES = new Set(['all', 'hercules', 'pocketnurse', 'diamedical', 'web_se
  * Enrichment image review gallery.
  *
  * GET  -> newest stored images (keyset via ?before=<ISO>), filterable
- *         by ?source=. Staff read; canReject reflects admin rights.
+ *         by ?source=. Admin-only, like the rest of the enrichment
+ *         review surface.
  * POST -> { action: 'reject', imageId } (admin) — removes the image
  *         link and marks the item so no automation refills it.
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
+    const auth = await requireApiAuth(ADMIN_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
     const params = request.nextUrl.searchParams
