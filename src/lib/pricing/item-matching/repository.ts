@@ -86,7 +86,7 @@ async function batchCostLineIds(batchId: string) {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('supplier_contract_cost_lines')
-    .select('id, source_row_number, distributor_sku, manufacturer_part_number, model_number, gtin, internal_item_id, hercules_catalog_item_id')
+    .select('id, source_row_number, distributor_sku, manufacturer_part_number, model_number, gtin, item_description_raw, internal_item_id, hercules_catalog_item_id')
     .eq('source_batch_id', batchId)
   assertNoError(error)
   return (data ?? []) as DbRow[]
@@ -136,7 +136,7 @@ export async function listItemMatchSuggestions(batchId: string): Promise<ItemMat
   if (herculesIds.length > 0) {
     const { data: items, error: herculesError } = await supabase
       .from('hercules_catalog_items')
-      .select('id, description, manufacturer_name')
+      .select('id, description, manufacturer_name, manufacturer_part_number, brand, category')
       .in('id', herculesIds)
     assertNoError(herculesError)
     for (const item of (items ?? []) as DbRow[]) herculesById.set(String(item.id), item)
@@ -146,6 +146,8 @@ export async function listItemMatchSuggestions(batchId: string): Promise<ItemMat
     const line = lineById.get(String(match.cost_line_id))
     const product = productById.get(String(match.pricing_product_id ?? ''))
     const hercules = herculesById.get(String(match.hercules_catalog_item_id ?? ''))
+    const matchedField = match.matched_identifier_field ? String(match.matched_identifier_field) : null
+    const matchedValue = line && matchedField && line[matchedField] ? String(line[matchedField]) : null
     return {
       id: String(match.id),
       cost_line_id: String(match.cost_line_id),
@@ -160,6 +162,8 @@ export async function listItemMatchSuggestions(batchId: string): Promise<ItemMat
       created_at: String(match.created_at),
       cost_line_source_row_number: line ? (line.source_row_number === null ? null : Number(line.source_row_number)) : null,
       cost_line_identifier: line ? costLineIdentifier(line) : null,
+      cost_line_description: line && line.item_description_raw ? String(line.item_description_raw) : null,
+      matched_value: matchedValue,
       target_label: product
         ? String(product.name ?? product.zeus_product_id ?? '')
         : hercules
@@ -170,6 +174,12 @@ export async function listItemMatchSuggestions(batchId: string): Promise<ItemMat
         : hercules
           ? (hercules.manufacturer_name ? String(hercules.manufacturer_name) : null)
           : null,
+      target_part_number: hercules && hercules.manufacturer_part_number
+        ? String(hercules.manufacturer_part_number)
+        : product
+          ? String(product.zeus_product_id ?? '') || null
+          : null,
+      target_category: hercules && hercules.category ? String(hercules.category) : null,
     }
   })
 }

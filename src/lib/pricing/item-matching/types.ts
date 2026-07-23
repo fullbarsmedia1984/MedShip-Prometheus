@@ -29,8 +29,12 @@ export type ItemMatchSuggestion = {
   // Display context resolved by the repository:
   cost_line_source_row_number: number | null
   cost_line_identifier: string | null
+  cost_line_description: string | null
+  matched_value: string | null
   target_label: string | null
   target_manufacturer: string | null
+  target_part_number: string | null
+  target_category: string | null
 }
 
 export type ItemMatchReviewInput = {

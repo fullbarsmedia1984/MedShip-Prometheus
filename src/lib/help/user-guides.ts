@@ -132,8 +132,10 @@ const BATCH_DETAIL: PageGuide = {
       heading: 'Item matching (any time)',
       steps: [
         'In the Item Matching card, click Generate Suggestions.',
-        'Approve a suggestion only if you are confident it is the same product from the same manufacturer; otherwise Reject or leave it.',
-        'Unmatched lines are fine — they never block publishing.',
+        'Each suggestion shows your spreadsheet line on the left and the suggested catalog item on the right.',
+        'Compare the two part numbers first — a suggestion only appears because they match exactly. The descriptions are just a sanity check; they come from different systems and will not read word-for-word the same.',
+        'Approve when the part numbers agree and both descriptions are clearly the same kind of product from the same manufacturer. Reject only when the descriptions clearly disagree (a different kind of product).',
+        'Not sure? Leave it open and move on. Unmatched lines are fine — they never block publishing.',
       ],
     },
     {

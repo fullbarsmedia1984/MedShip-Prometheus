@@ -91,8 +91,12 @@ type MatchSuggestion = {
   status: string
   cost_line_source_row_number: number | null
   cost_line_identifier: string | null
+  cost_line_description: string | null
+  matched_value: string | null
   target_label: string | null
   target_manufacturer: string | null
+  target_part_number: string | null
+  target_category: string | null
 }
 
 type PageProps = {
@@ -612,49 +616,67 @@ export default function PricingImportDetailPage({ params }: PageProps) {
                   </Button>
                 </div>
                 {matchSuggestions.filter((match) => match.status === 'suggested').length > 0 && (
-                  <div className="mt-4 overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-right">Source Row</TableHead>
-                          <TableHead>Line Identifier</TableHead>
-                          <TableHead>Suggested Item</TableHead>
-                          <TableHead>Target</TableHead>
-                          <TableHead>Method</TableHead>
-                          <TableHead className="text-right">Confidence</TableHead>
-                          <TableHead>Review</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {matchSuggestions.filter((match) => match.status === 'suggested').map((match) => (
-                          <TableRow key={match.id}>
-                            <TableCell className="text-right font-mono text-sm">{match.cost_line_source_row_number ?? '-'}</TableCell>
-                            <TableCell className="max-w-[160px] truncate font-mono text-xs">{match.cost_line_identifier ?? '-'}</TableCell>
-                            <TableCell className="max-w-[280px] truncate text-sm">
-                              {match.target_label ?? 'Unknown'}
-                              {match.target_manufacturer ? (
-                                <span className="ml-1 text-xs text-muted-foreground">({match.target_manufacturer})</span>
+                  <div className="mt-4 space-y-3">
+                    <p className="rounded-md border border-medship-primary/20 bg-medship-primary/5 p-3 text-sm text-muted-foreground">
+                      <span className="font-medium text-card-foreground">How to review:</span> compare the two part
+                      numbers first — the suggestion exists because they match exactly. Approve when the part numbers
+                      agree and the two descriptions are clearly the same kind of product from the same manufacturer.
+                      Reject only if the descriptions clearly disagree. If unsure, leave it open — unmatched lines
+                      never block anything.
+                    </p>
+                    {matchSuggestions.filter((match) => match.status === 'suggested').map((match) => (
+                      <div key={match.id} className="rounded-md border p-4">
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase text-muted-foreground">
+                              Spreadsheet line (row {match.cost_line_source_row_number ?? '?'})
+                            </p>
+                            <p className="mt-1 font-mono text-sm text-card-foreground">
+                              {match.matched_value ?? match.cost_line_identifier ?? '-'}
+                              {match.matched_identifier_field ? (
+                                <span className="ml-2 font-sans text-xs text-muted-foreground">
+                                  ({match.matched_identifier_field.replace(/_/g, ' ')})
+                                </span>
                               ) : null}
-                            </TableCell>
-                            <TableCell className="text-xs">{match.target_type === 'pricing_product' ? 'Internal' : 'Hercules'}</TableCell>
-                            <TableCell className="text-xs">{match.match_method.replace(/_/g, ' ')}</TableCell>
-                            <TableCell className="text-right font-mono text-sm">
-                              {match.match_confidence === null ? '-' : `${Math.round(match.match_confidence * 100)}%`}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => reviewMatch(match.id, 'approved')} disabled={actionLoading !== null}>
-                                  Approve
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => reviewMatch(match.id, 'rejected')} disabled={actionLoading !== null}>
-                                  Reject
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                            </p>
+                            <p className="mt-1 whitespace-normal break-words text-sm text-muted-foreground">
+                              {match.cost_line_description ?? 'No description on this spreadsheet line.'}
+                            </p>
+                          </div>
+                          <div className="min-w-0 lg:border-l lg:pl-4">
+                            <p className="text-xs font-medium uppercase text-muted-foreground">
+                              Suggested catalog item ({match.target_type === 'pricing_product' ? 'internal item' : 'Hercules supplier catalog'})
+                            </p>
+                            <p className="mt-1 font-mono text-sm text-card-foreground">
+                              {match.target_part_number ?? '-'}
+                              {match.target_manufacturer ? (
+                                <span className="ml-2 font-sans text-xs text-muted-foreground">{match.target_manufacturer}</span>
+                              ) : null}
+                            </p>
+                            <p className="mt-1 whitespace-normal break-words text-sm text-muted-foreground">
+                              {match.target_label ?? 'No catalog description.'}
+                            </p>
+                            {match.target_category ? (
+                              <p className="mt-1 text-xs text-muted-foreground">Category: {match.target_category}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                          <p className="text-xs text-muted-foreground">
+                            Matched on {match.matched_identifier_field?.replace(/_/g, ' ') ?? 'identifier'} ({match.match_method.replace(/_/g, ' ')}
+                            {match.match_confidence !== null ? `, ${Math.round(match.match_confidence * 100)}% confidence` : ''})
+                          </p>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => reviewMatch(match.id, 'approved')} disabled={actionLoading !== null}>
+                              Approve Match
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => reviewMatch(match.id, 'rejected')} disabled={actionLoading !== null}>
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </>
