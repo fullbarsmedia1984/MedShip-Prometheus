@@ -130,7 +130,9 @@ const searchOrders: AskZeusTool = {
     'Search Fishbowl sales orders (the operational and revenue source of truth). ' +
     'Call this when the user asks about orders, a customer’s purchase history, ' +
     'order statuses, or recent sales. Supports free-text search over SO number and ' +
-    'customer name, plus status and date filters. Dates are YYYY-MM-DD.',
+    'customer name, plus status and date filters. Dates are YYYY-MM-DD. This does ' +
+    'NOT search products — for what was SOLD by product across orders, use ' +
+    'search_product_sales instead.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -283,6 +285,76 @@ const getCustomerSummary: AskZeusTool = {
   },
 }
 
+const searchProductSales: AskZeusTool = {
+  name: 'search_product_sales',
+  description:
+    'Product-level sales history across ALL issued sales orders: what we have SOLD, ' +
+    'matched by keyword against line-item descriptions and part numbers, aggregated ' +
+    'per SKU with units, revenue, order count, and customer count. Call this ' +
+    'whenever the user asks what products sold, how much of a product type sold over ' +
+    'a period, or for top sellers in a product family. For multi-category questions ' +
+    '(e.g. beds AND infusion pumps), call once per category — in parallel — so the ' +
+    'results stay separated. Include synonyms as extra terms (they are OR-matched), ' +
+    'e.g. ["infusion", "IV pump", "Alaris"]. Dates are YYYY-MM-DD.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      terms: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: 6,
+        description: 'Keywords OR-matched against part description and part number',
+      },
+      date_from: { type: 'string', description: 'Earliest order date (YYYY-MM-DD)' },
+      date_to: { type: 'string', description: 'Latest order date, inclusive (YYYY-MM-DD)' },
+      limit: { type: 'number', description: 'Max SKUs to return (default 25, max 50)' },
+    },
+    required: ['terms'],
+    additionalProperties: false,
+  },
+  roles: SALES_TIER,
+  activityLabel: 'Searching product sales…',
+  execute: async (input, ctx) => {
+    const terms = (Array.isArray(input.terms) ? input.terms : [])
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+      .map((t) => t.trim())
+      .slice(0, 6)
+    if (terms.length === 0) throw new Error('terms is required')
+    const scope = repScope(ctx)
+    if (scope && scope.length === 0) {
+      return {
+        data: { skus: [], note: 'No orders visible to this user.' },
+        summary: 'No visible orders',
+      }
+    }
+    const supabase = createAdminClient()
+    const { data, error } = await supabase.rpc('askzeus_product_sales', {
+      p_terms: terms,
+      p_date_from: str(input, 'date_from') ?? null,
+      p_date_to: str(input, 'date_to') ?? null,
+      p_salespersons: scope ?? null,
+      p_limit: limitOf(input),
+    })
+    if (error) throw new Error(error.message)
+    const result = data as {
+      skus: Array<Record<string, unknown>>
+      totals: { skuCount: number; units: number; revenue: number; orderCount: number; customerCount: number }
+      truncated: boolean
+    }
+    return {
+      data: {
+        ...result,
+        note:
+          'Issued sales orders only (same revenue basis as the dashboards). SKUs are ' +
+          'keyword-matched on line-item descriptions — totals cover every match, rows ' +
+          'are the top SKUs by revenue.',
+      },
+      summary: `${result.totals.skuCount} SKU${result.totals.skuCount === 1 ? '' : 's'}, ${result.totals.orderCount} order${result.totals.orderCount === 1 ? '' : 's'}`,
+    }
+  },
+}
+
 const getRevenueSummary: AskZeusTool = {
   name: 'get_revenue_summary',
   description:
@@ -325,7 +397,9 @@ const getCategorySalesTool: AskZeusTool = {
   name: 'get_category_sales',
   description:
     'Revenue split by product family/category (from won Salesforce opportunity line ' +
-    'items). Call this when the user asks which product categories sell most.',
+    'items). CAUTION: product families are largely unpopulated in Salesforce, so ' +
+    'this usually collapses to one Uncategorized bucket — prefer search_product_sales ' +
+    'with keyword terms for questions about product types or categories sold.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   roles: REVENUE_TIER,
   activityLabel: 'Breaking down categories…',
@@ -804,6 +878,7 @@ const REGISTRY: AskZeusTool[] = [
   searchOrders,
   getOrderDetail,
   getCustomerSummary,
+  searchProductSales,
   getRevenueSummary,
   getCategorySalesTool,
   getSalesLeaderboard,
