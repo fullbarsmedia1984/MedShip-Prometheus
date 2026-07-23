@@ -620,6 +620,7 @@ function queueEntryAsLine(entry: QueueEntry): ResolvedLineItem {
     quantity: 1,
     uom: null,
     productId: null,
+    resolvedPartNumber: null,
     fishbowlDims: { lengthIn: null, widthIn: null, heightIn: null, weightLb: null },
     dimsSource: 'default',
     resolved: {

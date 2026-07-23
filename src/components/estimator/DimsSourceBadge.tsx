@@ -8,7 +8,7 @@ const STYLES: Record<DimsSource, { label: string; className: string; dot: string
     dot: 'bg-medship-success',
   },
   catalog: {
-    label: 'Catalog',
+    label: 'Hercules — unverified',
     className: 'bg-medship-primary/10 text-medship-primary border-medship-primary/30',
     dot: 'bg-medship-primary',
   },

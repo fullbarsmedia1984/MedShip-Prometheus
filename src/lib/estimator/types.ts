@@ -18,11 +18,18 @@ export interface AdvisoryDims {
 
 /** One physical SO line as fetched from Fishbowl. */
 export interface SoLineItem {
+  /** Fishbowl PRODUCT number as it appears on the SO line (e.g. "130122bx"). */
   partNumber: string
   description: string
   quantity: number
   uom: string | null
   productId: number | null
+  /**
+   * Underlying Fishbowl PART number the product resolves to (often a real
+   * manufacturer part number, e.g. "00409-3977-03"). Null when the product
+   * could not be resolved; dims lookups fall back to the product number.
+   */
+  resolvedPartNumber: string | null
   fishbowlDims: AdvisoryDims
 }
 

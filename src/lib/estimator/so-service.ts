@@ -16,6 +16,7 @@ import {
   type FBRawSalesOrderItem,
 } from '@/lib/fishbowl/sales-orders'
 import { getProductDimsByIds } from '@/lib/fishbowl/product-dims'
+import { getProductPartNumbersByIds } from '@/lib/fishbowl/product-parts'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { AdvisoryDims, SoLineItem } from './types'
 
@@ -157,6 +158,7 @@ function parseLineItems(raw: FBRawSalesOrder): {
         quantity,
         uom,
         productId: toNumber(valueAt(productRecord, ['id']) ?? valueAt(item, ['productId'])),
+        resolvedPartNumber: null,
         fishbowlDims: extractAdvisoryDims(item, productRecord),
       })
     }
@@ -203,6 +205,31 @@ async function enrichLinesWithProductDims(
     }
   } catch {
     // Advisory enrichment only — the estimate proceeds without it.
+  }
+}
+
+/**
+ * Resolve each line's product to its underlying PART number (one data query).
+ * SO lines carry product numbers ("130122bx"); the dims catalog is keyed by
+ * part numbers ("00409-3977-03"), so this hop is what connects catalog dims
+ * to real orders. Best-effort: a data-query failure never blocks the fetch.
+ */
+async function enrichLinesWithPartNumbers(
+  client: FishbowlClient,
+  lineItems: SoLineItem[]
+): Promise<void> {
+  const withIds = lineItems.filter((line) => line.productId !== null)
+  if (withIds.length === 0) return
+  try {
+    const partById = await getProductPartNumbersByIds(
+      client,
+      withIds.map((line) => line.productId as number)
+    )
+    for (const line of withIds) {
+      line.resolvedPartNumber = partById.get(line.productId as number) ?? null
+    }
+  } catch {
+    // Resolution is an enrichment — the estimate proceeds without it.
   }
 }
 
@@ -310,7 +337,10 @@ export async function fetchSalesOrderForEstimate(
       }
     }
 
-    await enrichLinesWithProductDims(client, parsed.lineItems)
+    await Promise.all([
+      enrichLinesWithProductDims(client, parsed.lineItems),
+      enrichLinesWithPartNumbers(client, parsed.lineItems),
+    ])
 
     const customerRecord = objectValue(valueAt(raw, ['customer']))
     return {

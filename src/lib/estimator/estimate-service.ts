@@ -141,7 +141,12 @@ export async function getSalesOrderSummary(soNumber: string): Promise<SalesOrder
   const partNumbers = so.lineItems.map((l) => l.partNumber)
   const [verifiedByPart, catalogByPart] = await Promise.all([
     getVerifiedDimsForParts(partNumbers),
-    getCatalogDimsForParts(partNumbers),
+    getCatalogDimsForParts(
+      so.lineItems.map((l) => ({
+        partNumber: l.partNumber,
+        resolvedPartNumber: l.resolvedPartNumber,
+      }))
+    ),
   ])
   const lineItems = so.lineItems.map((line) =>
     resolveLine(line, verifiedByPart.get(line.partNumber), catalogByPart.get(line.partNumber))

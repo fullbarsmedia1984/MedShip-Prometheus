@@ -1,13 +1,15 @@
 // =============================================================================
-// Backfill item_dims_catalog from the Hercules vendor catalog (passes 1-3).
+// Backfill item_dims_catalog from the Hercules vendor catalog (passes 1-4).
 //
-// Matches every Fishbowl part (inventory_snapshot) to Hercules offer UOM dims
-// and inserts one row per (part, pack level). Matching spine, in priority
-// order (a part only falls through to the next pass if the previous found
-// nothing):
+// Matches every ACTIVE Fishbowl part (pulled live via data-query; SO lines
+// resolve product -> part at estimate time) to Hercules offer UOM dims and
+// inserts one row per (part, pack level). Matching spine, in priority order
+// (a part only falls through to the next pass if the previous found nothing):
 //   1. exact manufacturer part number        (confidence 0.9 / 0.7 multi-mfr)
-//   2. normalized MPN (case/trim variants)   (confidence 0.8 / 0.65)
-//   3. vendor part number                    (confidence 0.75)
+//   2. normalized MPN (case/punct variants)  (confidence 0.8 / 0.65)
+//   3. Hercules vendor part number           (confidence 0.75)
+//   4. Fishbowl vendorparts.vendorPartNumber matched against Hercules MPN and
+//      vendor part number                    (confidence 0.7)
 //
 // Runs client-side in small indexed key batches over a direct Postgres
 // connection (DG_URL) on purpose: set-based SQL over the 0.7M/1.2M-row
@@ -37,7 +39,7 @@ const { loadEnvConfig } = envPkg
 loadEnvConfig(process.cwd())
 
 const dryRun = process.argv.includes('--dry-run')
-const RUN_ID = 'hercules-backfill-2026-07-09'
+const RUN_ID = 'hercules-backfill-2026-07-23'
 // Real pack levels seen in Hercules offer UOMs. The estimator prefers EA and
 // falls back to lowest volume, so storing less-common pack codes is safe.
 const UOM_CODES = new Set([
@@ -54,6 +56,129 @@ const client = new pg.Client({
   connectionString: requireEnv('DG_URL'),
   ssl: { rejectUnauthorized: false },
 })
+
+// --- Fishbowl auth + data-query (mirrors scripts/backfill-item-dims-fishbowl) -
+
+import { request as httpsRequest } from 'node:https'
+import { request as httpRequest } from 'node:http'
+
+const FISHBOWL_BASE = requireEnv('FISHBOWL_API_URL').replace(/\/+$/, '')
+
+function cfHeaders() {
+  return {
+    ...(process.env.FISHBOWL_CF_ACCESS_CLIENT_ID
+      ? { 'CF-Access-Client-Id': process.env.FISHBOWL_CF_ACCESS_CLIENT_ID }
+      : {}),
+    ...(process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET
+      ? { 'CF-Access-Client-Secret': process.env.FISHBOWL_CF_ACCESS_CLIENT_SECRET }
+      : {}),
+  }
+}
+
+async function fishbowlLogin() {
+  const response = await fetch(`${FISHBOWL_BASE}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...cfHeaders() },
+    body: JSON.stringify({
+      appName: process.env.FISHBOWL_APP_NAME ?? 'MedShip Prometheus',
+      appDescription: 'Zeus dims backfill',
+      appId: Number(process.env.FISHBOWL_APP_ID ?? 20260505),
+      username: requireEnv('FISHBOWL_USERNAME'),
+      password: requireEnv('FISHBOWL_PASSWORD'),
+    }),
+  })
+  if (!response.ok) throw new Error(`Fishbowl login failed (${response.status})`)
+  const data = await response.json()
+  if (!data.token) throw new Error('Fishbowl login returned no token')
+  return data.token
+}
+
+async function fishbowlLogout(token) {
+  try {
+    await fetch(`${FISHBOWL_BASE}/api/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, ...cfHeaders() },
+    })
+  } catch {
+    // best effort
+  }
+}
+
+function dataQuery(token, sql) {
+  const url = new URL(`${FISHBOWL_BASE}/api/data-query`)
+  const requestFn = url.protocol === 'https:' ? httpsRequest : httpRequest
+  return new Promise((resolve, reject) => {
+    const req = requestFn(
+      url,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/sql',
+          'Content-Length': Buffer.byteLength(sql),
+          Authorization: `Bearer ${token}`,
+          ...cfHeaders(),
+        },
+        timeout: 120_000,
+      },
+      (res) => {
+        let body = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk) => {
+          body += chunk
+        })
+        res.on('end', () => {
+          if (!res.statusCode || res.statusCode >= 400) {
+            reject(new Error(`data-query error ${res.statusCode}: ${body.slice(0, 300)}`))
+            return
+          }
+          try {
+            resolve(JSON.parse(body))
+          } catch {
+            reject(new Error(`data-query returned non-JSON: ${body.slice(0, 200)}`))
+          }
+        })
+      }
+    )
+    req.on('timeout', () => req.destroy(new Error('data-query timed out')))
+    req.on('error', reject)
+    req.write(sql)
+    req.end()
+  })
+}
+
+/**
+ * The parts universe + vendor part numbers, live from Fishbowl. Every active
+ * part is fair game: the estimator resolves SO products to parts, so parts
+ * outside the inventory snapshot still surface on real orders.
+ */
+async function fetchFishbowlParts() {
+  const token = await fishbowlLogin()
+  try {
+    const partRows = await dataQuery(
+      token,
+      "SELECT pt.num FROM part pt WHERE pt.activeFlag = 1 AND pt.num IS NOT NULL AND pt.num <> ''"
+    )
+    const vendorRows = await dataQuery(
+      token,
+      'SELECT pt.num AS partNum, v.vendorPartNumber ' +
+        'FROM part pt JOIN vendorparts v ON v.partId = pt.id ' +
+        "WHERE pt.activeFlag = 1 AND v.vendorPartNumber IS NOT NULL AND v.vendorPartNumber <> ''"
+    )
+    const parts = [...new Set(partRows.map((r) => String(r.num ?? '').trim()).filter(Boolean))]
+    const vendorPartsByPart = new Map()
+    for (const row of vendorRows) {
+      const pn = String(row.partNum ?? '').trim()
+      const vpn = String(row.vendorPartNumber ?? '').trim()
+      if (!pn || !vpn || vpn === pn) continue
+      const list = vendorPartsByPart.get(pn) ?? new Set()
+      list.add(vpn)
+      vendorPartsByPart.set(pn, list)
+    }
+    return { parts, vendorPartsByPart }
+  } finally {
+    await fishbowlLogout(token)
+  }
+}
 
 function chunks(array, size) {
   const out = []
@@ -315,11 +440,10 @@ async function main() {
   await client.connect()
   await client.query("SET statement_timeout = '300s'")
 
-  const { rows: snapshotParts } = await client.query(
-    'SELECT DISTINCT part_number FROM inventory_snapshot WHERE part_number IS NOT NULL'
+  const { parts: allParts, vendorPartsByPart } = await fetchFishbowlParts()
+  console.log(
+    `${allParts.length} active Fishbowl parts, ${vendorPartsByPart.size} with vendor part numbers`
   )
-  const allParts = snapshotParts.map((r) => r.part_number)
-  console.log(`${allParts.length} distinct Fishbowl parts`)
 
   const rows = []
   const matched = new Set()
@@ -408,6 +532,51 @@ async function main() {
       }
     }
     console.log(`pass 3 (vendor_part_number): ${matched.size - before} parts matched`)
+  }
+
+  // Pass 4: Fishbowl vendor part numbers as matching keys — the numbers our
+  // purchasing team actually orders under, matched against Hercules MPNs and
+  // Hercules vendor part numbers.
+  {
+    const before = matched.size
+    const keyToParts = new Map()
+    for (const [pn, vpns] of vendorPartsByPart) {
+      if (matched.has(pn)) continue
+      for (const vpn of vpns) {
+        const list = keyToParts.get(vpn) ?? []
+        list.push(pn)
+        keyToParts.set(vpn, list)
+      }
+    }
+    if (keyToParts.size > 0) {
+      const foundByMpn = await matchViaCatalogItems(keyToParts)
+      for (const [pn, entry] of foundByMpn) {
+        if (matched.has(pn)) continue
+        const partRows = buildRows(pn, entry, 'vendor_part_number', 0.7, 0.7)
+        if (partRows.length > 0) {
+          rows.push(...partRows)
+          matched.add(pn)
+        }
+      }
+
+      const remainingKeys = [...keyToParts.entries()].filter(([, pns]) =>
+        pns.some((pn) => !matched.has(pn))
+      )
+      if (remainingKeys.length > 0) {
+        const foundByVpn = await matchViaVendorPartNumber(remainingKeys.map(([vpn]) => vpn))
+        for (const [vpn, entry] of foundByVpn) {
+          for (const pn of keyToParts.get(vpn) ?? []) {
+            if (matched.has(pn)) continue
+            const partRows = buildRows(pn, entry, 'vendor_part_number', 0.7, 0.7)
+            if (partRows.length > 0) {
+              rows.push(...partRows)
+              matched.add(pn)
+            }
+          }
+        }
+      }
+    }
+    console.log(`pass 4 (fishbowl vendorparts): ${matched.size - before} parts matched`)
   }
 
   console.log(`${matched.size} parts matched total, ${rows.length} dims rows to write`)
