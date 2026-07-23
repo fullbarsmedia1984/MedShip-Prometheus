@@ -15,9 +15,11 @@ export function formatPct(value: number): string {
   return `${Math.round(value * 100)}%`
 }
 
+// Spaces around the × on purpose: decimal-heavy dims ("9.5×8.5×4.75") are
+// hard to scan on the warehouse floor without them.
 export function formatDims(l: number, w: number, h: number): string {
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
-  return `${fmt(l)}×${fmt(w)}×${fmt(h)} in`
+  return `${fmt(l)} × ${fmt(w)} × ${fmt(h)} in`
 }
 
 /** Plain-text block formatted for pasting into carrier portals. */
@@ -57,7 +59,7 @@ export function buildPortalText(record: {
     const p = plan.palletPlan
     for (const pallet of p.pallets) {
       lines.push(
-        `Pallet: ${pallet.lengthIn}×${pallet.widthIn}×${pallet.heightIn} in — ${pallet.weightLb} lb (${pallet.boxCount} cartons, incl. deck)`
+        `Pallet: ${pallet.lengthIn} × ${pallet.widthIn} × ${pallet.heightIn} in — ${pallet.weightLb} lb (${pallet.boxCount} cartons, incl. deck)`
       )
     }
     lines.push(
