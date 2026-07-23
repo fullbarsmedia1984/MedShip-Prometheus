@@ -95,6 +95,30 @@ export type InngestEvents = {
     }
   }
 
+  // P15: competitor catalog crawl (pocketnurse via Firecrawl+direct
+  // fetch, diamedical via its public SuiteCommerce items API). Starts
+  // a run or resumes the active one; also the continuation event.
+  'enrichment/competitor.crawl': {
+    data: {
+      competitor: 'pocketnurse' | 'diamedical'
+      triggeredBy?: string
+    }
+  }
+
+  // P16: mirror known product-image URLs into Supabase Storage.
+  'enrichment/images.mirror': {
+    data: {
+      triggeredBy?: string
+    }
+  }
+
+  // P17: Firecrawl web/image search for items still missing images.
+  'enrichment/images.search': {
+    data: {
+      triggeredBy?: string
+    }
+  }
+
   // Manual retry trigger
   'sync/retry': {
     data: {

@@ -1,5 +1,6 @@
 import 'server-only'
-import { getFishbowlClient } from '@/lib/fishbowl/client'
+import type { FishbowlClient } from '@/lib/fishbowl/client'
+import { withFishbowlSession } from '@/lib/fishbowl/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // Open-PO cache refresh for the wallboard. Pulls open purchase-order lines
@@ -26,8 +27,10 @@ type OpenPoRow = {
   expectedAt: string | null
 }
 
-export async function syncOpenPoLines(): Promise<number> {
-  const client = getFishbowlClient()
+// Callers own the Fishbowl session (withFishbowlSession) so every login is
+// paired with a logout — an unclosed session holds a Fishbowl license seat
+// until the server-side timeout.
+export async function syncOpenPoLines(client: FishbowlClient): Promise<number> {
   const rows = await client.dataQuery<OpenPoRow[]>(OPEN_PO_SQL)
   if (!Array.isArray(rows)) return 0
 
@@ -69,7 +72,10 @@ export async function ensureFreshPoLines(maxAgeMinutes = 15): Promise<void> {
       .maybeSingle()
     const ageMs = data ? Date.now() - new Date(data.synced_at).getTime() : Infinity
     if (ageMs > maxAgeMinutes * 60_000) {
-      await syncOpenPoLines()
+      await withFishbowlSession(
+        { automation: 'P11_PO_SYNC', sourceSystem: 'fishbowl', targetSystem: 'prometheus' },
+        (client) => syncOpenPoLines(client)
+      )
     }
   } catch (err) {
     console.error('[wallboard] open-PO refresh failed:', err)
@@ -161,8 +167,7 @@ export interface PoSyncResult {
   lines: number
 }
 
-export async function syncPurchaseOrders(): Promise<PoSyncResult> {
-  const client = getFishbowlClient()
+export async function syncPurchaseOrders(client: FishbowlClient): Promise<PoSyncResult> {
   const supabase = createAdminClient()
 
   // Watermark: newest dateLastModified we already hold (minus 1h overlap).

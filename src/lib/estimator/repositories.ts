@@ -263,33 +263,79 @@ function toCatalogDims(row: CatalogDimsRow): CatalogDims {
   }
 }
 
-/** Case-variant SO parts ("10001cs") resolve to the base part's CS-level row. */
-export function catalogLookupCandidates(partNumber: string): Array<{
+/**
+ * Pack-variant suffixes on Fishbowl product numbers -> acceptable catalog
+ * pack levels, most specific first. BX and PK are treated as aliases: vendors
+ * label the same inner pack either way for the same manufacturer part number.
+ * Suffixed products only ever match pack-level rows — falling back to EA
+ * would multiply out wrong (a "bx" of 25 packed as 25 singles' volume is
+ * fine, but 1 box packed as 1 vial is a massive underestimate).
+ */
+const SUFFIX_TO_UOMS: Record<string, string[]> = {
+  cs: ['CS'],
+  bx: ['BX', 'PK'],
+  pk: ['PK', 'BX'],
+  ea: ['EA'],
+}
+
+type CatalogLookupCandidate = {
   partNumber: string
-  preferredUom: string | null
-}> {
-  const candidates: Array<{ partNumber: string; preferredUom: string | null }> = [
-    { partNumber, preferredUom: null },
+  /** Acceptable pack levels in preference order; null = EA-then-lowest-volume. */
+  preferredUoms: string[] | null
+}
+
+/**
+ * Lookup order for an SO line:
+ *   1. the product number itself (covers parts sold directly);
+ *   2. the suffix-stripped base number at the suffix's pack level;
+ *   3. the resolved Fishbowl PART number — the hop that connects catalog dims
+ *      (keyed by manufacturer-style part numbers) to SO product numbers.
+ * A pack-suffixed product keeps its pack-level requirement across all hops.
+ */
+export function catalogLookupCandidates(
+  partNumber: string,
+  resolvedPartNumber?: string | null
+): CatalogLookupCandidate[] {
+  const suffixMatch = partNumber.match(/^(.*?)(cs|bx|pk|ea)$/i)
+  const suffixUoms = suffixMatch ? SUFFIX_TO_UOMS[suffixMatch[2].toLowerCase()] : null
+
+  // The exact key first, with no pack requirement: a catalog row keyed by the
+  // suffixed number already describes the pack variant itself.
+  const candidates: CatalogLookupCandidate[] = [
+    { partNumber, preferredUoms: null },
   ]
-  const caseVariant = partNumber.match(/^(.*?)cs$/i)
-  if (caseVariant && caseVariant[1]) {
-    candidates.push({ partNumber: caseVariant[1], preferredUom: 'CS' })
+  if (suffixMatch && suffixMatch[1]) {
+    candidates.push({ partNumber: suffixMatch[1], preferredUoms: suffixUoms })
+  }
+  if (resolvedPartNumber && resolvedPartNumber !== partNumber) {
+    candidates.push({ partNumber: resolvedPartNumber, preferredUoms: suffixUoms })
   }
   return candidates
 }
 
+export type CatalogDimsLookup = {
+  partNumber: string
+  resolvedPartNumber?: string | null
+}
+
 /**
- * Load catalog dims for a set of SO part numbers. Each part resolves to at
- * most one row: its own best row (preferring EA, then lowest volume so a
- * mixed-pack match never inflates the estimate), or — for case-variant part
- * numbers — the base part's case-level row.
+ * Load catalog dims for a set of SO lines. Each line resolves to at most one
+ * row via catalogLookupCandidates (product number, suffix-stripped base,
+ * resolved part number), preferring EA then lowest volume so a mixed-pack
+ * match never inflates the estimate. Result is keyed by the SO product
+ * number as passed in.
  */
 export async function getCatalogDimsForParts(
-  partNumbers: string[]
+  lines: CatalogDimsLookup[]
 ): Promise<Map<string, CatalogDims>> {
-  if (partNumbers.length === 0) return new Map()
+  if (lines.length === 0) return new Map()
   const lookups = new Map<string, ReturnType<typeof catalogLookupCandidates>>()
-  for (const pn of partNumbers) lookups.set(pn, catalogLookupCandidates(pn))
+  for (const line of lines) {
+    lookups.set(
+      line.partNumber,
+      catalogLookupCandidates(line.partNumber, line.resolvedPartNumber ?? null)
+    )
+  }
   const allKeys = [...new Set([...lookups.values()].flat().map((c) => c.partNumber))]
 
   const supabase = createAdminClient()
@@ -308,12 +354,14 @@ export async function getCatalogDimsForParts(
 
   const pickRow = (
     rows: CatalogDimsRow[],
-    preferredUom: string | null
+    preferredUoms: string[] | null
   ): CatalogDimsRow | undefined => {
-    if (preferredUom) {
-      const match = rows.find((r) => r.uom_code.toUpperCase() === preferredUom)
-      if (match) return match
-      return undefined // case-variant fallback only trusts an actual CS row
+    if (preferredUoms) {
+      for (const uom of preferredUoms) {
+        const match = rows.find((r) => r.uom_code.toUpperCase() === uom)
+        if (match) return match
+      }
+      return undefined // pack-variant lookups only trust an actual pack-level row
     }
     const ea = rows.find((r) => r.uom_code.toUpperCase() === 'EA')
     if (ea) return ea
@@ -329,7 +377,7 @@ export async function getCatalogDimsForParts(
     for (const candidate of candidates) {
       const rows = rowsByPart.get(candidate.partNumber)
       if (!rows || rows.length === 0) continue
-      const row = pickRow(rows, candidate.preferredUom)
+      const row = pickRow(rows, candidate.preferredUoms)
       if (row) {
         result.set(pn, toCatalogDims(row))
         break

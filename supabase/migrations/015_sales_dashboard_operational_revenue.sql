@@ -65,7 +65,7 @@ FROM (
     ('kbugarski', '0052E00000Kuuj8QAB', 'Kristina Bugarski', 'Sales', false, false),
     ('Christine', '0052E00000M1j73QAB', 'Christine Livingstone', 'Sales', false, false),
     ('Nikola', '005Ua00000EnNsTIAV', 'Nikola Kovilic', 'Sales', false, false),
-    ('kdedvukaj', '005Ua000008QA96IAG', 'Kendall Cook', 'Sales', false, false),
+    ('kdedvukaj', '005Ua000008QA96IAG', 'Kristal Dedvukaj', 'Sales', false, false),
     ('admin', null, 'Fishbowl Admin / Legacy', 'System', false, true),
     ('MedShip', null, 'Medical Shipment House Account', 'House', true, false),
     ('House Account', null, 'House Account', 'House', true, false),

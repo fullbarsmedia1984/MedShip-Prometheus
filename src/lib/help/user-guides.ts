@@ -227,9 +227,48 @@ const CONTRACT_DETAIL: PageGuide = {
   ],
 }
 
+const ASKZEUS_GUIDE: PageGuide = {
+  title: 'AskZeus',
+  intro:
+    'AskZeus is a chat assistant that answers questions about orders, customers, revenue, inventory, and warehouse operations using live Zeus data.',
+  sections: [
+    {
+      heading: 'How to ask',
+      steps: [
+        'Type a question in plain English — for example "How is revenue this month vs last year?" or "Which items are low on stock?"',
+        'Watch the activity chips: they show exactly which data AskZeus is looking up before it answers.',
+        'Follow up in the same chat — AskZeus remembers the conversation.',
+      ],
+    },
+    {
+      heading: 'What it can see',
+      text: 'AskZeus only sees data your role allows. Sales reps see their own orders, customers, and quotes; warehouse sees inventory and fulfillment; staff and admins see company-wide metrics. If it says data is outside your role, that is by design.',
+    },
+    {
+      heading: 'Trust but verify',
+      text: 'Every number comes from a live lookup, never from memory, but AskZeus can still misread a question. For decisions that matter, confirm the figure on the relevant dashboard page.',
+    },
+    {
+      heading: 'Conversation history',
+      steps: [
+        'Your chats are saved automatically — reopen them from the list on the left.',
+        'Click New chat to start fresh; hover a conversation to delete it.',
+      ],
+    },
+    {
+      heading: 'Help it improve',
+      steps: [
+        'Rate answers with the thumbs under each reply — especially the bad ones. A short note on what was wrong makes the feedback far more useful.',
+        'Admins can teach AskZeus standing facts (business rules, vocabulary) via "Teach AskZeus" in the left panel — changes apply to the very next question.',
+      ],
+    },
+  ],
+}
+
 const GUIDE_ROUTES: GuideRoute[] = [
   { pattern: new RegExp(`^/dashboard/pricing/contracts/${UUID}$`), guide: CONTRACT_DETAIL },
   { pattern: /^\/dashboard\/pricing\/contracts$/, guide: CONTRACTS_LIST },
+  { pattern: /^\/dashboard\/askzeus$/, guide: ASKZEUS_GUIDE },
   { pattern: new RegExp(`^/dashboard/pricing/imports/upload/${UUID}$`), guide: UPLOAD_DETAIL },
   { pattern: /^\/dashboard\/pricing\/imports\/upload$/, guide: UPLOAD_FORM },
   { pattern: new RegExp(`^/dashboard/pricing/imports/${UUID}$`), guide: BATCH_DETAIL },

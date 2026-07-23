@@ -1,5 +1,10 @@
 import { inngest } from '../client'
 import {
+  FishbowlPriorityYieldError,
+  FishbowlSessionLockError,
+  withFishbowlSession,
+} from '@/lib/fishbowl/session'
+import {
   syncOpenPoLines,
   syncPurchaseOrders,
 } from '@/lib/warehouse-board/po-sync'
@@ -13,10 +18,29 @@ import {
  *
  * Schedule per ops: 8a, 10a, 12p, 2p, 4p Monday-Friday (America/Chicago).
  */
+// One Fishbowl session for the whole run (both syncs), logged out in the
+// session helper's finally — an unclosed session holds a license seat.
+// Skips quietly when another automation holds the Fishbowl session lock;
+// the next cron tick catches up.
 async function runPurchaseOrdersSync() {
-  const result = await syncPurchaseOrders()
-  const openLines = await syncOpenPoLines()
-  return { ...result, openLines }
+  try {
+    return await withFishbowlSession(
+      { automation: 'P11_PO_SYNC', sourceSystem: 'fishbowl', targetSystem: 'prometheus' },
+      async (client) => {
+        const result = await syncPurchaseOrders(client)
+        const openLines = await syncOpenPoLines(client)
+        return { ...result, openLines, skipped: false }
+      }
+    )
+  } catch (error) {
+    if (
+      error instanceof FishbowlSessionLockError ||
+      error instanceof FishbowlPriorityYieldError
+    ) {
+      return { skipped: true, reason: error.message }
+    }
+    throw error
+  }
 }
 
 export const purchaseOrdersSync = inngest.createFunction(

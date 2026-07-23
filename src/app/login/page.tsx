@@ -97,7 +97,10 @@ export default function LoginPage() {
         <div
           className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[2rem]"
           style={{
-            background: 'linear-gradient(135deg, #1C3C6E 0%, #1E98D5 100%)',
+            backgroundImage:
+              "linear-gradient(135deg, rgba(28,60,110,0.88) 0%, rgba(30,152,213,0.6) 100%), url('/images/medship-zeus-v1.avif')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           }}
         >
           {/* Subtle glass overlay shapes */}
@@ -126,7 +129,7 @@ export default function LoginPage() {
               <span className="underline decoration-[#0FA62C] decoration-[3px] underline-offset-[6px]">
                 Medical Shipment
               </span>{' '}
-              Prometheus
+              Zeus
             </h1>
             <p className="mx-auto max-w-sm text-sm leading-relaxed text-white/60">
               Seamlessly orchestrate data flow between Salesforce CRM, Fishbowl
@@ -150,7 +153,7 @@ export default function LoginPage() {
           <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
             <img src="/ms-icon-color.png" alt="Medical Shipment" className="h-8 w-8" />
             <span className="text-2xl font-semibold text-[#1C3C6E]">Medical Shipment</span>
-            <span className="text-2xl font-light text-[#576671]">Prometheus</span>
+            <span className="text-2xl font-light text-[#576671]">Zeus</span>
           </div>
 
           {/* Welcome heading */}

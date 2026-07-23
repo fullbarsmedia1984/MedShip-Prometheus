@@ -216,7 +216,7 @@ export default function TerritoryPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-8">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
                 <CardTitle>Client Map</CardTitle>
                 <div className="flex gap-1 rounded-lg bg-muted/60 p-0.5">
                   <button

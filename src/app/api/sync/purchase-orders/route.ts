@@ -6,6 +6,7 @@ import {
   STAFF_API_AUTH_OPTIONS,
   requireApiAuth,
 } from '@/lib/auth'
+import { withFishbowlSession } from '@/lib/fishbowl/session'
 import {
   syncOpenPoLines,
   syncPurchaseOrders,
@@ -21,9 +22,15 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     if (body?.inline) {
-      const result = await syncPurchaseOrders()
-      const openLines = await syncOpenPoLines()
-      return NextResponse.json({ triggered: true, inline: true, ...result, openLines })
+      const result = await withFishbowlSession(
+        { automation: 'P11_PO_SYNC', sourceSystem: 'fishbowl', targetSystem: 'prometheus' },
+        async (client) => {
+          const sync = await syncPurchaseOrders(client)
+          const openLines = await syncOpenPoLines(client)
+          return { ...sync, openLines }
+        }
+      )
+      return NextResponse.json({ triggered: true, inline: true, ...result })
     }
 
     await inngest.send({

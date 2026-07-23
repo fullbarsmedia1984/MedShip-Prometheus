@@ -5,6 +5,7 @@ import {
 import { getAuthContext, type AppRole } from '@/lib/auth'
 import { getWallboardData } from '@/lib/warehouse-board/data'
 import { getKitGalaxyData } from '@/lib/warehouse-board/galaxy-data'
+import { getReceivingData } from '@/lib/warehouse-board/receiving-data'
 import { WallboardClient } from '@/components/warehouse-board/WallboardClient'
 import { WallboardGate } from '@/components/warehouse-board/WallboardGate'
 
@@ -46,9 +47,10 @@ export default async function WarehouseBoardPage() {
 
   // PO + inventory freshness is owned by the P11/P2 Inngest crons
   // (business-hours schedule); the board renders from the caches.
-  const [data, galaxy] = await Promise.all([
+  const [data, galaxy, receiving] = await Promise.all([
     getWallboardData(),
     getKitGalaxyData(),
+    getReceivingData(),
   ])
-  return <WallboardClient data={data} galaxy={galaxy} />
+  return <WallboardClient data={data} galaxy={galaxy} receiving={receiving} />
 }

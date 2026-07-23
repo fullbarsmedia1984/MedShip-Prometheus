@@ -5,11 +5,13 @@ import {
   twoFactorCodeEmail,
   roleChangedEmail,
   passwordResetEmail,
+  emailTestEmail,
 } from './templates'
 import type { AppRole } from '@/lib/auth'
 
 export { sendEmail } from './client'
 export type { EmailResult, SendEmailInput } from './client'
+export { getEmailConfiguration, PRODUCTION_EMAIL_DOMAIN } from './config'
 
 const ROLE_LABELS: Record<AppRole, string> = {
   superadmin: 'Superadmin',
@@ -69,5 +71,13 @@ export async function sendRoleChangedEmail(params: {
   const { subject, html, text } = roleChangedEmail({
     roleLabel: ROLE_LABELS[params.role],
   })
+  return sendEmail({ to: params.to, subject, html, text })
+}
+
+export async function sendEmailTest(params: {
+  to: string
+  appUrl: string
+}): Promise<EmailResult> {
+  const { subject, html, text } = emailTestEmail({ appUrl: params.appUrl })
   return sendEmail({ to: params.to, subject, html, text })
 }

@@ -161,7 +161,7 @@ export function EstimateResults({
                     {formatDims(box.outerLengthIn, box.outerWidthIn, box.outerHeightIn)}
                   </TableCell>
                   <TableCell className="max-w-[16rem] truncate text-xs text-medship-slate dark:text-white/60">
-                    {box.contents.map((c) => `${c.quantity}× ${c.partNumber}`).join(', ')}
+                    {box.contents.map((c) => `${c.quantity} × ${c.partNumber}`).join(', ')}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{box.actualWeightLb} lb</TableCell>
                   <TableCell className="text-right tabular-nums">{box.dimWeightLb} lb</TableCell>

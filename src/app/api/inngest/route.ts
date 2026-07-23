@@ -29,6 +29,16 @@ import {
   purchaseOrdersSyncManual,
   shipmentsCacheSync,
   shipmentsCacheSyncManual,
+  receiptsSync,
+  receiptsSyncManual,
+  productPartsSync,
+  productPartsSyncManual,
+  competitorCrawl,
+  competitorCrawlCron,
+  catalogImageMirror,
+  catalogImageMirrorCron,
+  imageSearchSweep,
+  imageSearchSweepCron,
 } from '@/inngest'
 
 // Inngest webhook handler
@@ -88,5 +98,25 @@ export const { GET, POST, PUT } = serve({
     // P12: Recent shipments cache (wallboard Shipped lane)
     shipmentsCacheSync,
     shipmentsCacheSyncManual,
+
+    // P14: Immutable Fishbowl receipt facts (Receiving view + cross-dock candidates)
+    receiptsSync,
+    receiptsSyncManual,
+
+    // P15: Product-part mapping (inventory analytics demand/stock bridge)
+    productPartsSync,
+    productPartsSyncManual,
+
+    // P16: Competitor catalog crawl (price book + item links)
+    competitorCrawl,
+    competitorCrawlCron,
+
+    // P17: Catalog image mirror (web -> Supabase Storage)
+    catalogImageMirror,
+    catalogImageMirrorCron,
+
+    // P18: Image search sweep (Firecrawl -> Storage)
+    imageSearchSweep,
+    imageSearchSweepCron,
   ],
 })

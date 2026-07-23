@@ -1,5 +1,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { chicagoTodayIso } from '@/lib/business-days'
+import { loadProductPartMap, toPartUnits } from '@/lib/inventory/product-parts'
+import { isKitOrderNumber } from '@/lib/kits/order-number'
 import { shipDeadline, workdaysBetween } from '@/lib/kits/workdays'
 
 export type LaneSeverity = 'ok' | 'warn' | 'critical'
@@ -66,6 +69,8 @@ export interface WallboardData {
   kpis: {
     readyCount: number
     pickingCount: number
+    pickingSalesCount: number
+    pickingKitsCount: number
     lateCount: number
     stuckPickCount: number
     noPoCount: number
@@ -75,7 +80,8 @@ export interface WallboardData {
   /** Full lists — the client caps the ambient lanes and offers an
    *  expanded, sortable view of everything. */
   ready: WallboardOrder[]
-  picking: WallboardOrder[]
+  pickingSales: WallboardOrder[]
+  pickingKits: WallboardOrder[]
   shipped: WallboardOrder[]
   closedShort: WallboardOrder[]
   longestWaiting: WallboardOrder[]
@@ -300,6 +306,22 @@ export async function getWallboardData(): Promise<WallboardData> {
     }
   }
 
+  // SO lines are keyed by PRODUCT number (selling SKU); inventory_snapshot
+  // and fb_open_po_lines are keyed by PART number (stocked SKU). Bridge
+  // through fb_product_parts (P15) and convert quantities to part eaches
+  // before any stock/PO comparison.
+  const productMap = await loadProductPartMap(
+    supabase,
+    [...openSaleLines.values()].flat().map((l) => l.part)
+  )
+  for (const lines of openSaleLines.values()) {
+    for (const line of lines) {
+      const mapped = toPartUnits(productMap, line.part, line.remaining)
+      line.part = mapped.part
+      line.remaining = mapped.units
+    }
+  }
+
   // Warehouse stock (on hand, summed across locations) for the parts on
   // Issued orders, plus the open-PO cache for "is it on order?".
   const neededParts = [
@@ -391,19 +413,23 @@ export async function getWallboardData(): Promise<WallboardData> {
     .filter((r) => r.status === 'Issued')
     .map((r) => ({ ...toO(r), stock: stockFor(r.so_number) }))
   const picking = openWh.filter((r) => r.status === 'In Progress').map(toO)
+  const pickingSales = picking.filter(
+    (order) => !isKitOrderNumber(order.soNumber)
+  )
+  const pickingKits = picking.filter((order) => isKitOrderNumber(order.soNumber))
 
   // Kit orders with entered need-by dates get due-based urgency (Phase 2):
   // the real ship deadline replaces the age heuristic on their cards.
   {
     const kitSos = [...ready, ...picking]
       .map((o) => o.soNumber)
-      .filter((soNum) => /-KIT/i.test(soNum))
+      .filter(isKitOrderNumber)
     if (kitSos.length > 0) {
       const { data: kitOps } = await supabase
         .from('kit_orders')
         .select('so_number, absolute_need_by, transit_days, table_location')
         .in('so_number', kitSos)
-      const today = now.toISOString().slice(0, 10)
+      const today = chicagoTodayIso(now)
       const bySo = new Map(
         (kitOps ?? []).map((r) => [r.so_number as string, r])
       )
@@ -467,7 +493,8 @@ export async function getWallboardData(): Promise<WallboardData> {
 
   // Oldest first = most critical at the top of each lane.
   ready.sort((a, b) => b.ageDays - a.ageDays)
-  picking.sort((a, b) => b.ageDays - a.ageDays)
+  pickingSales.sort((a, b) => b.ageDays - a.ageDays)
+  pickingKits.sort((a, b) => b.ageDays - a.ageDays)
 
   const allOpen = [...ready, ...picking]
   const lateCount = allOpen.filter((o) => o.ageDays > 7).length
@@ -550,6 +577,8 @@ export async function getWallboardData(): Promise<WallboardData> {
     kpis: {
       readyCount: ready.length,
       pickingCount: picking.length,
+      pickingSalesCount: pickingSales.length,
+      pickingKitsCount: pickingKits.length,
       lateCount,
       stuckPickCount: stuck.length,
       noPoCount: noPo.length,
@@ -557,7 +586,8 @@ export async function getWallboardData(): Promise<WallboardData> {
       shippedThisWeek: shippedO.length,
     },
     ready,
-    picking,
+    pickingSales,
+    pickingKits,
     shipped: shippedO,
     closedShort: shortO,
     longestWaiting,

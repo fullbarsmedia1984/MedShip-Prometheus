@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Zap,
 } from 'lucide-react'
 
 const ADMIN_ROLES: AppRole[] = ['superadmin', 'admin']
@@ -49,6 +50,7 @@ type NavItem = {
 // the sales experience: Sales, Quotes, Orders).
 const mainNav: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: STAFF_ROLES },
+  { name: 'AskZeus', href: '/dashboard/askzeus', icon: Zap },
   { name: 'Sales', href: '/dashboard/sales', icon: BarChart3, roles: SALES_ROLES },
   { name: 'Kanban', href: '/dashboard/kanban', icon: SquareKanban },
   { name: 'Incentives', href: '/dashboard/incentives', icon: Trophy, roles: MANAGER_ROLES },

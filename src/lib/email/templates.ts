@@ -101,3 +101,18 @@ export function roleChangedEmail(params: { roleLabel: string }): RenderedEmail {
     text: `Your Medical Shipment Prometheus role is now ${roleLabel}.`,
   }
 }
+
+export function emailTestEmail(params: { appUrl: string }): RenderedEmail {
+  return {
+    subject: 'Zeus production email test',
+    html: layout(
+      'Production email is ready',
+      `<p style="font-size:14px;line-height:1.6;color:${SLATE};">
+         Zeus successfully sent this message through the configured production
+         email provider. Invite and password-reset emails use this same path.
+       </p>
+       <p style="margin:24px 0;">${button(params.appUrl, 'Open Zeus')}</p>`
+    ),
+    text: `Zeus successfully sent this production email test. Open Zeus: ${params.appUrl}`,
+  }
+}

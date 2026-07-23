@@ -129,7 +129,7 @@ export function SalesLeaderboard({ reps, history = [] }: SalesLeaderboardProps) 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b border-border/50 bg-gradient-to-r from-medship-primary/[0.03] to-transparent">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2.5">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-medship-primary/10">
               <svg className="h-4 w-4 text-medship-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -142,7 +142,7 @@ export function SalesLeaderboard({ reps, history = [] }: SalesLeaderboardProps) 
           </CardTitle>
           {history.length > 0 && (
             <Select value={selectedMonth} onValueChange={(value) => setSelectedMonth(value ?? CURRENT_MONTH_VALUE)}>
-              <SelectTrigger className="w-[170px]">
+              <SelectTrigger className="w-full sm:w-[170px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

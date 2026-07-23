@@ -1,4 +1,9 @@
 import 'server-only'
+import {
+  getSnapshotFreshCutoff,
+  loadPickedByPart,
+} from '@/lib/inventory/availability'
+import { loadProductPartMap, toPartUnits } from '@/lib/inventory/product-parts'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { shipDeadline, workdaysBetween } from './workdays'
 
@@ -18,8 +23,10 @@ export interface KitOpsFields {
 }
 
 export interface KitBackorderLine {
+  /** stocked PART number (bridged from the SO line's product number) */
   part: string
   desc: string | null
+  /** part eaches still needed beyond on-hand */
   short: number
   onOrder: boolean
   eta: string | null
@@ -132,7 +139,7 @@ export async function getKitKpis(windowDays = 90): Promise<KitKpis> {
     supabase
       .from('fb_sales_orders')
       .select('so_number, customer_name, date_issued, date_completed')
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Fulfilled', 'Closed Short'])
       .gte('date_completed', since),
     supabase
@@ -232,12 +239,12 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     supabase
       .from('fb_sales_orders')
       .select('so_number, customer_name, status, date_issued, date_completed')
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Issued', 'In Progress']),
     supabase
       .from('fb_sales_orders')
       .select('so_number, customer_name, status, date_issued, date_completed')
-      .ilike('so_number', '%-KIT%')
+      .ilike('so_number', '%-KIT')
       .in('status', ['Fulfilled', 'Closed Short'])
       .gte('date_completed', monthAgo),
     supabase.from('kit_orders').select('*'),
@@ -266,11 +273,15 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     ])
   )
 
-  // shipments (ground truth for shipped date)
+  // shipments (ground truth for shipped date). The cache holds 30 days
+  // (Outbound Velocity chart); keep this at 10 so an old partial shipment
+  // doesn't classify a still-open kit as shipped.
+  const shipCutoff = new Date(Date.now() - 10 * 86400000).toISOString()
   const { data: shipRows, error: shipErr } = await supabase
     .from('fb_recent_shipments')
     .select('so_number, date_shipped')
     .in('so_number', soRows.map((r) => r.so_number))
+    .gte('date_shipped', shipCutoff)
   if (shipErr) throw shipErr
   const latestShip = new Map<string, string>()
   for (const row of shipRows ?? []) {
@@ -313,23 +324,44 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     }
   }
 
-  // stock + open-PO facts for backorder computation
+  // stock + open-PO facts for backorder computation. SO line items are keyed
+  // by PRODUCT number; inventory_snapshot / fb_open_po_lines by PART number —
+  // bridge through fb_product_parts (P15) and compare in part eaches.
+  // A part absent from inventory_snapshot (only qty>0 parts are cached)
+  // correctly reads as 0 on hand. Rows older than the latest P2 run are
+  // stale drop-outs (the part fell to zero) and must be ignored, and stock
+  // already picked for open orders is not available to cover shortages.
+  const [productMap, pickedByPart, freshCutoff] = await Promise.all([
+    loadProductPartMap(
+      supabase,
+      [...itemsBySo.values()].flat().map((r) => r.part_number as string)
+    ),
+    loadPickedByPart(supabase),
+    getSnapshotFreshCutoff(supabase),
+  ])
   const parts = [
     ...new Set(
-      [...itemsBySo.values()].flat().map((r) => r.part_number as string)
+      [...itemsBySo.values()]
+        .flat()
+        .map(
+          (r) =>
+            productMap.get(r.part_number as string)?.part ??
+            (r.part_number as string)
+        )
     ),
   ]
   const onHand = new Map<string, number>()
   for (let i = 0; i < parts.length; i += 100) {
     const batch = parts.slice(i, i + 100)
     const rows = await pageAll<{ part_number: string; qty_on_hand: number }>(
-      (from, to) =>
-        supabase
+      (from, to) => {
+        let q = supabase
           .from('inventory_snapshot')
           .select('part_number, qty_on_hand')
           .in('part_number', batch)
-          .order('id')
-          .range(from, to)
+        if (freshCutoff) q = q.gte('last_synced_at', freshCutoff)
+        return q.order('id').range(from, to)
+      }
     )
     for (const row of rows) {
       onHand.set(
@@ -382,17 +414,32 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
 
     const backorders: KitBackorderLine[] = []
     for (const it of items) {
+      // The Kit-type line is the kit master (the program SKU itself, e.g.
+      // "71789NUR-Fall 2026") — assembled by the floor, never stocked or
+      // purchased, so it can never be a backorder.
+      if (it.line_type === 'Kit') continue
       const remaining = Number(it.quantity ?? 0) - Number(
         it.quantity_picked ?? it.quantity_fulfilled ?? 0
       )
       if (remaining <= 0 || isShipped) continue
-      const avail = onHand.get(it.part_number as string) ?? 0
-      if (avail >= remaining) continue
-      const po = onOrder.get(it.part_number as string)
+      const { part, units: needed } = toPartUnits(
+        productMap,
+        it.part_number as string,
+        remaining
+      )
+      // available = on hand minus units already staged on open picks (this
+      // SO's own picked units are excluded from `remaining` above, and their
+      // stock is likewise excluded here — matches Fishbowl's pick shorts).
+      const avail = Math.max(
+        0,
+        (onHand.get(part) ?? 0) - (pickedByPart.get(part) ?? 0)
+      )
+      if (avail >= needed) continue
+      const po = onOrder.get(part)
       backorders.push({
-        part: it.part_number as string,
+        part,
         desc: it.prod_desc,
-        short: remaining - avail,
+        short: needed - avail,
         onOrder: Boolean(po && po.qty > 0),
         eta: po?.eta ?? null,
       })

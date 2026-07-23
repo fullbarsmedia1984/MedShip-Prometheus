@@ -1,17 +1,20 @@
 import 'server-only'
-import { getFishbowlClient } from '@/lib/fishbowl/client'
+import type { FishbowlClient } from '@/lib/fishbowl/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // Rolling shipments cache for the wallboard's Shipped lane. A shipment
 // leaving the dock counts as shipped even while the SO is still In
 // Progress (partial shipment) or before the cached SO status flips.
+// 180-day window: the wallboard only reads the last 7 days and the kit
+// views pin their own 10-day cutoff, but the inventory analytics Outbound
+// Velocity chart trends up to 180 days with a 20-day moving average.
 const RECENT_SHIPMENTS_SQL = `
   SELECT s.num AS shipNum, so.num AS soNum, s.statusId AS statusId,
          s.dateShipped AS dateShipped, s.cartonCount AS cartonCount
   FROM ship s
   JOIN so ON so.id = s.soId
   WHERE s.statusId = 30
-    AND s.dateShipped >= DATE_SUB(NOW(), INTERVAL 10 DAY)
+    AND s.dateShipped >= DATE_SUB(NOW(), INTERVAL 180 DAY)
 `
 
 type ShipRow = {
@@ -22,8 +25,10 @@ type ShipRow = {
   cartonCount: number | null
 }
 
-export async function syncRecentShipments(): Promise<number> {
-  const client = getFishbowlClient()
+// Callers own the Fishbowl session (withFishbowlSession) so every login is
+// paired with a logout — an unclosed session holds a Fishbowl license seat
+// until the server-side timeout.
+export async function syncRecentShipments(client: FishbowlClient): Promise<number> {
   const rows = await client.dataQuery<ShipRow[]>(RECENT_SHIPMENTS_SQL)
   if (!Array.isArray(rows)) return 0
 

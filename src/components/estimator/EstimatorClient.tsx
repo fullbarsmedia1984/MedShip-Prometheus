@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
+  AArrowDown,
+  AArrowUp,
   Boxes,
   History,
   Loader2,
@@ -41,6 +43,12 @@ import {
 
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.7
 
+// Text-size steps for the warehouse floor: browser zoom is global and easy to
+// lose on shared stations, so the estimator carries its own scale, persisted
+// per device. `zoom` scales layout with the text, so nothing overlaps.
+const FONT_SCALE_STEPS = [0.85, 1, 1.15, 1.3, 1.45, 1.6] as const
+const FONT_SCALE_STORAGE_KEY = 'medship.estimator.font-scale.v1'
+
 export function EstimatorClient({ canManage = false }: { canManage?: boolean }) {
   const [soInput, setSoInput] = useState('')
   const [loadingSo, setLoadingSo] = useState(false)
@@ -50,6 +58,36 @@ export function EstimatorClient({ canManage = false }: { canManage?: boolean }) 
   const [verifyLine, setVerifyLine] = useState<ResolvedLineItem | null>(null)
   const [confidenceThreshold, setConfidenceThreshold] = useState(DEFAULT_CONFIDENCE_THRESHOLD)
   const [historyKey, setHistoryKey] = useState(0)
+  const [fontScale, setFontScale] = useState<number>(1)
+
+  // Restore on mount (not in the initial state) to avoid an SSR hydration
+  // mismatch — same pattern as the sales-page summary cards.
+  useEffect(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(FONT_SCALE_STORAGE_KEY))
+      if (FONT_SCALE_STEPS.includes(stored as (typeof FONT_SCALE_STEPS)[number])) {
+        setFontScale(stored)
+      }
+    } catch {
+      // localStorage unavailable — keep the default
+    }
+  }, [])
+
+  const stepFontScale = (direction: 1 | -1) => {
+    setFontScale((current) => {
+      const index = FONT_SCALE_STEPS.indexOf(current as (typeof FONT_SCALE_STEPS)[number])
+      const next =
+        FONT_SCALE_STEPS[
+          Math.min(FONT_SCALE_STEPS.length - 1, Math.max(0, (index === -1 ? 1 : index) + direction))
+        ]
+      try {
+        window.localStorage.setItem(FONT_SCALE_STORAGE_KEY, String(next))
+      } catch {
+        // best effort
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     fetchJson<{ rules: { estimate_confidence_threshold?: number } }>('/api/estimator/rules')
@@ -119,7 +157,42 @@ export function EstimatorClient({ canManage = false }: { canManage?: boolean }) 
   return (
     <>
       <Header title="Packaging Estimator" />
-      <main className="flex-1 space-y-6 overflow-auto p-4 md:p-6">
+      <main
+        className="flex-1 space-y-6 overflow-auto p-4 md:p-6"
+        style={{ zoom: fontScale } as React.CSSProperties}
+      >
+        {/* Text size — warehouse stations read this screen from a distance */}
+        <div className="flex items-center justify-end gap-1.5">
+          <span className="mr-1 text-xs font-medium uppercase tracking-wide text-medship-slate dark:text-white/50">
+            Text size
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => stepFontScale(-1)}
+            disabled={fontScale <= FONT_SCALE_STEPS[0]}
+            aria-label="Decrease text size"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-card-foreground"
+          >
+            <AArrowDown className="h-4 w-4" />
+          </Button>
+          <span className="w-12 text-center text-xs font-medium tabular-nums text-muted-foreground">
+            {Math.round(fontScale * 100)}%
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => stepFontScale(1)}
+            disabled={fontScale >= FONT_SCALE_STEPS[FONT_SCALE_STEPS.length - 1]}
+            aria-label="Increase text size"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-card-foreground"
+          >
+            <AArrowUp className="h-4 w-4" />
+          </Button>
+        </div>
+
         {/* SO input */}
         <Card className="border-medship-primary/20">
           <CardContent className="pt-6">
