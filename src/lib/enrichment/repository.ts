@@ -77,6 +77,19 @@ function toStoredImage(row: DbRow): StoredImageRecord {
   }
 }
 
+export type ReviewImage = {
+  id: string
+  itemId: string
+  productName: string | null
+  manufacturerName: string | null
+  storagePath: string
+  url: string
+  source: ImageSource
+  sourceUrl: string
+  isPrimary: boolean
+  createdAt: string
+}
+
 export type SearchSweepTarget = {
   itemId: string
   searchAttempts: number
@@ -610,6 +623,116 @@ export class SupabaseEnrichmentRepository {
         manufacturerPartNumber: (item.manufacturer_part_number as string | null) ?? null,
       }
     })
+  }
+
+  // ----------------------------------------------------------------
+  // Review gallery
+  // ----------------------------------------------------------------
+
+  /** Keyset page of stored images (newest first) with item identity. */
+  async listReviewImages(input: {
+    source: ImageSource | 'all'
+    before: string | null
+    limit: number
+  }): Promise<ReviewImage[]> {
+    let query = this.supabase
+      .from('catalog_item_images')
+      .select(
+        'id, hercules_catalog_item_id, storage_path, source, source_url, is_primary, created_at, hercules_catalog_items(brand, manufacturer_name)'
+      )
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(input.limit)
+    if (input.source !== 'all') query = query.eq('source', input.source)
+    if (input.before) query = query.lt('created_at', input.before)
+
+    const { data, error } = await query
+    assertNoError(error)
+
+    return ((data ?? []) as DbRow[]).map((row) => {
+      const item = (row.hercules_catalog_items as DbRow | null) ?? {}
+      return {
+        id: String(row.id),
+        itemId: String(row.hercules_catalog_item_id),
+        productName: (item.brand as string | null) ?? null,
+        manufacturerName: (item.manufacturer_name as string | null) ?? null,
+        storagePath: String(row.storage_path),
+        url: this.supabase.storage
+          .from(CATALOG_IMAGES_BUCKET)
+          .getPublicUrl(String(row.storage_path)).data.publicUrl,
+        source: row.source as ImageSource,
+        sourceUrl: String(row.source_url),
+        isPrimary: Boolean(row.is_primary),
+        createdAt: String(row.created_at),
+      }
+    })
+  }
+
+  async countImagesBySource(): Promise<Record<string, number>> {
+    const counts: Record<string, number> = {}
+    for (const source of ['hercules', 'pocketnurse', 'diamedical', 'web_search'] as const) {
+      const { count, error } = await this.supabase
+        .from('catalog_item_images')
+        .select('id', { count: 'exact', head: true })
+        .eq('source', source)
+      assertNoError(error)
+      counts[source] = count ?? 0
+    }
+    return counts
+  }
+
+  /**
+   * Reject a mirrored image: delete the link row and mark the item so
+   * no automation refills it (search_not_found is terminal for both the
+   * mirror and the sweep). The storage object is left in place — it is
+   * content-addressed and may be shared by other items. If the rejected
+   * image was the item's primary, the oldest remaining image (if any)
+   * is promoted.
+   */
+  async rejectImage(imageId: string): Promise<{ itemId: string } | null> {
+    const { data, error } = await this.supabase
+      .from('catalog_item_images')
+      .select('id, hercules_catalog_item_id, is_primary')
+      .eq('id', imageId)
+      .maybeSingle()
+    assertNoError(error)
+    if (!data) return null
+
+    const itemId = String((data as DbRow).hercules_catalog_item_id)
+    const wasPrimary = Boolean((data as DbRow).is_primary)
+
+    const { error: deleteError } = await this.supabase
+      .from('catalog_item_images')
+      .delete()
+      .eq('id', imageId)
+    assertNoError(deleteError)
+
+    if (wasPrimary) {
+      const { data: next, error: nextError } = await this.supabase
+        .from('catalog_item_images')
+        .select('id')
+        .eq('hercules_catalog_item_id', itemId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      assertNoError(nextError)
+      if (next) {
+        const { error: promoteError } = await this.supabase
+          .from('catalog_item_images')
+          .update({ is_primary: true })
+          .eq('id', String((next as DbRow).id))
+        assertNoError(promoteError)
+      }
+    }
+
+    const { count, error: countError } = await this.supabase
+      .from('catalog_item_images')
+      .select('id', { count: 'exact', head: true })
+      .eq('hercules_catalog_item_id', itemId)
+    assertNoError(countError)
+
+    await this.setItemImageState(itemId, (count ?? 0) > 0 ? 'mirrored' : 'search_not_found')
+    return { itemId }
   }
 
   // ----------------------------------------------------------------
