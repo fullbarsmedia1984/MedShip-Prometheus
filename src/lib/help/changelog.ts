@@ -20,6 +20,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-16-match-review-side-by-side',
+    date: '2026-07-16',
+    title: 'Clearer item match review',
+    summary:
+      'Match suggestions now show your spreadsheet line and the suggested catalog item side by side — full descriptions, both part numbers, and the manufacturer — so you can compare them directly instead of reading a cut-off sentence.',
+    details: [
+      'Compare the two part numbers first; the suggestion exists because they match exactly.',
+      'Approve when the part numbers agree and the descriptions are clearly the same kind of product.',
+      'Not sure? Leave it open — unmatched lines never block publishing.',
+    ],
+    areas: [{ label: 'Supplier Cost Imports', href: '/dashboard/pricing/imports' }],
+  },
+  {
     id: '2026-07-15-guides-and-changelog',
     date: '2026-07-15',
     title: 'In-app page guides and update notices',
