@@ -4,46 +4,50 @@
 **Scope:** Buy-side contract pricing — the costs we have negotiated with suppliers and distributors.
 **Out of scope:** Customer sell pricing. Nothing in this workflow reads or changes customer prices.
 
-Zeus is now the system of record for negotiated supplier costs. Excel price lists are still how
-distributors *send* us pricing, but they are no longer where we *keep* it: every workbook is
-imported, reviewed, and published inside Zeus, with a full audit trail down to the exact
-spreadsheet cell each cost came from.
+**Zeus is the system of record for negotiated supplier costs.** Day-to-day pricing management
+happens directly in Zeus tables — the **Contract Price Manager**. Excel is not part of the
+workflow: a distributor's spreadsheet is only a *one-time on-ramp* used to load their pricing
+into Zeus (and occasionally to bulk-load a full revised list). Once a supplier's pricing is in
+Zeus, there is no spreadsheet to maintain, ever.
 
 ---
 
 ## 1. The big picture
 
-Every supplier price list moves through the same pipeline:
+There are two ways pricing data enters or changes in Zeus:
 
-```
-Upload workbook  →  Map columns (profile)  →  Dry run  →  Stage
-     →  Review exceptions  →  Approve  →  Prepare costs  →  Publish
-```
+1. **Directly in the table (the normal way).** Open the supplier's contract in Contract Price
+   Manager and add, correct, or expire cost lines. This covers the everyday reality of
+   purchasing: a price negotiated on a call, a correction, a discontinued item.
+2. **By importing a price list (the bulk way).** When onboarding a supplier for the first time,
+   or when a distributor sends a full revised price list, import the file through the governed
+   upload → review → publish pipeline instead of typing hundreds of lines.
 
-Three principles to keep in mind:
+Three principles apply to both:
 
-1. **Nothing becomes official by accident.** Costs only become active at the final Publish step,
-   which requires typing `PUBLISH` to confirm — and it can always be rolled back.
-2. **The computer extracts, people decide.** Zeus reads prices from the workbook exactly as
-   written (no guessing, no unit conversions). Column mappings and item matches are only
-   *suggestions* until a person approves them.
-3. **Everything is traceable.** Every published cost records which file, sheet, row, and cell it
-   came from, who approved it, and when.
+1. **Nothing is ever silently overwritten.** Correcting a cost creates a *new version* and
+   keeps the old one as history. Expiring a line keeps it in history. Bulk publishes can be
+   rolled back.
+2. **The computer extracts, people decide.** Imports read prices exactly as written (no
+   guessing, no unit conversions); column mappings and item matches are suggestions until a
+   person approves them.
+3. **Everything is traceable.** Every cost records where it came from — the workbook file,
+   sheet, row, and cell for imports; the person and timestamp for manual entries — and who
+   approved every change.
 
 ### Key terms
 
 | Term | Meaning |
 | --- | --- |
-| **Upload** | A distributor workbook file stored in Zeus, plus its contract details (contract number, effective date, etc.). |
-| **Profile** | A saved column mapping for one distributor's workbook layout ("Item # is column A, Contract Price is column D…"). Reused every time that distributor sends an updated list. |
-| **Dry run** | A preview extraction. Counts what would import cleanly and what has problems. Changes nothing. |
-| **Batch** | One imported price list working its way through review. |
+| **Contract** | One supplier relationship's pricing agreement in Zeus, holding its cost lines. Created automatically at first import; visible in Contract Price Manager. |
+| **Cost line** | One negotiated cost: item + unit of measure + price + effective window. |
+| **Active cost line** | The official current cost — the answer Zeus gives when asked "what do we pay for this?" |
+| **Version / Superseded** | When a cost is corrected or re-imported, the new line supersedes the old one. Old versions stay visible under the Superseded filter. |
+| **Expire** | End a cost line without a replacement (discontinued item, lapsed deal). Kept in history. |
+| **Batch** | One imported price list moving through review — only relevant during imports. |
+| **Profile** | A saved column mapping for one distributor's workbook layout, reused on re-imports. |
 | **Exception** | A flagged problem on an imported row (e.g., a price cell that says "call for pricing"). |
-| **Item matching** | Linking an imported line to a known catalog item. Suggestion-first, human-approved. |
-| **Pending cost line** | A cost that has been prepared but is not yet official. |
-| **Active cost line** | An official negotiated cost — the answer Zeus gives when asked "what do we pay for this?" |
-| **Supersede** | When a newly published cost replaces the previous active cost for the same item and unit of measure. The old one is kept for history. |
-| **Rollback** | Un-publishing a batch: its costs are deactivated and the previous costs are restored. |
+| **Item matching** | Linking a cost line to a known catalog item. Suggestion-first, human-approved. |
 
 ---
 
@@ -51,8 +55,9 @@ Three principles to keep in mind:
 
 - You need an **admin** account with two-factor authentication enabled.
 - All screens live under **Pricing** in the left menu:
-  - **Supplier Cost Imports** — the batch list, and the Upload Workbook button.
-  - **Supplier Cost Exceptions** — the exception queue across batches.
+  - **Contract Price Manager** — the day-to-day home: contracts and their cost-line tables.
+  - **Supplier Cost Imports** — the import pipeline (onboarding and bulk updates).
+  - **Supplier Cost Exceptions** — the exception queue for imported rows.
 - Every page has a **?** button in the top bar with a step-by-step guide, and a "What's new"
   popup appears once whenever a workflow changes.
 
@@ -62,139 +67,134 @@ Three principles to keep in mind:
 
 | When | What to do | Time |
 | --- | --- | --- |
-| A distributor sends a price list | Run **Workflow A → D** below, end to end. | 15–45 min |
-| Daily or every other day | Quick check of **Supplier Cost Imports**: any batch sitting in "needs review"? Any open exceptions or match suggestions on in-flight batches? | 5 min |
-| Monthly | Review upcoming **contract expirations** (you entered the expiration date at upload). Set a calendar reminder per contract — Zeus does not yet send expiration alerts. | 15 min |
-| After any publish | Spot-check a handful of published lines against the original workbook. | 10 min |
+| A price changes (call, email, renegotiation) | Edit the line in Contract Price Manager — Workflow 1. | 2 min |
+| A new item is negotiated outside a price list | Add the line in Contract Price Manager — Workflow 1. | 2 min |
+| An item is discontinued | Expire the line — Workflow 1. | 1 min |
+| A distributor sends a full price list | Import it — Workflows 2–5. | 15–45 min |
+| Daily or every other day | Quick check of Supplier Cost Imports for in-flight batches, open exceptions, open match suggestions. | 5 min |
+| Monthly | Review upcoming contract expirations in Contract Price Manager. Set a calendar reminder per contract — Zeus does not yet send expiration alerts. | 15 min |
+| After any bulk publish | Spot-check a handful of published lines against the original workbook. | 10 min |
 
 ---
 
-## 4. Workflow A — Import a new price list
+## 4. Workflow 1 — Day-to-day: manage costs in the table
 
-**Trigger:** a distributor emails an updated Excel price list.
+**Where:** Pricing → **Contract Price Manager** → open the supplier's contract.
 
-1. Save the attachment somewhere temporary (you can delete it after upload — Zeus keeps the file).
-2. Go to **Pricing → Supplier Cost Imports** and click **Upload Workbook**.
-3. Fill in the form. Three fields are required and gate everything downstream:
-   - **Distributor name** — use the same spelling every time for the same distributor.
-   - **Contract number** — from the contract or the distributor's cover email.
-   - **Effective date** — when this pricing takes effect.
-   Also fill expiration date, account number, and location when you have them.
-4. Choose the file and click **Upload and Analyze**. Zeus stores the workbook and detects its
-   structure automatically, then opens the workbook page.
+The table shows the contract's cost lines. The **Active** filter (default) is what Zeus
+considers the current negotiated costs; **Superseded** and **All** show history.
 
-### First time for this distributor: build the profile
+### Look up a cost
 
-5. In the **Column Mapping** card, check the sheet and header row Zeus detected (correct them
-   if it guessed wrong — the header row is the row containing the column titles).
-6. Zeus pre-fills suggested mappings from the column headers. Confirm each one: does column D
-   really contain the contract price? Fix anything wrong; leave irrelevant fields "Not mapped."
-   **Price is required.** If the workbook has no unit-of-measure column, set a **Default price
-   UOM** (usually `EA`).
-7. Click **Save Profile**. Profiles are versioned automatically — saving again after a fix
-   creates the next version; old versions are kept.
+Open the contract and find the line — identifier, description, UOM, cost, effective window,
+where it came from (imported file and row, or manual entry), and whether it's matched to a
+catalog item.
 
-### Returning distributor: reuse the saved profile
+### Add a cost line (price negotiated without a price list)
 
-If this distributor has sent lists before, skip to the Dry Run card and pick their existing
-profile from the dropdown. Only rebuild the mapping if their file layout changed (the dry run
-will make that obvious).
+1. Click **Add Line**.
+2. Enter at least one identifier (SKU, manufacturer part number, model, or GTIN), the
+   **cost**, and the **price UOM** (usually `EA`). Add a description so others recognize it.
+3. Set the effective date (defaults to today) and, if known, the expiration date.
+4. Click **Add Cost Line**. It is active immediately and recorded under your name.
+
+### Correct a cost line
+
+1. Click **Edit** on the line, fix what's wrong (cost, UOM, dates, description).
+2. Click **Save New Version**. The corrected line becomes active; the old one moves to
+   Superseded history automatically. You never lose sight of what the cost used to be.
+
+### Expire a cost line
+
+1. Click **Expire** on the line, then **Confirm Expire**.
+2. The line stops being an active cost but stays in history. Use this for discontinued items
+   or lapsed pricing with no replacement.
+
+> **Never keep a side spreadsheet.** If you catch yourself noting a price in Excel "for now,"
+> put it in the table instead — it takes the same two minutes and it's the copy everyone sees.
+
+---
+
+## 5. Workflow 2 — Import a price list (onboarding or bulk update)
+
+**Trigger:** onboarding a new supplier, or a distributor sends a full revised price list.
+
+1. Go to **Pricing → Supplier Cost Imports** and click **Upload Workbook**.
+2. Fill in the form. Three fields are required: **Distributor name** (same spelling every
+   time), **Contract number**, **Effective date**. Add expiration date, account number, and
+   location when known.
+3. Choose the file (.xlsx) and click **Upload and Analyze**.
+
+### First import for this distributor: build the profile
+
+4. In the **Column Mapping** card, check the sheet and header row Zeus detected.
+5. Confirm each suggested mapping (does column D really contain the contract price?).
+   **Price is required.** No unit-of-measure column? Set a **Default price UOM** (usually `EA`).
+6. Click **Save Profile** (versions increment automatically on later fixes).
+
+### Re-import for a known distributor
+
+Pick their saved profile in the Dry Run card. Only rebuild the mapping if their layout changed —
+the dry run makes that obvious.
 
 ### Dry run and stage
 
-8. In the **Dry Run & Stage** card, select the profile and click **Run Dry Run**.
-9. Read the counts: **Valid** rows import cleanly; **Warnings** import but are flagged;
-   **Blocking** rows have problems that stop the import.
-10. If there are blocking reasons, the card lists them in plain language. The two most common:
-    - *Wrong column mapped* (e.g., prices are unreadable) → fix the mapping, save a new profile
-      version, re-run.
-    - *Genuine data problems in the workbook* (e.g., "call for pricing" in a price cell) → ask
-      the distributor for a corrected file, or accept that those rows won't import.
-11. When the dry run is clean, click **Stage Batch**. The page links to the new batch — continue
-    with Workflow B.
+7. Select the profile, click **Run Dry Run**, and read the counts (valid / warning / blocking).
+8. Blocking reasons are listed in plain language: a wrong mapping → fix it and save a new
+   profile version; genuine workbook problems → request a corrected file.
+9. When clean, click **Stage Batch** and continue with Workflow 3.
 
 ---
 
-## 5. Workflow B — Review and approve the batch
+## 6. Workflow 3 — Review and approve an imported batch
 
-On the batch page (also reachable from the Supplier Cost Imports list):
-
-1. Check the counts: rows, valid, warning, blocking.
-2. Work the **exception list** on the right. For each open exception choose:
-   - **Resolve** — you fixed or verified the underlying issue.
-   - **Waive** — the issue is real but acceptable (note why).
-   - **Ack** — acknowledged, decision deferred.
-   Notes are recorded with your name.
-3. When there are no blocking rows and no open exceptions, click **Approve**. Approval is a
-   recorded decision — it does not publish anything yet.
+1. On the batch page, check the counts: rows, valid, warning, blocking.
+2. Work each open exception: **Resolve** (fixed/verified), **Waive** (acceptable — note why),
+   or **Ack** (deferred). Notes are recorded with your name.
+3. With no blocking rows and no open exceptions, click **Approve** (a recorded decision — it
+   does not publish anything yet).
 
 ---
 
-## 6. Workflow C — Item matching (any time; never blocks publishing)
+## 7. Workflow 4 — Item matching (any time; never blocks anything)
 
-Matching links imported lines to known catalog items so costs connect to the rest of Zeus. Run
-it whenever a batch is staged — before or after publishing, both are fine.
-
-1. In the **Item Matching** card, click **Generate Suggestions**.
-2. Each suggestion shows **your spreadsheet line on the left** and the **suggested catalog item
-   on the right** — part numbers, manufacturers, and full descriptions.
-3. Decide in this order:
-   1. **Compare the part numbers.** The suggestion exists because they match exactly.
-   2. **Sanity-check the descriptions.** They come from different systems and won't read
-      word-for-word the same — they just need to clearly be the same kind of product from the
-      same manufacturer.
-   3. **Approve** when both hold. **Reject** when the descriptions clearly disagree (your line
-      is a scale, the suggestion is a cart). **Not sure? Leave it open** and move on.
-4. Unmatched lines are normal — many supplier catalog items aren't things we stock. They never
-   block anything.
+1. In the batch's **Item Matching** card, click **Generate Suggestions**.
+2. Each suggestion shows your spreadsheet line and the suggested catalog item side by side.
+3. Decide in order: **compare the part numbers first** (the suggestion exists because they
+   match exactly), then sanity-check the descriptions — different systems word things
+   differently; they just need to clearly be the same kind of product from the same
+   manufacturer.
+4. **Approve** when both hold; **Reject** when the descriptions clearly disagree; **not sure —
+   leave it open**. Unmatched lines are normal and never block anything.
 
 ---
 
-## 7. Workflow D — Publish (make the costs official)
+## 8. Workflow 5 — Publish an imported batch (make the costs official)
 
-1. On the approved batch page, click **Prepare Costs**. This creates *pending* cost lines —
-   still not official.
-2. Check the **Publish Preview** numbers: pending candidates, open exceptions (0), blocking
-   rows (0), and "Sell Pricing: No."
-3. Optionally spot-check a few rows against the original workbook.
-4. Click **Publish**. Read the impact summary — it states exactly how many lines will activate
-   and how many currently active lines will be replaced (superseded).
-5. Type `PUBLISH` and confirm.
-6. The batch status changes to **published**. These are now the active negotiated costs, and
-   any previous costs for the same item and unit of measure on this contract are superseded
-   automatically — you never need to hunt down and retire old lines by hand.
+1. On the approved batch, click **Prepare Costs**, then check the **Publish Preview** (pending
+   candidates; open exceptions 0; blocking rows 0; "Sell Pricing: No").
+2. Click **Publish**, read the impact summary (how many lines activate, how many current
+   lines are superseded), type `PUBLISH`, confirm.
+3. The new costs are live in Contract Price Manager; superseded versions move to history
+   automatically.
 
-**Publishing an updated list from the same distributor** is the same flow: upload the new file
-(Workflow A, reusing the profile), stage, approve, publish. The new lines supersede the old ones.
-
----
-
-## 8. Workflow E — Rollback (undo a publish)
-
-If anything about a published batch turns out to be wrong:
-
-1. Open the published batch and click **Roll Back**.
-2. Read the summary: every cost line from this batch will be deactivated, and the lines it
-   superseded will be restored.
-3. Type `ROLLBACK` and confirm.
-
-Rollback is safe and complete — the system returns to exactly the state before the publish, and
-the whole event is recorded. Fix the underlying problem, then re-import and publish again.
+**Undo:** open the published batch, click **Roll Back**, type `ROLLBACK`. Every line from the
+batch is deactivated and the previously superseded lines are restored — the exact pre-publish
+state, fully recorded.
 
 ---
 
 ## 9. Rules and guardrails
 
 - **Customer sell pricing is never touched.** This module is supplier costs only.
-- **Never activate costs outside the Publish button.** There is no other supported path.
-- **Contract number and effective date are required at upload** — no exceptions; staging is
-  blocked without them.
+- **The table is the truth.** After a supplier is onboarded, their Excel file is history — no
+  parallel spreadsheets, no "working copies."
+- **History is sacred.** Corrections version; expiries archive; publishes supersede; rollbacks
+  restore. Nothing is deleted or silently overwritten.
+- **Contract number and effective date are required at upload** — staging is blocked without them.
 - **Don't guess on matches.** An open suggestion costs nothing; a wrong approval pollutes the
-  catalog link. When unsure, leave it open and ask.
-- **One distributor, one spelling.** Consistent distributor names keep profiles and contracts
-  organized.
-- **After cutover, the Excel file is history, not a working copy.** Once a distributor's
-  pricing is published in Zeus, do not maintain a parallel spreadsheet.
+  catalog link.
+- **One distributor, one spelling.** Consistent names keep contracts and profiles organized.
 
 ---
 
@@ -202,22 +202,23 @@ the whole event is recorded. Fix the underlying problem, then re-import and publ
 
 | What you see | What it means | What to do |
 | --- | --- | --- |
-| "Only .xlsx and .xlsm workbooks are supported" | The file is an old `.xls`, a CSV, or a PDF | Open it in Excel and save as `.xlsx`, or ask the distributor for an Excel version. |
-| Dry run shows many blocking rows | Usually a wrong column mapping or wrong header row | Re-check the mapping (is Price really that column? is the header row right?), save a new profile version, re-run. |
-| "Missing price UOM" blocking reason | The workbook has no unit-of-measure column and no default was set | Set **Default price UOM** in the profile (usually `EA`), save, re-run. |
-| "Batches with blocking rows cannot be approved" | Blocking rows are still present | Fix at the dry-run stage (Workflow A step 10) — approval never overrides blocking rows. |
-| "Open blocking exceptions must be resolved or waived" | Exceptions still open on the batch | Work the exception list (Workflow B step 2). |
-| Publish button is disabled | Batch isn't ready — not approved, costs not prepared, or preview shows blockers | Follow the order: Approve → Prepare Costs → Publish. The preview lists any blockers. |
-| "Batch is already published" | Someone already published it | Nothing to do — check the batch status. |
-| A published price is wrong | Bad data or wrong mapping made it through | **Roll Back** the batch, fix, re-import, re-publish. |
-| Page or button missing entirely | Account role or an in-progress deployment | Confirm your account has the admin role; check the "What's new" popup; contact the administrator. |
+| Can't find a supplier in Contract Price Manager | That supplier has never been imported | Onboard them: import their price list (Workflow 2), or if they have only a handful of items, create the contract via a first import and manage the rest in the table. |
+| "Only active approved cost lines can be updated" | The line is already superseded or expired | Switch the filter to Active and edit the current version of that item's line. |
+| "At least one item identifier is required" | Manual line has no SKU/MPN/model/GTIN | Enter whichever identifier the supplier uses — costs must be attachable to an item. |
+| "Only .xlsx and .xlsm workbooks are supported" | The file is an old .xls, CSV, or PDF | Save as .xlsx in Excel, or request an Excel version. |
+| Dry run shows many blocking rows | Usually a wrong column mapping or header row | Re-check the mapping, save a new profile version, re-run. |
+| "Missing price UOM" blocking reason | No unit-of-measure column and no default set | Set Default price UOM in the profile (usually `EA`), save, re-run. |
+| "Batches with blocking rows cannot be approved" | Blocking rows still present | Fix at the dry-run stage — approval never overrides blocking rows. |
+| Publish button is disabled | Batch not ready | Follow the order: Approve → Prepare Costs → Publish; the preview lists blockers. |
+| A published price is wrong | Bad data or wrong mapping made it through | Single line → Edit it in Contract Price Manager. Whole batch → Roll Back, fix, re-import. |
+| Page or button missing entirely | Account role or an in-progress deployment | Confirm the admin role; check "What's new"; contact the administrator. |
 
 ---
 
 ## 11. Getting help
 
 - Click the **?** button on any pricing page for that page's step-by-step guide.
-- The **"What's new" popup** explains changes after every update — it appears once per change.
+- The **"What's new" popup** explains changes after every update.
 - For anything unexpected, copy the exact error text and send it to the system administrator —
   exact wording makes fixes fast.
 

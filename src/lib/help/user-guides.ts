@@ -169,7 +169,67 @@ const EXCEPTIONS_QUEUE: PageGuide = {
   ],
 }
 
+const CONTRACTS_LIST: PageGuide = {
+  title: 'Contract Price Manager',
+  intro:
+    'This is the system of record for negotiated supplier costs. Each row is one supplier contract; open it to work with its cost lines directly — no spreadsheet needed.',
+  sections: [
+    {
+      heading: 'Day to day',
+      steps: [
+        'Open a contract to view its active cost lines in a table.',
+        'Add a line when you negotiate a price outside a formal price list (e.g., by phone or email).',
+        'Edit a line to correct a cost, UOM, or date — the old version is kept automatically.',
+        'Expire a line when an item is discontinued or the negotiated price ends.',
+      ],
+    },
+    {
+      heading: 'Where contracts come from',
+      text: 'Contracts are created automatically the first time a distributor price list is imported and prepared for publish. Excel files are a one-time on-ramp per supplier — after that, this table is where pricing lives.',
+    },
+  ],
+}
+
+const CONTRACT_DETAIL: PageGuide = {
+  title: 'Contract cost lines',
+  intro:
+    'The table shows this contract’s negotiated costs. Active is what Zeus answers with today; Superseded and other filters show history. Every change here is versioned and audited — nothing is ever silently overwritten.',
+  sections: [
+    {
+      heading: 'Add a cost line',
+      steps: [
+        'Click Add Line.',
+        'Enter at least one identifier (SKU, part number, model, or GTIN), the cost, and the price UOM (usually EA).',
+        'Set the effective date (defaults to today). Click Add Cost Line — it becomes active immediately, recorded under your name.',
+      ],
+    },
+    {
+      heading: 'Correct a cost line',
+      steps: [
+        'Click Edit on the line, change what is wrong, and click Save New Version.',
+        'The corrected line becomes active and the old one moves to Superseded history — you can always see what the cost used to be.',
+      ],
+    },
+    {
+      heading: 'Expire a cost line',
+      steps: [
+        'Click Expire, then Confirm Expire. The line stops being an active cost but stays in history.',
+        'Use this when an item is discontinued or a negotiated price ends without a replacement.',
+      ],
+    },
+    {
+      heading: 'Reading the table',
+      steps: [
+        'Source shows where a cost came from: an imported workbook (file and row) or a manual entry.',
+        'Item Link shows whether the line is matched to an internal item or a Hercules catalog item — matching happens on the import batch page.',
+      ],
+    },
+  ],
+}
+
 const GUIDE_ROUTES: GuideRoute[] = [
+  { pattern: new RegExp(`^/dashboard/pricing/contracts/${UUID}$`), guide: CONTRACT_DETAIL },
+  { pattern: /^\/dashboard\/pricing\/contracts$/, guide: CONTRACTS_LIST },
   { pattern: new RegExp(`^/dashboard/pricing/imports/upload/${UUID}$`), guide: UPLOAD_DETAIL },
   { pattern: /^\/dashboard\/pricing\/imports\/upload$/, guide: UPLOAD_FORM },
   { pattern: new RegExp(`^/dashboard/pricing/imports/${UUID}$`), guide: BATCH_DETAIL },
