@@ -20,6 +20,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-23-contract-price-manager',
+    date: '2026-07-23',
+    title: 'Manage contract pricing directly in a table',
+    summary:
+      'New Contract Price Manager: open any supplier contract and work with its cost lines directly — add a negotiated price, correct a line, or expire one. Excel files are now only a one-time on-ramp per supplier.',
+    details: [
+      'Find it on the Pricing page: the Contract Price Manager card is now live.',
+      'Edits never overwrite history — a correction creates a new version and keeps the old one.',
+      'Expiring a line keeps it in history; it just stops being the active cost.',
+      'Every change is recorded with who made it and when.',
+    ],
+    areas: [{ label: 'Contract Price Manager', href: '/dashboard/pricing/contracts' }],
+  },
+  {
     id: '2026-07-16-match-review-side-by-side',
     date: '2026-07-16',
     title: 'Clearer item match review',

@@ -112,9 +112,10 @@ const MODULES: PricingModule[] = [
   },
   {
     title: 'Contract Price Manager',
-    description: 'Read contract coverage now; import and edit workflows stay disabled until role-backed APIs exist.',
+    description: 'The system of record for negotiated supplier costs: view, add, correct, and expire cost lines per contract.',
     icon: FileText,
-    status: 'coming-soon',
+    status: 'live',
+    href: '/dashboard/pricing/contracts',
   },
   {
     title: 'Supplier Cost Imports',
