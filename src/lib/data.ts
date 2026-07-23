@@ -31,6 +31,7 @@ import { AUTOMATION_INFO } from '@/types'
 import type { SyncEvent, FieldMapping, ConnectionConfig, AutomationType } from '@/types'
 import { getDataSourceMode } from '@/lib/utils/app-settings'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getInboundBucketParts, type InboundBucketKey } from '@/lib/inventory/analytics'
 
 // ---------------------------------------------------------------------------
 // Filter / pagination types
@@ -63,8 +64,37 @@ export interface InventoryFilters {
   category?: string
   stockStatus?: 'all' | 'in_stock' | 'low' | 'out_of_stock'
   search?: string
+  /** "field:dir", e.g. "qtyAvailable:asc" — see INVENTORY_SORT_FIELDS */
+  sort?: string
+  /** restrict to parts with open PO lines landing in this bucket
+   *  (set by clicking a bar on the Inbound Pipeline chart) */
+  inboundBucket?: InboundBucketKey
   page?: number
   pageSize?: number
+}
+
+export const INVENTORY_SORT_FIELDS = [
+  'sku',
+  'name',
+  'qtyOnHand',
+  'qtyAllocated',
+  'qtyAvailable',
+] as const
+
+function sortInventory(items: Product[], sort: string | undefined): Product[] {
+  const [field, dir] = (sort ?? '').split(':')
+  if (!(INVENTORY_SORT_FIELDS as readonly string[]).includes(field)) return items
+  const sign = dir === 'desc' ? -1 : 1
+  const key = field as (typeof INVENTORY_SORT_FIELDS)[number]
+  return [...items].sort((a, b) => {
+    const av = a[key]
+    const bv = b[key]
+    const cmp =
+      typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv))
+    return cmp * sign
+  })
 }
 
 export interface EventFilters {
@@ -1582,9 +1612,14 @@ async function getLiveSalesRepOptions(): Promise<SalesRep[]> {
 export async function getInventory(filters: InventoryFilters = {}): Promise<PaginatedResult<Product>> {
   void await getDataSourceMode()
   const products = await getLiveInventoryProducts()
-  const items = applyInventoryFilters(products, filters)
+  let items = applyInventoryFilters(products, filters)
 
-  return paginate(items, filters.page, filters.pageSize)
+  if (filters.inboundBucket) {
+    const parts = await getInboundBucketParts(filters.inboundBucket)
+    items = items.filter((p) => parts.has(p.sku))
+  }
+
+  return paginate(sortInventory(items, filters.sort), filters.page, filters.pageSize)
 }
 
 export interface InventoryKpis {
@@ -1849,7 +1884,7 @@ function defaultAliasMappingRows(): FishbowlSalespersonAliasRow[] {
     { fishbowl_salesperson: 'kbugarski', sf_user_id: '0052E00000Kuuj8QAB', display_name: 'Kristina Bugarski', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
     { fishbowl_salesperson: 'Christine', sf_user_id: '0052E00000M1j73QAB', display_name: 'Christine Livingstone', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
     { fishbowl_salesperson: 'Nikola', sf_user_id: '005Ua00000EnNsTIAV', display_name: 'Nikola Kovilic', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
-    { fishbowl_salesperson: 'kdedvukaj', sf_user_id: '005Ua000008QA96IAG', display_name: 'Kendall Cook', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
+    { fishbowl_salesperson: 'kdedvukaj', sf_user_id: '005Ua000008QA96IAG', display_name: 'Kristal Dedvukaj', team: 'Sales', is_active: true, is_house_account: false, is_system_alias: false, show_on_sales_dashboard: true, dashboard_sort_order: 60 },
     { fishbowl_salesperson: 'admin', sf_user_id: null, display_name: 'Fishbowl Admin / Legacy', team: 'System', is_active: true, is_house_account: false, is_system_alias: true, show_on_sales_dashboard: false, dashboard_sort_order: null },
     { fishbowl_salesperson: 'MedShip', sf_user_id: null, display_name: 'Medical Shipment House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },
     { fishbowl_salesperson: 'House Account', sf_user_id: null, display_name: 'House Account', team: 'House', is_active: true, is_house_account: true, is_system_alias: false, show_on_sales_dashboard: false, dashboard_sort_order: null },

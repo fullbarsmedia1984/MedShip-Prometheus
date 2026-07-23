@@ -15,7 +15,10 @@ import {
   DollarSign,
   FileText,
   GraduationCap,
+  Layers,
   MapPin,
+  SquareKanban,
+  Tv,
   RefreshCw,
   Trophy,
   List,
@@ -25,12 +28,16 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Zap,
 } from 'lucide-react'
 
 const ADMIN_ROLES: AppRole[] = ['superadmin', 'admin']
 const STAFF_ROLES: AppRole[] = ['superadmin', 'admin', 'staff']
 const MANAGER_ROLES: AppRole[] = ['superadmin', 'admin', 'staff', 'sales_manager']
 const REP_ROLES: AppRole[] = ['sales_rep']
+// Sales-tier surfaces: everyone except warehouse/logistics.
+const SALES_ROLES: AppRole[] = ['superadmin', 'admin', 'staff', 'sales_manager', 'sales_rep']
+const WALLBOARD_ROLES: AppRole[] = ['superadmin', 'admin', 'staff', 'warehouse']
 
 type NavItem = {
   name: string
@@ -43,17 +50,21 @@ type NavItem = {
 // the sales experience: Sales, Quotes, Orders).
 const mainNav: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: STAFF_ROLES },
-  { name: 'Sales', href: '/dashboard/sales', icon: BarChart3 },
+  { name: 'AskZeus', href: '/dashboard/askzeus', icon: Zap },
+  { name: 'Sales', href: '/dashboard/sales', icon: BarChart3, roles: SALES_ROLES },
+  { name: 'Kanban', href: '/dashboard/kanban', icon: SquareKanban },
   { name: 'Incentives', href: '/dashboard/incentives', icon: Trophy, roles: MANAGER_ROLES },
   { name: 'My Scorecard', href: '/dashboard/incentives/scorecard', icon: Trophy, roles: REP_ROLES },
   { name: 'TAM', href: '/dashboard/tam', icon: GraduationCap, roles: STAFF_ROLES },
-  { name: 'Quotes', href: '/dashboard/quotes', icon: FileText },
+  { name: 'Quotes', href: '/dashboard/quotes', icon: FileText, roles: SALES_ROLES },
   { name: 'Pricing', href: '/dashboard/pricing', icon: DollarSign, roles: STAFF_ROLES },
   { name: 'Estimator', href: '/dashboard/estimator', icon: Boxes },
-  { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart },
+  { name: 'Orders', href: '/dashboard/orders', icon: ShoppingCart, roles: SALES_ROLES },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: STAFF_ROLES },
+  { name: 'Kit Assembly', href: '/dashboard/kits', icon: Layers, roles: WALLBOARD_ROLES },
   { name: 'Supplier Catalog', href: '/dashboard/catalog', icon: BookOpen },
   { name: 'Territory', href: '/dashboard/territory', icon: MapPin, roles: STAFF_ROLES },
+  { name: 'Wallboard', href: '/warehouse-board', icon: Tv, roles: WALLBOARD_ROLES },
 ]
 
 const opsNav: NavItem[] = [

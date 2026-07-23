@@ -308,7 +308,9 @@ async function main() {
   }
 
   if (args.command === 'publish' || args.command === 'rollback') {
-    throw new Error(`${args.command} is intentionally not implemented in this phase.`)
+    throw new Error(
+      `${args.command} is intentionally not implemented in the CLI. Use the authenticated dashboard publish/rollback flow so the action is attributed to a reviewer and audited.`
+    )
   }
 
   if (args.command !== 'preflight' && args.command !== 'stage') {

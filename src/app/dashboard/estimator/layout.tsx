@@ -1,11 +1,11 @@
-import { STAFF_API_AUTH_OPTIONS, requireDashboardAuth } from '@/lib/auth'
+import { ESTIMATOR_API_AUTH_OPTIONS, requireDashboardAuth } from '@/lib/auth'
 
 export default async function EstimatorLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  await requireDashboardAuth(STAFF_API_AUTH_OPTIONS)
+  await requireDashboardAuth(ESTIMATOR_API_AUTH_OPTIONS)
 
   return <>{children}</>
 }

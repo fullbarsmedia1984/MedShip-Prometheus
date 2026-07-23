@@ -3,15 +3,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
-import { KpiCard } from '@/components/dashboard/KpiCard'
 import { DataTable } from '@/components/dashboard/DataTable'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
+import { InventoryAnalytics, type ChartDrill } from '@/components/inventory/InventoryAnalytics'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
-import { Package, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
+import { X } from 'lucide-react'
 import { fetchJson } from '@/lib/client-api'
 import type { PaginatedResult, InventoryKpis } from '@/lib/data'
+import type { InboundBucketKey, OutboundDay } from '@/lib/inventory/analytics'
 import type { Product } from '@/lib/seed-data'
 import { cn } from '@/lib/utils'
 
@@ -19,8 +20,19 @@ interface Filters {
   category: string
   stockStatus: string
   search: string
+  sort: string
+  inboundBucket: InboundBucketKey | ''
   page: number
 }
+
+const SORT_OPTIONS = [
+  { value: 'sku:asc', label: 'SKU A–Z' },
+  { value: 'name:asc', label: 'Name A–Z' },
+  { value: 'qtyAvailable:asc', label: 'Available: low first' },
+  { value: 'qtyAvailable:desc', label: 'Available: high first' },
+  { value: 'qtyOnHand:asc', label: 'On hand: low first' },
+  { value: 'qtyOnHand:desc', label: 'On hand: high first' },
+] as const
 
 type InventoryDashboardResponse = {
   result: PaginatedResult<Product>
@@ -65,12 +77,53 @@ export default function InventoryPage() {
     category: 'all',
     stockStatus: 'all',
     search: '',
+    sort: 'sku:asc',
+    inboundBucket: '',
     page: 1,
   })
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [result, setResult] = useState<PaginatedResult<Product> | null>(null)
-  const [kpis, setKpis] = useState<InventoryKpis | null>(null)
   const [loading, setLoading] = useState(true)
+  // Chart-driven state: a chip describing the active drill filter, and the
+  // shipment detail for a clicked Outbound Velocity day.
+  const [drillChip, setDrillChip] = useState<string | null>(null)
+  const [dayDetail, setDayDetail] = useState<OutboundDay | null>(null)
+
+  const handleDrill = useCallback((drill: ChartDrill) => {
+    if (drill.type === 'part') {
+      const p = drill.part
+      setFilters((prev) => ({
+        ...prev,
+        search: p.part,
+        sort: 'qtyAvailable:asc',
+        inboundBucket: '',
+        page: 1,
+      }))
+      const coverage =
+        p.onOrder > 0
+          ? `${p.onOrder.toLocaleString()} on order${p.eta ? `, ETA ${p.eta}` : ''}`
+          : 'NO PO'
+      setDrillChip(
+        `Shortage ${p.part}: ${p.short.toLocaleString()} short · ${p.available.toLocaleString()} available · ${coverage} · ${p.sos} SOs`
+      )
+    } else if (drill.type === 'bucket') {
+      setFilters((prev) => ({
+        ...prev,
+        search: '',
+        inboundBucket: drill.key,
+        sort: 'qtyAvailable:asc',
+        page: 1,
+      }))
+      setDrillChip(`Inbound: ${drill.label} — parts with POs landing in this window`)
+    } else {
+      setDayDetail(drill.day)
+    }
+  }, [])
+
+  const clearDrill = useCallback(() => {
+    setDrillChip(null)
+    setFilters((prev) => ({ ...prev, search: '', inboundBucket: '', sort: 'sku:asc', page: 1 }))
+  }, [])
 
   // Debounce search
   useEffect(() => {
@@ -88,16 +141,17 @@ export default function InventoryPage() {
         category: filters.category,
         stockStatus: filters.stockStatus,
         search: debouncedSearch,
+        sort: filters.sort,
         page: String(filters.page),
         pageSize: '20',
       })
+      if (filters.inboundBucket) params.set('inboundBucket', filters.inboundBucket)
       const data = await fetchJson<InventoryDashboardResponse>(`/api/dashboard/inventory?${params}`)
       setResult(data.result)
-      setKpis(data.kpis)
     } finally {
       setLoading(false)
     }
-  }, [filters.category, filters.stockStatus, debouncedSearch, filters.page])
+  }, [filters.category, filters.stockStatus, debouncedSearch, filters.sort, filters.inboundBucket, filters.page])
 
   useEffect(() => {
     fetchInventory()
@@ -106,7 +160,7 @@ export default function InventoryPage() {
   // Reset page on filter change
   useEffect(() => {
     setFilters((prev) => ({ ...prev, page: 1 }))
-  }, [filters.category, filters.stockStatus, debouncedSearch])
+  }, [filters.category, filters.stockStatus, debouncedSearch, filters.sort, filters.inboundBucket])
 
   const columns = [
     {
@@ -186,32 +240,49 @@ export default function InventoryPage() {
     <>
       <Header title="Inventory" />
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-        {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard
-            title="Total SKUs"
-            value={kpis?.totalSkus ?? 0}
-            icon={Package}
-          />
-          <KpiCard
-            title="In Stock"
-            value={kpis?.inStock ?? 0}
-            icon={CheckCircle}
-            iconColor="text-medship-success"
-          />
-          <KpiCard
-            title="Low Stock"
-            value={kpis?.lowStock ?? 0}
-            icon={AlertTriangle}
-            iconColor="text-medship-warning"
-          />
-          <KpiCard
-            title="Out of Stock"
-            value={kpis?.outOfStock ?? 0}
-            icon={XCircle}
-            iconColor="text-medship-danger"
-          />
-        </div>
+        {/* Warehouse analytics band: stock health, committed demand,
+            shortages w/ PO coverage, inbound pipeline, outbound velocity.
+            Bar clicks drill into the table via handleDrill. */}
+        <InventoryAnalytics onDrill={handleDrill} />
+
+        {/* Outbound day drill-down: the SOs that shipped that day */}
+        {dayDetail && (
+          <Card className="border-medship-success/40 shadow-sm">
+            <CardContent className="flex flex-wrap items-start gap-x-4 gap-y-2 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-card-foreground">
+                  Shipped {dayDetail.label}
+                </span>
+                <span className="rounded-full bg-medship-success/10 px-2 py-0.5 text-xs font-medium text-medship-success">
+                  {dayDetail.shipments} shipment{dayDetail.shipments === 1 ? '' : 's'} · {dayDetail.cartons} cartons
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                {dayDetail.ships.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">No shipments this day</span>
+                ) : (
+                  dayDetail.ships.map((s, i) => (
+                    <span
+                      key={`${s.so}-${i}`}
+                      className="rounded-md border border-[#D6DEE3] px-2 py-0.5 font-mono text-xs text-medship-primary-dark dark:border-[rgba(255,255,255,0.1)] dark:text-medship-primary-light"
+                      title={`${s.cartons} carton${s.cartons === 1 ? '' : 's'}`}
+                    >
+                      {s.so}
+                    </span>
+                  ))
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setDayDetail(null)}
+                className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted"
+                aria-label="Dismiss shipped-day detail"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Filters bar */}
         <Card className="shadow-sm">
@@ -220,9 +291,10 @@ export default function InventoryPage() {
               <Input
                 placeholder="Search by product name or SKU..."
                 value={filters.search}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setDrillChip(null)
                   setFilters((prev) => ({ ...prev, search: e.target.value }))
-                }
+                }}
                 className="w-full sm:w-64"
               />
               <Select
@@ -259,6 +331,36 @@ export default function InventoryPage() {
                   <SelectItem value="out_of_stock">Out of Stock</SelectItem>
                 </SelectContent>
               </Select>
+              <Select
+                value={filters.sort}
+                onValueChange={(value) =>
+                  setFilters((prev) => ({ ...prev, sort: value ?? 'sku:asc' }))
+                }
+              >
+                <SelectTrigger className="w-full sm:w-52">
+                  <SelectValue placeholder="Sort" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      Sort: {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {drillChip && (
+                <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-medship-primary/10 px-3 py-1 text-xs font-medium text-medship-primary-dark dark:text-medship-primary-light">
+                  <span className="truncate">{drillChip}</span>
+                  <button
+                    type="button"
+                    onClick={clearDrill}
+                    className="shrink-0 rounded-full p-0.5 hover:bg-medship-primary/20"
+                    aria-label="Clear chart filter"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>

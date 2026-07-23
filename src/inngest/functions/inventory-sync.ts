@@ -73,6 +73,7 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
     )
     const supabase = createAdminClient()
 
+    let upsertErrors = 0
     for (let i = 0; i < inventory.length; i += 100) {
       const chunk = inventory.slice(i, i + 100)
       const rows = chunk.map((item) => ({
@@ -91,7 +92,26 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
         .upsert(rows, { onConflict: 'part_number' })
 
       if (error) {
+        upsertErrors += 1
         console.error(`Supabase upsert error on chunk ${i}:`, error)
+      }
+    }
+
+    // Fishbowl stops reporting a part once its quantity hits zero, so any row
+    // this run did not touch is a stale leftover claiming phantom stock (e.g.
+    // 14242-28 sat at "10 on hand" for six weeks). Remove drop-outs — but only
+    // when every chunk upserted cleanly, so a partial failure can't wipe rows
+    // that merely failed to refresh.
+    if (upsertErrors === 0 && inventory.length > 0) {
+      const { error: cleanupError, count: staleRemoved } = await supabase
+        .from('inventory_snapshot')
+        .delete({ count: 'exact' })
+        .lt('last_synced_at', new Date(startTime).toISOString())
+
+      if (cleanupError) {
+        console.error('Stale inventory_snapshot cleanup failed:', cleanupError)
+      } else if (staleRemoved) {
+        logger.log('info', 'P2_INVENTORY_SYNC', `Removed ${staleRemoved} stale zero-stock rows`)
       }
     }
 
@@ -176,14 +196,14 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
  * P2: Fishbowl Inventory -> Salesforce Products
  *
  * Scheduled job that syncs inventory levels from Fishbowl to Salesforce.
- * Runs every 15 minutes.
+ * Runs 8am, 12pm, and 4pm Monday-Friday (America/Chicago) per ops.
  */
 export const inventorySync = inngest.createFunction(
   {
     id: 'inventory-sync',
     name: 'P2: Inventory Sync (FB -> SF)',
     retries: 2,
-    triggers: [{ cron: '*/15 * * * *' }],
+    triggers: [{ cron: 'TZ=America/Chicago 0 8,12,16 * * 1-5' }],
   },
   async ({ step }) => {
     return step.run('run-inventory-sync', () => runInventorySync('schedule'))

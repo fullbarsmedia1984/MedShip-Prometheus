@@ -4,11 +4,14 @@ import {
   inviteEmail,
   twoFactorCodeEmail,
   roleChangedEmail,
+  passwordResetEmail,
+  emailTestEmail,
 } from './templates'
 import type { AppRole } from '@/lib/auth'
 
 export { sendEmail } from './client'
 export type { EmailResult, SendEmailInput } from './client'
+export { getEmailConfiguration, PRODUCTION_EMAIL_DOMAIN } from './config'
 
 const ROLE_LABELS: Record<AppRole, string> = {
   superadmin: 'Superadmin',
@@ -16,6 +19,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   staff: 'Administrative Staff',
   sales_rep: 'Sales Rep',
   sales_manager: 'Sales Manager',
+  warehouse: 'Warehouse / Logistics',
 }
 
 export function roleLabel(role: AppRole): string {
@@ -48,6 +52,18 @@ export async function sendTwoFactorCodeEmail(params: {
   return sendEmail({ to: params.to, subject, html, text })
 }
 
+export async function sendPasswordResetEmail(params: {
+  to: string
+  resetUrl: string
+  minutes: number
+}): Promise<EmailResult> {
+  const { subject, html, text } = passwordResetEmail({
+    resetUrl: params.resetUrl,
+    minutes: params.minutes,
+  })
+  return sendEmail({ to: params.to, subject, html, text })
+}
+
 export async function sendRoleChangedEmail(params: {
   to: string
   role: AppRole
@@ -55,5 +71,13 @@ export async function sendRoleChangedEmail(params: {
   const { subject, html, text } = roleChangedEmail({
     roleLabel: ROLE_LABELS[params.role],
   })
+  return sendEmail({ to: params.to, subject, html, text })
+}
+
+export async function sendEmailTest(params: {
+  to: string
+  appUrl: string
+}): Promise<EmailResult> {
+  const { subject, html, text } = emailTestEmail({ appUrl: params.appUrl })
   return sendEmail({ to: params.to, subject, html, text })
 }

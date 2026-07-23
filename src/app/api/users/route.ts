@@ -47,7 +47,10 @@ export async function POST(request: NextRequest) {
       actor: { userId: auth.user?.id ?? null, email: auth.user?.email ?? null },
       inviterName: auth.user?.email ?? 'An administrator',
     })
-    return NextResponse.json({ id: result.id }, { status: 201 })
+    return NextResponse.json(
+      { id: result.id, emailSent: result.emailSent, emailError: result.emailError ?? null },
+      { status: 201 }
+    )
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to invite user' },

@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logAudit, type AuditActor } from '@/lib/audit'
-import { sendInviteEmail, sendRoleChangedEmail } from '@/lib/email'
+import { sendInviteEmail, sendPasswordResetEmail, sendRoleChangedEmail } from '@/lib/email'
 import type { AppRole } from '@/lib/auth'
 
 export type ManagedUser = {
@@ -20,8 +20,8 @@ export type ManagedUser = {
 // grant staff and below. superadmin is never assignable through this path
 // (the sole-superadmin invariant is also enforced by a DB trigger).
 export const ASSIGNABLE_ROLES: Record<'superadmin' | 'admin', AppRole[]> = {
-  superadmin: ['admin', 'staff', 'sales_rep', 'sales_manager'],
-  admin: ['staff', 'sales_rep', 'sales_manager'],
+  superadmin: ['admin', 'staff', 'sales_rep', 'sales_manager', 'warehouse'],
+  admin: ['staff', 'sales_rep', 'sales_manager', 'warehouse'],
 }
 
 function appUrl(): string {
@@ -61,18 +61,33 @@ export async function inviteUser(params: {
   fishbowlUserId?: string | null
   actor: AuditActor
   inviterName: string
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; emailSent: boolean; emailError?: string }> {
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase.auth.admin.inviteUserByEmail(params.email, {
-    data: {},
-    redirectTo: `${appUrl()}/login`,
+  // Create the auth user ourselves (no Supabase default email) — the invite
+  // email below carries a set-password link and goes through Resend. If the
+  // address already exists (e.g. a previous invite whose email failed),
+  // fall through and re-issue the set-password link instead of erroring.
+  let userId: string
+  const { data: created, error: createError } = await supabase.auth.admin.createUser({
+    email: params.email,
+    email_confirm: true,
+    app_metadata: { role: params.role },
   })
-  if (error || !data.user) {
-    throw new Error(error?.message ?? 'Failed to create user')
-  }
 
-  const userId = data.user.id
+  if (created?.user) {
+    userId = created.user.id
+  } else if (createError && /already|registered|exists/i.test(createError.message)) {
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', params.email)
+      .maybeSingle()
+    if (!existing) throw new Error(createError.message)
+    userId = existing.id
+  } else {
+    throw new Error(createError?.message ?? 'Failed to create user')
+  }
 
   // Set the role in both places: app_metadata (JWT claim for RLS) and the
   // profile row (management source of truth). The handle_new_user trigger
@@ -91,9 +106,20 @@ export async function inviteUser(params: {
     })
     .eq('id', userId)
 
+  // The invite email carries a single-use set-password token redeemed by the
+  // /reset-password page (a recovery link works for users who have never set
+  // a password). Fall back to the login URL only if link generation fails.
+  const { data: link } = await supabase.auth.admin.generateLink({
+    type: 'recovery',
+    email: params.email,
+  })
+  const inviteUrl = link?.properties?.hashed_token
+    ? `${appUrl()}/reset-password?token=${encodeURIComponent(link.properties.hashed_token)}`
+    : `${appUrl()}/login`
+
   const invite = await sendInviteEmail({
     to: params.email,
-    inviteUrl: `${appUrl()}/login`,
+    inviteUrl,
     role: params.role,
     inviterName: params.inviterName,
   })
@@ -104,10 +130,97 @@ export async function inviteUser(params: {
     entityType: 'profile',
     entityId: userId,
     summary: `Invited ${params.email} as ${params.role}`,
-    diff: { role: params.role, emailSent: invite.sent },
+    diff: { role: params.role, emailSent: invite.sent, emailError: invite.error ?? null },
   })
 
-  return { id: userId }
+  return { id: userId, emailSent: invite.sent, emailError: invite.error }
+}
+
+/** Re-send the set-password invite to a user who has never signed in. */
+export async function resendInvite(params: {
+  userId: string
+  actor: AuditActor
+  inviterName: string
+}): Promise<{ emailSent: boolean; emailError?: string }> {
+  const supabase = createAdminClient()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email, role, is_active')
+    .eq('id', params.userId)
+    .maybeSingle()
+  if (!profile) throw new Error('User not found')
+  if (!profile.is_active) throw new Error('Reactivate the user before resending their invite')
+
+  const { data: authUser } = await supabase.auth.admin.getUserById(params.userId)
+  if (authUser?.user?.last_sign_in_at) {
+    throw new Error('This user has already signed in — send a password reset instead')
+  }
+
+  const { data: link, error } = await supabase.auth.admin.generateLink({
+    type: 'recovery',
+    email: profile.email,
+  })
+  if (error || !link?.properties?.hashed_token) {
+    throw new Error(error?.message ?? 'Failed to generate the invite link')
+  }
+
+  const inviteUrl = `${appUrl()}/reset-password?token=${encodeURIComponent(link.properties.hashed_token)}`
+  const result = await sendInviteEmail({
+    to: profile.email,
+    inviteUrl,
+    role: profile.role as AppRole,
+    inviterName: params.inviterName,
+  })
+
+  await logAudit({
+    actor: params.actor,
+    action: 'user.invite_resent',
+    entityType: 'profile',
+    entityId: params.userId,
+    summary: `Invite re-sent to ${profile.email}`,
+    diff: { emailSent: result.sent, emailError: result.error ?? null },
+  })
+
+  return { emailSent: result.sent, emailError: result.error }
+}
+
+/** Send a password-reset email to a user on an administrator's behalf. */
+export async function sendPasswordResetForUser(params: {
+  userId: string
+  actor: AuditActor
+}): Promise<{ emailSent: boolean; emailError?: string }> {
+  const supabase = createAdminClient()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email, is_active')
+    .eq('id', params.userId)
+    .maybeSingle()
+  if (!profile) throw new Error('User not found')
+  if (!profile.is_active) throw new Error('Reactivate the user before sending a reset')
+
+  const { data: link, error } = await supabase.auth.admin.generateLink({
+    type: 'recovery',
+    email: profile.email,
+  })
+  if (error || !link?.properties?.hashed_token) {
+    throw new Error(error?.message ?? 'Failed to generate the reset link')
+  }
+
+  const resetUrl = `${appUrl()}/reset-password?token=${encodeURIComponent(link.properties.hashed_token)}`
+  const result = await sendPasswordResetEmail({ to: profile.email, resetUrl, minutes: 60 })
+
+  await logAudit({
+    actor: params.actor,
+    action: 'user.password_reset_sent',
+    entityType: 'profile',
+    entityId: params.userId,
+    summary: `Password reset sent to ${profile.email} by an administrator`,
+    diff: { emailSent: result.sent, emailError: result.error ?? null },
+  })
+
+  return { emailSent: result.sent, emailError: result.error }
 }
 
 export async function changeUserRole(params: {

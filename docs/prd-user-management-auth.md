@@ -54,7 +54,9 @@ These came from Steven during discovery review and override any defaults:
 4. Comp visibility: rep sees own only; sales_manager sees all. (Deferred with the comp feature.)
 5. Reps **can** see contract price until COGS/pricing automation is complete. Model this as a revocable permission flag, not a hardcoded rule.
 6. Auth = **email + password with email 2FA** (code by email). Not passwordless.
-7. Resend account is Steven's; auth/transactional email sends **from his domain** (fullbarsmedia) — no dependency on medicalshipment.com DNS.
+7. Auth and transactional email sends through Resend from the verified
+   `medicalshipment.com` domain. Production uses
+   `Zeus <no-reply@medicalshipment.com>`.
 8. Live DB has ~10 migrations not in the repo (016→022 gap + newer). **Schema reconciliation is a Phase 0 prerequisite** — see §12.
 9. Salesforce webhook fail-open: undecided. Carried as an open item (§14); recommended fix is fail-closed in production.
 10. Audit = who-changed only.
@@ -156,7 +158,9 @@ Principles: JWT `role` claim drives policies; service-role server code is unaffe
 ## 10. Email Infrastructure (Resend)
 
 - Add the `resend` package; new abstraction at `src/lib/email/` — `sendEmail(template, to, data)` with typed templates. Fold the existing `src/lib/utils/notifications.ts` webhook/Resend fallback logic into it; **remove hardcoded recipient addresses** (move to `app_settings` or env).
-- **Auth emails** (2FA codes, invites, password reset): Supabase Auth SMTP configured to Resend, sending from Steven's domain (decision 7). Custom email templates in the Supabase dashboard to match brand.
+- **Auth emails** (2FA codes, invites, password reset): Zeus generates Supabase
+  Auth recovery links and sends the branded message directly through Resend
+  from the corporate domain (decision 7).
 - **App emails** (admin notifications, future low-stock alerts P6, automation emails): direct Resend API through the abstraction.
 - Env vars documented in `.env.example`: `RESEND_API_KEY`, `EMAIL_FROM`, `ALERT_WEBHOOK_URL` (optional).
 - Use cases shipped in this PRD: invite, 2FA code, password reset, "your role changed" notice, admin notification on failed-sync threshold (nice-to-have).

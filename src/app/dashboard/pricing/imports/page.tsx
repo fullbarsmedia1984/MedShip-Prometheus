@@ -84,17 +84,23 @@ export default function PricingImportsPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-semibold text-card-foreground">Supplier Contract Cost Imports</h1>
-                  <Badge variant="outline" className="border-medship-warning/30 bg-medship-warning/10 text-medship-warning">
-                    Staging Only
+                  <Badge variant="outline" className="border-medship-primary/30 bg-medship-primary/10 text-medship-primary">
+                    Buy-Side Costs
                   </Badge>
                 </div>
                 <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                  Reviewed dry-run outputs stage supplier cost data only. Batch approval is enabled; publish, active pricing, and customer sell-pricing updates remain disabled.
+                  Reviewed dry-run outputs stage supplier cost data. Approve, prepare, and final-publish flows are
+                  gated per batch with typed confirmation and rollback. Customer sell pricing is never touched.
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={loadBatches} disabled={loading}>
-                Refresh
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={loadBatches} disabled={loading}>
+                  Refresh
+                </Button>
+                <Button size="sm" render={<Link href="/dashboard/pricing/imports/upload" />}>
+                  Upload Workbook
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

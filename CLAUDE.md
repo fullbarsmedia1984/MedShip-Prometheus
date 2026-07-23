@@ -29,11 +29,37 @@ MedShip Prometheus is an integration hub for Medical Shipment LLC that automates
 | ID | Name | Trigger | Systems |
 |----|------|---------|---------|
 | P1 | Opp Close → Fishbowl SO | SF poll every 2 min | SF → Fishbowl |
-| P2 | Inventory Sync | Cron every 15 min | Fishbowl → SF |
+| P2 | Inventory Sync | Cron 8a/12p/4p Mon–Fri (Chicago) | Fishbowl → SF + inventory_snapshot |
 | P3 | Invoice/Payment Sync | Cron every 1 hr | QB → SF |
 | P4 | Shipment Tracking | Cron every 15 min | Fishbowl → SF |
 | P5 | Quote PDF Generation | On-demand (API call) | SF → PDF → SF |
 | P6 | Low Stock Alerts | After P2 runs | Fishbowl → Alert |
+| P7 | Sales Orders Cache | Cron every 15 min | Fishbowl → fb_sales_orders(+items) |
+| P8 | Incentive Recompute | Cron every 15 min | Supabase internal |
+| P10 | Hercules Catalog Ingest | Nightly delta cron | Hercules → catalog tables |
+| P11 | Purchase Orders Cache | Cron 8a–4p every 2h Mon–Fri (Chicago) | Fishbowl → fb_purchase_orders(+items, open lines) |
+| P12 | Recent Shipments Cache | Cron every 15 min | Fishbowl ship → fb_recent_shipments |
+| P13 | Kit Assembly | — (module, not a sync) | kit_orders overlay + /dashboard/kits |
+| P14 | Receipt Facts | Cron (see receipts-sync.ts) | Fishbowl receipts → fishbowl_receipt_events |
+| P15 | Product-Part Mapping | Cron 6:30a Mon–Fri (Chicago) | Fishbowl product/part → fb_product_parts |
+| P16 | Competitor Catalog Crawl | Cron weekly Sun 4a UTC | pocketnurse/diamedical → competitor_products(+price points, item links) |
+| P17 | Catalog Image Mirror | Cron daily 5a UTC | image URLs → Supabase Storage catalog-images + catalog_item_images |
+| P18 | Image Search Sweep | Cron daily 7a UTC (Firecrawl budget-capped) | Firecrawl search → catalog_item_images |
+
+NOTE (P15): SO lines carry PRODUCT numbers, inventory/POs carry PART numbers —
+only ~3% coincide. Any demand-vs-stock join MUST bridge through
+fb_product_parts (product_num → part_num × factor). See src/lib/inventory/.
+
+NOTE (availability): Fishbowl keeps PICKED units in qty-on-hand until the
+order SHIPS, so snapshot on-hand overstates what a pick can grab. Shortage
+math must subtract staged picks (src/lib/inventory/availability.ts). P2
+deletes snapshot rows for parts that fell to zero; rows older than the
+latest run are stale phantoms. Kit-type SO lines are the kit master (built
+by the floor) — never treat them as stock demand.
+
+NOTE: P2 runs 8a/12p/4p Mon–Fri (Chicago) as of 2026-07-09 (was every 15 min).
+After deploying new/changed Inngest functions, re-register the app
+(curl -X PUT <prod>/api/inngest) or new crons will not fire.
 
 ## Coding Standards
 - All files TypeScript with strict mode

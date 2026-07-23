@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { UserPlus } from 'lucide-react'
+import { MailCheck, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -32,6 +32,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   staff: 'Administrative Staff',
   sales_rep: 'Sales Rep',
   sales_manager: 'Sales Manager',
+  warehouse: 'Warehouse / Logistics',
 }
 
 function formatDate(value: string | null): string {
@@ -47,10 +48,19 @@ export function UsersManager({
   initialUsers,
   assignableRoles,
   currentUserId,
+  currentUserEmail,
+  emailStatus,
 }: {
   initialUsers: ManagedUser[]
   assignableRoles: AppRole[]
   currentUserId: string | null
+  currentUserEmail: string | null
+  emailStatus: {
+    ready: boolean
+    sender: string | null
+    appUrl: string | null
+    issues: string[]
+  }
 }) {
   const router = useRouter()
   const [users, setUsers] = useState(initialUsers)
@@ -61,6 +71,21 @@ export function UsersManager({
   const [busy, setBusy] = useState(false)
 
   const refresh = () => router.refresh()
+
+  const sendTestEmail = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/email/test', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error ?? 'Email test failed')
+        return
+      }
+      toast.success(`Test email sent to ${currentUserEmail}`)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const submitInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,11 +105,40 @@ export function UsersManager({
         toast.error(data.error ?? 'Failed to invite user')
         return
       }
-      toast.success(`Invite sent to ${inviteEmail}`)
+      if (data.emailSent === false) {
+        toast.warning(
+          `Account created, but the invite email failed: ${data.emailError ?? 'unknown error'}. Fix the email config and invite them again to resend.`
+        )
+      } else {
+        toast.success(`Invite sent to ${inviteEmail}`)
+      }
       setInviteOpen(false)
       setInviteEmail('')
       setInviteFishbowlId('')
       refresh()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const emailAction = async (id: string, action: 'resend_invite' | 'send_reset', label: string) => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error ?? `${label} failed`)
+        return
+      }
+      if (data.emailSent === false) {
+        toast.warning(`${label}: the email failed to send — ${data.emailError ?? 'unknown error'}`)
+        return
+      }
+      toast.success(`${label} sent`)
     } finally {
       setBusy(false)
     }
@@ -114,7 +168,33 @@ export function UsersManager({
   }
 
   return (
-    <Card className="p-0">
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-medship-dark">
+              <MailCheck className="h-4 w-4" />
+              Production email {emailStatus.ready ? 'configured' : 'not ready'}
+            </div>
+            {emailStatus.ready ? (
+              <p className="mt-1 text-xs text-medship-secondary">
+                Sender: {emailStatus.sender} · Links: {emailStatus.appUrl}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-destructive">{emailStatus.issues.join(' ')}</p>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !emailStatus.ready || !currentUserEmail}
+            onClick={sendTestEmail}
+          >
+            Send test to me
+          </Button>
+        </div>
+      </Card>
+      <Card className="p-0">
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <span className="text-sm font-medium text-medship-dark">
           {users.length} {users.length === 1 ? 'user' : 'users'}
@@ -183,14 +263,36 @@ export function UsersManager({
                 </TableCell>
                 <TableCell className="text-right">
                   {canManage && (
-                    <Button
-                      size="sm"
-                      variant={user.isActive ? 'outline' : 'default'}
-                      disabled={busy}
-                      onClick={() => updateUser(user.id, { isActive: !user.isActive })}
-                    >
-                      {user.isActive ? 'Deactivate' : 'Reactivate'}
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      {user.isActive && user.lastSignInAt === null && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => emailAction(user.id, 'resend_invite', 'Invite')}
+                        >
+                          Resend invite
+                        </Button>
+                      )}
+                      {user.isActive && user.lastSignInAt !== null && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => emailAction(user.id, 'send_reset', 'Password reset')}
+                        >
+                          Send reset
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant={user.isActive ? 'outline' : 'default'}
+                        disabled={busy}
+                        onClick={() => updateUser(user.id, { isActive: !user.isActive })}
+                      >
+                        {user.isActive ? 'Deactivate' : 'Reactivate'}
+                      </Button>
+                    </div>
                   )}
                 </TableCell>
               </TableRow>
@@ -255,6 +357,7 @@ export function UsersManager({
           </Card>
         </div>
       )}
-    </Card>
+      </Card>
+    </div>
   )
 }

@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
         data: {
           fullSync: params.fullSync ?? true,
           action: params.action ?? (params.fullSync === false ? 'incremental' : 'backfill.start'),
+          soNumbers: Array.isArray(params.soNumbers) ? params.soNumbers : undefined,
           triggeredBy: 'manual',
         },
       },

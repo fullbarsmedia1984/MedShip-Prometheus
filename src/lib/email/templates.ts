@@ -68,6 +68,24 @@ export function twoFactorCodeEmail(params: { code: string; minutes: number }): R
   }
 }
 
+export function passwordResetEmail(params: { resetUrl: string; minutes: number }): RenderedEmail {
+  const { resetUrl, minutes } = params
+  return {
+    subject: 'Reset your Prometheus password',
+    html: layout(
+      'Reset your password',
+      `<p style="font-size:14px;line-height:1.6;color:${SLATE};">
+         Someone (hopefully you) asked to reset the password for this account.
+         Click below to choose a new one. The link expires in ${minutes} minutes
+         and works once.
+       </p>
+       <p style="margin:24px 0;">${button(resetUrl, 'Choose a new password')}</p>
+       <p style="font-size:12px;color:${SLATE};">If you didn't ask for this, you can ignore this email — your password is unchanged.</p>`
+    ),
+    text: `Reset your Medical Shipment Prometheus password (link expires in ${minutes} minutes, single use): ${resetUrl}`,
+  }
+}
+
 export function roleChangedEmail(params: { roleLabel: string }): RenderedEmail {
   const { roleLabel } = params
   return {
@@ -81,5 +99,20 @@ export function roleChangedEmail(params: { roleLabel: string }): RenderedEmail {
        </p>`
     ),
     text: `Your Medical Shipment Prometheus role is now ${roleLabel}.`,
+  }
+}
+
+export function emailTestEmail(params: { appUrl: string }): RenderedEmail {
+  return {
+    subject: 'Zeus production email test',
+    html: layout(
+      'Production email is ready',
+      `<p style="font-size:14px;line-height:1.6;color:${SLATE};">
+         Zeus successfully sent this message through the configured production
+         email provider. Invite and password-reset emails use this same path.
+       </p>
+       <p style="margin:24px 0;">${button(params.appUrl, 'Open Zeus')}</p>`
+    ),
+    text: `Zeus successfully sent this production email test. Open Zeus: ${params.appUrl}`,
   }
 }

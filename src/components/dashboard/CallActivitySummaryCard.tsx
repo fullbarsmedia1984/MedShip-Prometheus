@@ -81,7 +81,7 @@ export function CallActivitySummaryCard({ summary }: CallActivitySummaryCardProp
               <PeriodStat label="This Week" period={weekly} />
               <PeriodStat label="This Month" period={monthly} />
             </div>
-            <div className="grid gap-2 border-t border-border/50 px-5 py-4 sm:grid-cols-7">
+            <div className="grid grid-cols-4 gap-2 border-t border-border/50 px-5 py-4 sm:grid-cols-7">
               {recentDaily.map((period) => (
                 <div key={period.periodStart} className="rounded-md bg-muted/20 px-2 py-2">
                   <p className="truncate text-[0.65rem] font-semibold text-muted-foreground">{period.label}</p>

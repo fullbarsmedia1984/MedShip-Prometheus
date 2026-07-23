@@ -1,5 +1,6 @@
 import 'server-only'
 import { Resend } from 'resend'
+import { getEmailConfiguration } from './config'
 
 export type EmailResult = {
   sent: boolean
@@ -31,26 +32,26 @@ function getResendClient(): Resend | null {
  * Low-level send. Prefer the typed helpers in ./index.ts (sendInviteEmail,
  * sendTwoFactorCodeEmail, ...) so subjects and bodies stay consistent.
  *
- * Sends from EMAIL_FROM (Steven's Resend-verified domain — never a
- * medicalshipment.com address, which is managed elsewhere). Returns a result
- * object rather than throwing so callers can decide whether a failed email is
- * fatal (2FA) or best-effort (notifications).
+ * Sends from EMAIL_FROM. Production configuration is constrained to the
+ * Resend-verified medicalshipment.com domain. Returns a result object rather
+ * than throwing so callers can decide whether a failed email is fatal (2FA)
+ * or best-effort (notifications).
  */
 export async function sendEmail(input: SendEmailInput): Promise<EmailResult> {
   const resend = getResendClient()
-  const from = process.env.EMAIL_FROM
+  const config = getEmailConfiguration()
 
-  if (!resend || !from) {
+  if (!resend || !config.ready || !config.sender) {
     return {
       sent: false,
       provider: 'none',
-      error: 'Email is not configured. Set RESEND_API_KEY and EMAIL_FROM.',
+      error: config.issues.join(' '),
     }
   }
 
   try {
     const { data, error } = await resend.emails.send({
-      from,
+      from: config.sender,
       to: input.to,
       subject: input.subject,
       html: input.html,

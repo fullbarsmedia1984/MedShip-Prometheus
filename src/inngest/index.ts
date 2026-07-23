@@ -40,6 +40,34 @@ export {
   ceoDailyBriefing,
   incentiveWeeklyDigest,
 } from './functions/incentive-comms'
+export {
+  purchaseOrdersSync,
+  purchaseOrdersSyncManual,
+} from './functions/purchase-orders-sync'
+export {
+  shipmentsCacheSync,
+  shipmentsCacheSyncManual,
+} from './functions/shipments-sync'
+export {
+  receiptsSync,
+  receiptsSyncManual,
+} from './functions/receipts-sync'
+export {
+  productPartsSync,
+  productPartsSyncManual,
+} from './functions/product-parts-sync'
+export {
+  competitorCrawl,
+  competitorCrawlCron,
+} from './functions/competitor-crawl'
+export {
+  catalogImageMirror,
+  catalogImageMirrorCron,
+} from './functions/catalog-image-mirror'
+export {
+  imageSearchSweep,
+  imageSearchSweepCron,
+} from './functions/image-search-sweep'
 
 // Re-export client for convenience
 export { inngest } from './client'

@@ -12,8 +12,12 @@ export type Automation =
   | 'P7_FB_SO_SYNC'
   | 'P10_HERCULES_CATALOG_INGEST'
   | 'P8_INCENTIVE_RECOMPUTE'
+  | 'P14_RECEIPTS_SYNC'
+  | 'P16_COMPETITOR_CRAWL'
+  | 'P17_CATALOG_IMAGE_MIRROR'
+  | 'P18_IMAGE_SEARCH_SWEEP'
 
-export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'prometheus' | 'inngest' | 'hercules'
+export type SystemName = 'salesforce' | 'fishbowl' | 'quickbooks' | 'easypost' | 'prometheus' | 'inngest' | 'hercules' | 'firecrawl' | 'web'
 
 export interface SyncEvent {
   id?: string
