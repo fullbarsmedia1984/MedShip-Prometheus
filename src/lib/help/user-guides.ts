@@ -187,6 +187,14 @@ const CONTRACTS_LIST: PageGuide = {
       heading: 'Where contracts come from',
       text: 'Contracts are created automatically the first time a distributor price list is imported and prepared for publish. Excel files are a one-time on-ramp per supplier — after that, this table is where pricing lives.',
     },
+    {
+      heading: 'Search and expiration warnings',
+      steps: [
+        'Use the search box to find a contract by supplier name or contract number.',
+        'An "Expires in Nd" badge appears when a contract is within 60 days of its expiration date; "Expired" means the date has passed — start the renewal conversation with the supplier.',
+        'The "Expiring / Expired" counter at the top shows how many contracts need renewal attention.',
+      ],
+    },
   ],
 }
 
@@ -222,6 +230,8 @@ const CONTRACT_DETAIL: PageGuide = {
       steps: [
         'Source shows where a cost came from: an imported workbook (file and row) or a manual entry.',
         'Item Link shows whether the line is matched to an internal item or a Hercules catalog item — matching happens on the import batch page.',
+        'A "Lapsed" badge on the expiration date means the negotiated window has passed — Zeus no longer answers with that cost even though the line still shows as active. Renew the price or expire the line.',
+        'Use the search box to find lines by identifier, description, or manufacturer.',
       ],
     },
   ],

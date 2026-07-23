@@ -72,7 +72,7 @@ Three principles apply to both:
 | An item is discontinued | Expire the line — Workflow 1. | 1 min |
 | A distributor sends a full price list | Import it — Workflows 2–5. | 15–45 min |
 | Daily or every other day | Quick check of Supplier Cost Imports for in-flight batches, open exceptions, open match suggestions. | 5 min |
-| Monthly | Review upcoming contract expirations in Contract Price Manager. Set a calendar reminder per contract — Zeus does not yet send expiration alerts. | 15 min |
+| Monthly | Check the "Expiring / Expired" counter in Contract Price Manager and work anything flagged "Expires in Nd" or "Expired" — start renewals before pricing lapses. Zeus does not yet send email alerts. | 15 min |
 | After any bulk publish | Spot-check a handful of published lines against the original workbook. | 10 min |
 
 ---

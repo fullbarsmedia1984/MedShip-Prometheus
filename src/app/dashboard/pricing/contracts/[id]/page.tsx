@@ -1,8 +1,8 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { PencilLine, Plus, Rows3 } from 'lucide-react'
+import { PencilLine, Plus, Rows3, Search } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -76,6 +76,35 @@ function lineIdentifier(line: CostLine) {
   return line.distributor_sku ?? line.manufacturer_part_number ?? line.model_number ?? line.gtin ?? '-'
 }
 
+function daysUntil(dateText: string | null): number | null {
+  if (!dateText) return null
+  const target = new Date(`${dateText}T00:00:00`)
+  if (Number.isNaN(target.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((target.getTime() - today.getTime()) / 86400000)
+}
+
+function lineExpirationBadge(expirationDate: string | null) {
+  const days = daysUntil(expirationDate)
+  if (days === null) return null
+  if (days < 0) {
+    return (
+      <Badge variant="outline" className="ml-2 border-medship-danger/30 bg-medship-danger/10 text-medship-danger">
+        Lapsed
+      </Badge>
+    )
+  }
+  if (days <= 60) {
+    return (
+      <Badge variant="outline" className="ml-2 border-medship-warning/30 bg-medship-warning/10 text-medship-warning">
+        {days === 0 ? 'Today' : `${days}d`}
+      </Badge>
+    )
+  }
+  return null
+}
+
 function sourceLabel(line: CostLine) {
   if (!line.source_batch_id) return 'Manual'
   return line.source_file_name
@@ -96,6 +125,7 @@ export default function SupplierContractDetailPage({ params }: PageProps) {
   const [editLineId, setEditLineId] = useState<string | null>(null)
   const [form, setForm] = useState({ ...EMPTY_LINE_FORM })
   const [expireConfirmId, setExpireConfirmId] = useState<string | null>(null)
+  const [lineSearch, setLineSearch] = useState('')
 
   const setField = (name: keyof typeof EMPTY_LINE_FORM) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setForm((current) => ({ ...current, [name]: event.target.value }))
@@ -196,6 +226,15 @@ export default function SupplierContractDetailPage({ params }: PageProps) {
     }
   }, [panel, editLineId, id, form, load])
 
+  const visibleLines = useMemo(() => {
+    const query = lineSearch.trim().toLowerCase()
+    if (!query) return lines
+    return lines.filter((line) =>
+      [line.distributor_sku, line.manufacturer_part_number, line.model_number, line.gtin, line.item_description_raw, line.manufacturer_name]
+        .some((value) => (value ?? '').toLowerCase().includes(query))
+    )
+  }, [lines, lineSearch])
+
   const expireLine = useCallback(async (lineId: string) => {
     setBusy(lineId)
     setError(null)
@@ -251,6 +290,16 @@ export default function SupplierContractDetailPage({ params }: PageProps) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="flex items-center gap-2"><Rows3 className="h-4 w-4" /> Cost Lines</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="search"
+                    value={lineSearch}
+                    onChange={(event) => setLineSearch(event.target.value)}
+                    placeholder="Search identifier or description"
+                    className="h-8 w-64 rounded-md border border-input bg-background pl-8 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </div>
                 {(['active', 'pending', 'superseded', 'all'] as StatusFilter[]).map((filter) => (
                   <Button
                     key={filter}
@@ -339,6 +388,8 @@ export default function SupplierContractDetailPage({ params }: PageProps) {
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No {statusFilter === 'all' ? '' : `${statusFilter} `}cost lines on this contract.
               </p>
+            ) : visibleLines.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">No cost lines match your search.</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -356,7 +407,7 @@ export default function SupplierContractDetailPage({ params }: PageProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lines.map((line) => (
+                    {visibleLines.map((line) => (
                       <TableRow key={line.id}>
                         <TableCell className="font-mono text-xs">{lineIdentifier(line)}</TableCell>
                         <TableCell className="max-w-[320px] text-sm">
@@ -367,7 +418,10 @@ export default function SupplierContractDetailPage({ params }: PageProps) {
                           {line.cost.toLocaleString('en-US', { style: 'currency', currency: line.currency || 'USD' })}
                         </TableCell>
                         <TableCell className="text-sm">{line.effective_date ?? '-'}</TableCell>
-                        <TableCell className="text-sm">{line.expiration_date ?? '-'}</TableCell>
+                        <TableCell className="text-sm">
+                          {line.expiration_date ?? '-'}
+                          {line.active ? lineExpirationBadge(line.expiration_date) : null}
+                        </TableCell>
                         <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{sourceLabel(line)}</TableCell>
                         <TableCell className="text-xs">
                           {line.internal_item_id ? (
