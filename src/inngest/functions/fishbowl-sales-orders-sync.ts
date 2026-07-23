@@ -1,4 +1,6 @@
+import { revalidateTag } from 'next/cache'
 import { inngest } from '../client'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getFishbowlConnectionProfile, type FishbowlClient } from '@/lib/fishbowl/client'
 import { FishbowlSessionLockError, withFishbowlSession } from '@/lib/fishbowl/session'
@@ -301,6 +303,20 @@ async function runFishbowlSalesOrderSync(
       lastRunDurationMs: Date.now() - startTime,
       recordsProcessed: countProcessedRows(result),
     })
+
+    // fb_sales_orders(+items) feed most DAL caches — bust them so pages see
+    // the refreshed orders immediately. Best-effort: a revalidation hiccup
+    // must never fail an otherwise successful sync.
+    try {
+      revalidateTag(CACHE_TAGS.orders, { expire: 0 })
+      revalidateTag(CACHE_TAGS.quotes, { expire: 0 })
+      revalidateTag(CACHE_TAGS.salesDashboard, { expire: 0 })
+      revalidateTag(CACHE_TAGS.kits, { expire: 0 })
+      revalidateTag(CACHE_TAGS.wallboard, { expire: 0 })
+      revalidateTag(CACHE_TAGS.inventory, { expire: 0 })
+    } catch (revalidateError) {
+      console.warn('P7_FB_SO_SYNC: cache revalidation failed (non-fatal)', revalidateError)
+    }
 
     return {
       action,

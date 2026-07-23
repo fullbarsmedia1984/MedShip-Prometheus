@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Customer } from '@/lib/seed-data'
 
 interface ClientMapProps {

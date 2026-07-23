@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { ADMIN_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 import {
   generateItemMatchSuggestions,
+  getBatchItemMatchOverview,
   getBatchItemMatchStats,
-  listItemMatchSuggestions,
 } from '@/lib/pricing/item-matching'
 
 type MatchSuggestionsContext = {
@@ -16,10 +16,9 @@ export async function GET(_request: Request, context: MatchSuggestionsContext) {
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params
-    const [stats, suggestions] = await Promise.all([
-      getBatchItemMatchStats(id),
-      listItemMatchSuggestions(id),
-    ])
+    // Single-pass read: stats are derived from the same cost-line and
+    // suggestion queries the list needs, so nothing runs twice.
+    const { stats, suggestions } = await getBatchItemMatchOverview(id)
     return NextResponse.json({ stats, suggestions })
   } catch (error) {
     return NextResponse.json(

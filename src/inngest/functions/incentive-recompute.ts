@@ -1,4 +1,6 @@
+import { revalidateTag } from 'next/cache'
 import { inngest } from '../client'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import { updateSyncSchedule } from '@/lib/utils/logger'
 import { getIncentiveSettings } from '@/lib/incentive/settings'
 import {
@@ -61,6 +63,14 @@ async function runRecompute(force: boolean): Promise<RecomputeSummary> {
     } catch {
       bellErrors++
     }
+  }
+
+  // The classification tables just rebuilt — bust the incentive dashboard
+  // cache. Best-effort: a revalidation hiccup must never fail the recompute.
+  try {
+    revalidateTag(CACHE_TAGS.incentives, { expire: 0 })
+  } catch (revalidateError) {
+    console.warn('P8_INCENTIVE_RECOMPUTE: cache revalidation failed (non-fatal)', revalidateError)
   }
 
   return { skipped: false, refreshResult, cohortResult, bellsRung, bellErrors }

@@ -2,7 +2,7 @@ import type React from 'react'
 import Link from 'next/link'
 import { DollarSign, GraduationCap, MapPinned, Users } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
-import { TamOverviewCharts } from '@/components/tam/TamOverviewCharts'
+import { TamOverviewChartsLazy } from '@/components/tam/TamOverviewChartsLazy'
 import { TamScenarioTabs } from '@/components/tam/TamScenarioTabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -216,7 +216,7 @@ export default async function TamDashboardPage({ searchParams }: PageProps) {
           </Card>
         </div>
 
-        <TamOverviewCharts
+        <TamOverviewChartsLazy
           byTier={overview.byTier}
           byStateDollars={overview.byStateDollars}
         />

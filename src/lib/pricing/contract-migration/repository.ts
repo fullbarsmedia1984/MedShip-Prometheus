@@ -159,19 +159,95 @@ export async function listMigrationRows(batchId: string, page: number, pageSize:
   return { rows: data ?? [], total: count ?? 0, page, pageSize }
 }
 
-export async function listMigrationExceptions(batchId: string) {
+// The UI works the queue a handful of rows at a time, so the full-row list is
+// bounded; aggregate views come from getMigrationExceptionSummary instead of
+// pulling every row into Node.
+const EXCEPTION_LIST_LIMIT = 200
+
+export async function listMigrationExceptions(batchId: string, limit = EXCEPTION_LIST_LIMIT) {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('pricing_ingestion_exceptions')
     .select('id, severity, exception_code, canonical_field, source_sheet_name, source_row_number, source_cell_reference, message, status, resolution, resolution_notes, reviewed_at, created_at')
     .eq('batch_id', batchId)
     .order('created_at', { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 1000))
 
   if (error) {
     if (missingRelation(error)) return []
     throw error
   }
   return data ?? []
+}
+
+export type MigrationExceptionSummary = {
+  total: number
+  open: number
+  /** Top exception codes by count, descending (up to 20). */
+  codes: Array<{ code: string; count: number }>
+}
+
+function summaryNumber(value: unknown) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+/**
+ * Batch-level exception rollup (total, open, top codes) computed with a SQL
+ * group-by (migration 055) so the bounded row list stays honest. Falls back
+ * to a narrow two-column scan until that migration is applied.
+ */
+export async function getMigrationExceptionSummary(batchId: string): Promise<MigrationExceptionSummary> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('pricing_ingestion_exception_summary', {
+    p_batch_id: batchId,
+  })
+
+  if (!error) {
+    const raw = (data ?? {}) as {
+      total?: unknown
+      open?: unknown
+      codes?: Array<{ code?: unknown; count?: unknown }> | null
+    }
+    return {
+      total: summaryNumber(raw.total),
+      open: summaryNumber(raw.open),
+      codes: (raw.codes ?? []).map((entry) => ({
+        code: String(entry.code ?? ''),
+        count: summaryNumber(entry.count),
+      })),
+    }
+  }
+
+  const message = String((error as { message?: unknown }).message ?? '').toLowerCase()
+  const code = (error as { code?: string }).code
+  const rpcMissing = code === 'PGRST202' || code === '42883' || message.includes('could not find the function')
+  if (!rpcMissing && !missingRelation(error)) throw error
+
+  // Fallback: only the two columns the rollup needs, not the full rows.
+  const { data: rows, error: rowError } = await supabase
+    .from('pricing_ingestion_exceptions')
+    .select('exception_code, status')
+    .eq('batch_id', batchId)
+  if (rowError) {
+    if (missingRelation(rowError)) return { total: 0, open: 0, codes: [] }
+    throw rowError
+  }
+
+  const typed = (rows ?? []) as Array<{ exception_code: unknown; status: unknown }>
+  const counts = new Map<string, number>()
+  for (const row of typed) {
+    const key = String(row.exception_code ?? '')
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return {
+    total: typed.length,
+    open: typed.filter((row) => row.status === 'open').length,
+    codes: [...counts.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 20)
+      .map(([exceptionCode, count]) => ({ code: exceptionCode, count })),
+  }
 }
 
 function safeUuid(value?: string | null) {

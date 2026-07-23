@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { unstable_cache } from 'next/cache'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toVectorLiteral } from './embeddings'
 import { expandSearchQuery } from './search-expansion'
@@ -139,6 +141,11 @@ export type CatalogItemDetail = {
   competitorPrices: CatalogCompetitorPrice[] | null
   createdAt: string | null
   updatedAt: string | null
+  /**
+   * Always `{}` in the standard detail read — the JSONB payload is large and
+   * only shown behind a collapsed toggle, so it loads lazily through
+   * getCatalogItemRawPayload (GET /api/hercules/catalog/[id]?raw=1).
+   */
   rawPayload: JsonObject
   offers: CatalogOfferDetail[]
 }
@@ -165,7 +172,7 @@ function numberOrNull(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export async function searchCatalogItems(
+async function searchCatalogItemsUncached(
   params: CatalogSearchParams,
   queryEmbedding?: number[] | null
 ): Promise<CatalogSearchResult> {
@@ -219,6 +226,30 @@ export async function searchCatalogItems(
   }
 }
 
+// Catalog tables only change on the nightly P10 delta ingest, which busts
+// CACHE_TAGS.catalog when it finishes — so every read here is safe to cache
+// for CACHE_TTL.catalog. Auth/role handling stays in the routes; nothing
+// per-request is captured inside the cached callbacks (the admin client is
+// env-configured only).
+const searchCatalogItemsCached = unstable_cache(
+  async (params: CatalogSearchParams) => searchCatalogItemsUncached(params),
+  ['hercules-catalog-search'],
+  { revalidate: CACHE_TTL.catalog, tags: [CACHE_TAGS.catalog] }
+)
+
+export async function searchCatalogItems(
+  params: CatalogSearchParams,
+  queryEmbedding?: number[] | null
+): Promise<CatalogSearchResult> {
+  // Semantic searches carry a ~1.5k-float embedding; serializing it into the
+  // cache key would bloat the data cache for near-zero hit rate, so only
+  // lexical searches go through the cache.
+  if (queryEmbedding && queryEmbedding.length > 0) {
+    return searchCatalogItemsUncached(params, queryEmbedding)
+  }
+  return searchCatalogItemsCached(params)
+}
+
 /** Strip buy-side prices for roles below staff. */
 export function stripSearchPrices(result: CatalogSearchResult): CatalogSearchResult {
   return {
@@ -243,7 +274,7 @@ export function stripDetailPrices(detail: CatalogItemDetail): CatalogItemDetail 
   }
 }
 
-export async function getCatalogFacets(): Promise<CatalogFacets> {
+async function getCatalogFacetsUncached(): Promise<CatalogFacets> {
   const supabase = createAdminClient()
   const { data, error } = await supabase.rpc('hercules_catalog_facets')
   assertNoError(error)
@@ -260,23 +291,44 @@ export async function getCatalogFacets(): Promise<CatalogFacets> {
   }
 }
 
-export async function getCatalogItemDetail(
+const getCatalogFacetsCached = unstable_cache(
+  getCatalogFacetsUncached,
+  ['hercules-catalog-facets'],
+  { revalidate: CACHE_TTL.catalog, tags: [CACHE_TAGS.catalog] }
+)
+
+export async function getCatalogFacets(): Promise<CatalogFacets> {
+  return getCatalogFacetsCached()
+}
+
+// Everything the detail view renders — deliberately NOT `*`: raw_payload (and
+// any other wide columns) would otherwise ship on every detail read even
+// though the UI only shows the payload inside a collapsed toggle.
+const CATALOG_ITEM_DETAIL_SELECT = `
+      id, hercules_item_id, ms_id, description, brand, manufacturer_name,
+      manufacturer_hercules_id, manufacturer_part_number, category, subcategory,
+      unspsc, country_of_origin, status, image_urls_json, created_at, updated_at,
+      hercules_vendor_offers(
+        id, vendor_name, supplier_code, vendor_product_title, is_primary,
+        lead_time, minimum_order_quantity,
+        hercules_suppliers(supplier_name, supplier_code),
+        hercules_offer_uoms(
+          id, uom_code, vendor_part_number, uom_title, package, per_quantity,
+          list_price_amount, contract_price_amount, contract_price_status,
+          currency, is_default, quantity_available, availability,
+          weight, weight_unit, length, width, height, dimension_unit,
+          gtin, hcpcs
+        )
+      )
+    `
+
+async function getCatalogItemDetailUncached(
   id: string
 ): Promise<CatalogItemDetail | null> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('hercules_catalog_items')
-    .select(
-      `
-      *,
-      hercules_vendor_offers(
-        id, vendor_name, supplier_code, vendor_product_title, is_primary,
-        lead_time, minimum_order_quantity,
-        hercules_suppliers(supplier_name, supplier_code),
-        hercules_offer_uoms(*)
-      )
-    `
-    )
+    .select(CATALOG_ITEM_DETAIL_SELECT)
     .eq('id', id)
     .maybeSingle()
 
@@ -314,7 +366,8 @@ export async function getCatalogItemDetail(
     competitorPrices,
     createdAt: textOrNull(row.created_at),
     updatedAt: textOrNull(row.updated_at),
-    rawPayload: (row.raw_payload as JsonObject | null) ?? {},
+    // Loaded lazily via getCatalogItemRawPayload; see CatalogItemDetail.
+    rawPayload: {},
     offers: offers.map((offer) => {
       const supplier = offer.hercules_suppliers as DbRow | null
       const uoms = Array.isArray(offer.hercules_offer_uoms)
@@ -357,6 +410,49 @@ export async function getCatalogItemDetail(
       }
     }),
   }
+}
+
+const getCatalogItemDetailCached = unstable_cache(
+  getCatalogItemDetailUncached,
+  ['hercules-catalog-item-detail'],
+  { revalidate: CACHE_TTL.catalog, tags: [CACHE_TAGS.catalog] }
+)
+
+export async function getCatalogItemDetail(
+  id: string
+): Promise<CatalogItemDetail | null> {
+  return getCatalogItemDetailCached(id)
+}
+
+async function getCatalogItemRawPayloadUncached(
+  id: string
+): Promise<JsonObject | null> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('hercules_catalog_items')
+    .select('raw_payload')
+    .eq('id', id)
+    .maybeSingle()
+  assertNoError(error)
+  if (!data) return null
+  return ((data as DbRow).raw_payload as JsonObject | null) ?? {}
+}
+
+const getCatalogItemRawPayloadCached = unstable_cache(
+  getCatalogItemRawPayloadUncached,
+  ['hercules-catalog-item-raw-payload'],
+  { revalidate: CACHE_TTL.catalog, tags: [CACHE_TAGS.catalog] }
+)
+
+/**
+ * Lazy companion to getCatalogItemDetail: the raw Hercules JSONB payload,
+ * fetched only when the detail page's collapsed toggle is opened.
+ * Returns null when the item does not exist.
+ */
+export async function getCatalogItemRawPayload(
+  id: string
+): Promise<JsonObject | null> {
+  return getCatalogItemRawPayloadCached(id)
 }
 
 async function getStoredImages(

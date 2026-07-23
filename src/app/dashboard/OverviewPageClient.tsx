@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { CeoBriefingCard } from '@/components/dashboard/CeoBriefingCard'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
@@ -8,11 +9,25 @@ import { SyncStatusCard } from '@/components/dashboard/SyncStatusCard'
 import { SalesLeaderboard, type LeaderboardMonth } from '@/components/dashboard/SalesLeaderboard'
 import { SalesActivityFeed } from '@/components/dashboard/SalesActivityFeed'
 import { PipelineSnapshot } from '@/components/dashboard/PipelineSnapshot'
-import { ClientMapPreview } from '@/components/dashboard/ClientMapPreview'
 import { EmptyState } from '@/components/dashboard/EmptyState'
-import { RevenueChart } from '@/components/charts/RevenueChart'
-import { CategoryPieChart } from '@/components/charts/CategoryPieChart'
+import { ChartSkeleton } from '@/components/charts/ChartSkeleton'
 import { Header } from '@/components/layout/Header'
+
+// recharts (charts) and mapbox-gl (map preview) are heavy — load them lazily
+// so the overview shell paints without either bundle. Fixed-height skeletons
+// keep the layout from shifting while they mount.
+const RevenueChart = dynamic(
+  () => import('@/components/charts/RevenueChart').then((m) => m.RevenueChart),
+  { ssr: false, loading: () => <ChartSkeleton height={410} /> }
+)
+const CategoryPieChart = dynamic(
+  () => import('@/components/charts/CategoryPieChart').then((m) => m.CategoryPieChart),
+  { ssr: false, loading: () => <ChartSkeleton height={410} /> }
+)
+const ClientMapPreview = dynamic(
+  () => import('@/components/dashboard/ClientMapPreview').then((m) => m.ClientMapPreview),
+  { ssr: false, loading: () => <ChartSkeleton height={490} /> }
+)
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -63,24 +78,36 @@ function formatDate(dateStr: string): string {
   })
 }
 
-export default function DashboardPage() {
-  const [loading, setLoading] = useState(true)
-  const [metrics, setMetrics] = useState<RevenueMetrics | null>(null)
-  const [salesKpis, setSalesKpis] = useState<SalesKpis | null>(null)
-  const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenue[]>([])
-  const [categorySales, setCategorySales] = useState<CategorySales[]>([])
-  const [recentOrders, setRecentOrders] = useState<Order[]>([])
-  const [inventoryAlerts, setInventoryAlerts] = useState<Product[]>([])
-  const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([])
-  const [leaderboard, setLeaderboard] = useState<SeedSalesRep[]>([])
-  const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardMonth[]>([])
-  const [activities, setActivities] = useState<SeedSalesActivity[]>([])
-  const [pipeline, setPipeline] = useState<SeedPipelineStage[]>([])
-  const [mapCustomers, setMapCustomers] = useState<Customer[]>([])
-  const [regionSummaries, setRegionSummaries] = useState<SeedRegionSummary[]>([])
-  const [profileCallData, setProfileCallData] = useState<{ totalMTD: number; totalLastMonth: number; conversionRate: number } | null>(null)
+interface DashboardPageProps {
+  /**
+   * Server-rendered payload for instant first paint. When null (server load
+   * failed), the client falls back to the original fetch-on-mount path.
+   */
+  initialData?: DashboardOverviewResponse | null
+}
+
+export default function DashboardPage({ initialData = null }: DashboardPageProps) {
+  const [loading, setLoading] = useState(!initialData)
+  const [metrics, setMetrics] = useState<RevenueMetrics | null>(initialData?.metrics ?? null)
+  const [salesKpis, setSalesKpis] = useState<SalesKpis | null>(initialData?.salesKpis ?? null)
+  const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenue[]>(initialData?.monthlyRevenue ?? [])
+  const [categorySales, setCategorySales] = useState<CategorySales[]>(initialData?.categorySales ?? [])
+  const [recentOrders, setRecentOrders] = useState<Order[]>(initialData?.recentOrders ?? [])
+  const [inventoryAlerts, setInventoryAlerts] = useState<Product[]>(initialData?.inventoryAlerts ?? [])
+  const [integrations, setIntegrations] = useState<IntegrationStatusData[]>(initialData?.integrations ?? [])
+  const [leaderboard, setLeaderboard] = useState<SeedSalesRep[]>(initialData?.leaderboard ?? [])
+  const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardMonth[]>(initialData?.leaderboardHistory ?? [])
+  const [activities, setActivities] = useState<SeedSalesActivity[]>(initialData?.activities ?? [])
+  const [pipeline, setPipeline] = useState<SeedPipelineStage[]>(initialData?.pipeline ?? [])
+  const [mapCustomers, setMapCustomers] = useState<Customer[]>(initialData?.mapCustomers ?? [])
+  const [regionSummaries, setRegionSummaries] = useState<SeedRegionSummary[]>(initialData?.regionSummaries ?? [])
+  const [profileCallData, setProfileCallData] = useState<{ totalMTD: number; totalLastMonth: number; conversionRate: number } | null>(initialData?.profileCallData ?? null)
 
   useEffect(() => {
+    // Server already provided the payload — skip the initial client fetch.
+    // The API route remains the refresh path for any client-side reload.
+    if (initialData) return
+
     async function loadData() {
       try {
         const data = await fetchJson<DashboardOverviewResponse>('/api/dashboard/overview')
@@ -107,7 +134,7 @@ export default function DashboardPage() {
     }
 
     loadData()
-  }, [])
+  }, [initialData])
 
   if (loading || !metrics || !salesKpis) {
     return (

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import { KITS_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -92,5 +94,11 @@ export async function PATCH(
   if (error) {
     return NextResponse.json({ error: 'Save failed' }, { status: 500 })
   }
+
+  // The workbench/wallboard read kit_orders through cached DALs; bust them so
+  // the edit survives the client's router.refresh().
+  revalidateTag(CACHE_TAGS.kits, { expire: 0 })
+  revalidateTag(CACHE_TAGS.wallboard, { expire: 0 })
+
   return NextResponse.json({ ops: data })
 }

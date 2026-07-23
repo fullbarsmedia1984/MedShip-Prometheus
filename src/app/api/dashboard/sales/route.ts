@@ -107,7 +107,9 @@ const getSalesDashboardPayload = unstable_cache(
   },
   ['sales-dashboard-payload'],
   {
-    revalidate: 60,
+    // Tag invalidation from the syncs handles freshness; the TTL is only a
+    // self-heal fallback, so it can sit well above the old 60s.
+    revalidate: 300,
     tags: [SALES_DASHBOARD_CACHE_TAG],
   }
 )

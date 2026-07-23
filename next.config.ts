@@ -1,6 +1,28 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'recharts', '@tanstack/react-table'],
+  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+      },
+    ],
+  },
+  async headers() {
+    return [
+      {
+        // Static geojson re-downloaded on every map mount without this.
+        source: '/tam/us-states.geojson',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=86400, immutable' },
+        ],
+      },
+    ];
+  },
   transpilePackages: [
     'kepler.gl',
     '@kepler.gl/actions',

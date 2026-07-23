@@ -20,6 +20,11 @@ type QuoteDetailResponse = {
 
 type QuoteDetailClientProps = {
   quoteId: string
+  // Server-resolved record: a SeedQuote when found and in scope, null when
+  // the server determined "not found" (including rep scope misses),
+  // undefined when no server data is available — only then does the client
+  // fetch on mount.
+  initialQuote?: SeedQuote | null
 }
 
 function formatCurrency(value: number): string {
@@ -87,12 +92,18 @@ function SummaryMetric({
   )
 }
 
-export function QuoteDetailClient({ quoteId }: QuoteDetailClientProps) {
-  const [quote, setQuote] = useState<SeedQuote | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function QuoteDetailClient({ quoteId, initialQuote }: QuoteDetailClientProps) {
+  const [quote, setQuote] = useState<SeedQuote | null>(initialQuote ?? null)
+  const [loading, setLoading] = useState(initialQuote === undefined)
+  const [error, setError] = useState<string | null>(
+    initialQuote === null ? 'Quote not found' : null
+  )
 
   useEffect(() => {
+    // The server already resolved this quote (found, or a scoped not-found);
+    // keep the fetch path only for the no-server-data fallback.
+    if (initialQuote !== undefined) return
+
     let active = true
 
     async function fetchQuote() {
@@ -120,7 +131,7 @@ export function QuoteDetailClient({ quoteId }: QuoteDetailClientProps) {
     return () => {
       active = false
     }
-  }, [quoteId])
+  }, [quoteId, initialQuote])
 
   return (
     <>

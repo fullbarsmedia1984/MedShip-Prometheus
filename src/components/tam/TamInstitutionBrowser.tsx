@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   flexRender,
@@ -37,7 +37,7 @@ import type {
   TamSortDirection,
 } from '@/lib/tam/supabase'
 
-type InstitutionPayload = {
+export type TamInstitutionsPayload = {
   data: TamInstitutionListRow[]
   totalItems: number
   page: number
@@ -159,7 +159,18 @@ function buildQuery(filters: {
   return params
 }
 
-export function TamInstitutionBrowser() {
+export function TamInstitutionBrowser({
+  initialData = null,
+}: {
+  /**
+   * First-paint payload the server page fetched with this component's
+   * default filter state (name asc, page 1, 25 rows, no filters). When
+   * provided, the mount fetch is skipped — the initial filter state below is
+   * always the default (the only URL param, institutionId, deep-links the
+   * detail dialog and does not affect the list query).
+   */
+  initialData?: TamInstitutionsPayload | null
+}) {
   const searchParams = useSearchParams()
   const deepLinkedInstitutionId = searchParams.get('institutionId')
   const [search, setSearch] = useState('')
@@ -171,9 +182,10 @@ export function TamInstitutionBrowser() {
   const [sortDirection, setSortDirection] = useState<TamSortDirection>('asc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  const [payload, setPayload] = useState<InstitutionPayload | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [payload, setPayload] = useState<TamInstitutionsPayload | null>(initialData)
+  const [loading, setLoading] = useState(!initialData)
   const [error, setError] = useState<string | null>(null)
+  const skipInitialFetchRef = useRef(initialData !== null)
   const [detail, setDetail] = useState<InstitutionDetail | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [openedDeepLinkId, setOpenedDeepLinkId] = useState<string | null>(null)
@@ -208,7 +220,7 @@ export function TamInstitutionBrowser() {
     setLoading(true)
     setError(null)
     try {
-      setPayload(await fetchJson<InstitutionPayload>(`/api/tam/institutions?${query}`))
+      setPayload(await fetchJson<TamInstitutionsPayload>(`/api/tam/institutions?${query}`))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load institutions')
     } finally {
@@ -217,6 +229,13 @@ export function TamInstitutionBrowser() {
   }, [query])
 
   useEffect(() => {
+    // Server-rendered first paint: the default-state rows arrived as a prop,
+    // so skip the very first fetch. Any filter/sort/page change reruns this
+    // effect (new loadData identity) and fetches normally.
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false
+      return
+    }
     loadData()
   }, [loadData])
 

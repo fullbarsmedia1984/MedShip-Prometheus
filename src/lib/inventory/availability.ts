@@ -1,5 +1,8 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { loadProductPartMap, toPartUnits } from './product-parts'
 
 // True part availability = snapshot on-hand minus stock that is physically
@@ -23,9 +26,7 @@ async function pageAll<T>(
   return out
 }
 
-/** Units picked (staged) but not yet shipped on open SOs, in part eaches.
- *  Subtract from snapshot on-hand before any shortage computation. */
-export async function loadPickedByPart(
+async function computePickedByPart(
   supabase: SupabaseClient
 ): Promise<Map<string, number>> {
   const { data: soRows, error } = await supabase
@@ -78,6 +79,32 @@ export async function loadPickedByPart(
     byPart.set(part, (byPart.get(part) ?? 0) + units)
   }
   return byPart
+}
+
+// The compute re-queries every open SO plus all of its line items — work its
+// callers have usually just done themselves. Cache one shared result behind
+// the orders tag (P7 busts it; TTL matches the 15-min cadence). The cache
+// serializes to JSON, so store entries and rebuild the Map on the way out.
+const loadPickedByPartCached = unstable_cache(
+  async (): Promise<[string, number][]> => {
+    const byPart = await computePickedByPart(createAdminClient())
+    return [...byPart.entries()]
+  },
+  ['picked-by-part'],
+  {
+    revalidate: CACHE_TTL.salesOrders,
+    tags: [CACHE_TAGS.orders],
+  }
+)
+
+/** Units picked (staged) but not yet shipped on open SOs, in part eaches.
+ *  Subtract from snapshot on-hand before any shortage computation.
+ *  Cached — every caller passes the admin client, so the cached compute
+ *  creates its own and the argument only preserves the call signature. */
+export async function loadPickedByPart(
+  _supabase: SupabaseClient
+): Promise<Map<string, number>> {
+  return new Map(await loadPickedByPartCached())
 }
 
 /** Cutoff timestamp separating the latest P2 run's rows from stale leftovers.

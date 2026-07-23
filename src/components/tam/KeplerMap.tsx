@@ -9,6 +9,7 @@ import keplerGlReducer from '@kepler.gl/reducers'
 import { addDataToMap } from '@kepler.gl/actions'
 import { processGeojson, processRowObject } from '@kepler.gl/processors'
 import { taskMiddleware } from 'react-palm/tasks'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import type { ProtoDataset } from '@kepler.gl/types/actions'
 import type { TamGeoRow } from '@/lib/tam/supabase'
 

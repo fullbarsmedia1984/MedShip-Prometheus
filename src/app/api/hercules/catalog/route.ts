@@ -10,7 +10,9 @@ import {
 } from '@/lib/hercules/catalog-browse'
 import { embedQuery } from '@/lib/hercules/embeddings'
 
-export const dynamic = 'force-dynamic'
+// No force-dynamic: reads go through the unstable_cache-wrapped catalog DAL
+// (tag 'catalog-cache', busted by the nightly P10 ingest); the route itself is
+// still rendered per-request because requireApiAuth reads cookies.
 
 // Owner decision 2026-07-08: every signed-in role (sales reps,
 // purchasing/quotes staff, admins) may see supplier cost.
@@ -45,44 +47,42 @@ export async function GET(request: NextRequest) {
       : 'relevance'
 
     const startedAt = Date.now()
-    let result = await searchCatalogItems({
-      q,
-      manufacturer: params.get('manufacturer') ?? undefined,
-      category: params.get('category') ?? undefined,
-      vendor: params.get('vendor') ?? undefined,
-      sort,
-      page: Number(params.get('page') ?? '1') || 1,
-      pageSize: Number(params.get('pageSize') ?? '25') || 25,
-    }, queryEmbedding)
+    // Facets are additive UI sugar — fetch them alongside the search rather
+    // than after it, and never let a slow aggregate under ingestion load take
+    // the whole page down.
+    const facetsPromise: Promise<Awaited<ReturnType<typeof getCatalogFacets>> | null> =
+      params.get('facets') === '1' ? getCatalogFacets().catch(() => null) : Promise.resolve(null)
+
+    const [searchResult, facets] = await Promise.all([
+      searchCatalogItems({
+        q,
+        manufacturer: params.get('manufacturer') ?? undefined,
+        category: params.get('category') ?? undefined,
+        vendor: params.get('vendor') ?? undefined,
+        sort,
+        page: Number(params.get('page') ?? '1') || 1,
+        pageSize: Number(params.get('pageSize') ?? '25') || 25,
+      }, queryEmbedding),
+      facetsPromise,
+    ])
 
     // Telemetry on real searches (not default browsing); zero-result
     // queries feed the synonym dictionary.
-    if (q && result.page === 1) {
+    if (q && searchResult.page === 1) {
       logCatalogSearch({
         q,
         manufacturer: params.get('manufacturer'),
         category: params.get('category'),
         vendor: params.get('vendor'),
         sort,
-        resultCount: result.items.length,
-        hasMore: result.hasMore,
+        resultCount: searchResult.items.length,
+        hasMore: searchResult.hasMore,
         tookMs: Date.now() - startedAt,
         role: auth.role,
       })
     }
 
-    if (!canSeePrices) result = stripSearchPrices(result)
-
-    // Facets are additive UI sugar — never let a slow aggregate under
-    // ingestion load take the whole page down.
-    let facets = null
-    if (params.get('facets') === '1') {
-      try {
-        facets = await getCatalogFacets()
-      } catch {
-        facets = null
-      }
-    }
+    const result = canSeePrices ? searchResult : stripSearchPrices(searchResult)
 
     return NextResponse.json({ result, facets, canSeePrices })
   } catch (error) {

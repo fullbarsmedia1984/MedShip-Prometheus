@@ -1,4 +1,6 @@
+import { revalidateTag } from 'next/cache'
 import { inngest } from '../client'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import { logger } from '@/lib/utils/logger'
 import { logSyncEvent, updateSyncSchedule } from '@/lib/utils/logger'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -155,6 +157,20 @@ async function runInventorySync(triggeredBy: 'schedule' | 'manual', fullSync = f
       lastRunDurationMs: Date.now() - startTime,
       recordsProcessed: inventory.length,
     })
+
+    // Bust every DAL cache built on inventory_snapshot so pages pick up the
+    // new stock levels immediately. Best-effort: a revalidation hiccup must
+    // never fail an otherwise successful sync.
+    try {
+      revalidateTag(CACHE_TAGS.inventory, { expire: 0 })
+      revalidateTag(CACHE_TAGS.wallboard, { expire: 0 })
+      revalidateTag(CACHE_TAGS.kits, { expire: 0 })
+      revalidateTag(CACHE_TAGS.pricingReadiness, { expire: 0 })
+    } catch (revalidateError) {
+      logger.log('warn', 'P2_INVENTORY_SYNC', 'Cache revalidation failed (non-fatal)', {
+        error: revalidateError instanceof Error ? revalidateError.message : String(revalidateError),
+      })
+    }
 
     await inngest.send({
       name: 'inventory/low-stock.check',

@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import { useSidebar } from './SidebarContext'
+import { useAuthInfo } from './AuthInfoContext'
 import { useTheme } from 'next-themes'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -21,19 +22,24 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
-  const [account, setAccount] = useState<{
+  const authInfo = useAuthInfo()
+  const [fetchedAccount, setFetchedAccount] = useState<{
     email: string
     role: string | null
   } | null>(null)
 
+  // The dashboard layout provides the account via AuthInfoContext; the client
+  // getUser() round-trip is only a fallback for pages rendered outside it.
   useEffect(() => {
+    if (authInfo) return
+
     const supabase = createClient()
 
     supabase.auth.getUser().then(({ data }) => {
       const user = data.user
       if (!user) return
 
-      setAccount({
+      setFetchedAccount({
         email: user.email ?? 'Signed in',
         role:
           typeof user.app_metadata?.role === 'string'
@@ -41,7 +47,11 @@ export function Header({ title, failedSyncCount = 0 }: HeaderProps) {
             : null,
       })
     })
-  }, [])
+  }, [authInfo])
+
+  const account = authInfo
+    ? { email: authInfo.email ?? 'Signed in', role: authInfo.role }
+    : fetchedAccount
 
   useEffect(() => {
     if (!menuOpen) return

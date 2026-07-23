@@ -1,15 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { SummaryCardPicker } from '@/components/dashboard/SummaryCardPicker'
 import { QuoteStatusBadge } from '@/components/dashboard/QuoteStatusBadge'
 import { EmptyState } from '@/components/dashboard/EmptyState'
 import { ComingSoonBadge, ComingSoonPanel } from '@/components/dashboard/ComingSoon'
-import { RevenueByRepChart } from '@/components/charts/RevenueByRepChart'
-import { PipelineByRepChart } from '@/components/charts/PipelineByRepChart'
-import { NewRecurringBusinessChart } from '@/components/charts/NewRecurringBusinessChart'
-import { NewRecurringBusinessByRepChart } from '@/components/charts/NewRecurringBusinessByRepChart'
+import { ChartSkeleton } from '@/components/charts/ChartSkeleton'
 import { Header } from '@/components/layout/Header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -52,17 +50,76 @@ import { cn } from '@/lib/utils'
 import { fetchJson } from '@/lib/client-api'
 import type { SalesKpis, ProfileCallMetricsResult, SalesRepPerformance, SalesDataHealth, CallActivitySummary, MonthlyBusinessRevenue, MonthlyBusinessRevenueByRep, TerritoryQoQPayload, YoYRevenueComparison } from '@/lib/data'
 import type { SeedMonthlyRepRevenue, SeedPipelineByRep, SeedQuote, SeedProfileCall, SeedWeeklyCallVolume } from '@/lib/seed-data'
-import { WeeklyCallVolumeChart } from '@/components/charts/WeeklyCallVolumeChart'
-import { CallOutcomeChart } from '@/components/charts/CallOutcomeChart'
 import { ProfileCallTable } from '@/components/dashboard/ProfileCallTable'
 import { ProfileCallLeaderboard } from '@/components/dashboard/ProfileCallLeaderboard'
 import { CallActivitySummaryCard } from '@/components/dashboard/CallActivitySummaryCard'
-import { RingDnaRepActivityCharts } from '@/components/charts/RingDnaRepActivityCharts'
 import { RevenueCohortSection } from '@/components/dashboard/RevenueCohortSection'
-import { YoYRevenueCharts } from '@/components/charts/YoYRevenueCharts'
-import { TerritoryQoQCharts } from '@/components/charts/TerritoryQoQCharts'
 import { ReportingMethodologyDialog } from '@/components/dashboard/ReportingMethodologyDialog'
 import type { CohortDashboard } from '@/lib/cohorts'
+
+// Chart components pull in recharts (~100kb+ gzipped). Load them lazily so
+// the page shell paints without the charting bundle; the fixed-height
+// skeletons keep the layout from shifting while each chart mounts.
+const RevenueByRepChart = dynamic(
+  () => import('@/components/charts/RevenueByRepChart').then((m) => m.RevenueByRepChart),
+  { ssr: false, loading: () => <ChartSkeleton height={460} /> }
+)
+const PipelineByRepChart = dynamic(
+  () => import('@/components/charts/PipelineByRepChart').then((m) => m.PipelineByRepChart),
+  { ssr: false, loading: () => <ChartSkeleton height={460} /> }
+)
+const NewRecurringBusinessChart = dynamic(
+  () => import('@/components/charts/NewRecurringBusinessChart').then((m) => m.NewRecurringBusinessChart),
+  { ssr: false, loading: () => <ChartSkeleton height={460} /> }
+)
+const NewRecurringBusinessByRepChart = dynamic(
+  () => import('@/components/charts/NewRecurringBusinessByRepChart').then((m) => m.NewRecurringBusinessByRepChart),
+  { ssr: false, loading: () => <ChartSkeleton height={460} /> }
+)
+const WeeklyCallVolumeChart = dynamic(
+  () => import('@/components/charts/WeeklyCallVolumeChart').then((m) => m.WeeklyCallVolumeChart),
+  { ssr: false, loading: () => <ChartSkeleton height={390} /> }
+)
+const CallOutcomeChart = dynamic(
+  () => import('@/components/charts/CallOutcomeChart').then((m) => m.CallOutcomeChart),
+  { ssr: false, loading: () => <ChartSkeleton height={330} /> }
+)
+const RingDnaRepActivityCharts = dynamic(
+  () => import('@/components/charts/RingDnaRepActivityCharts').then((m) => m.RingDnaRepActivityCharts),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ChartSkeleton height={440} />
+        <ChartSkeleton height={440} />
+      </div>
+    ),
+  }
+)
+const YoYRevenueCharts = dynamic(
+  () => import('@/components/charts/YoYRevenueCharts').then((m) => m.YoYRevenueCharts),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <ChartSkeleton height={420} />
+        <ChartSkeleton height={420} />
+      </div>
+    ),
+  }
+)
+const TerritoryQoQCharts = dynamic(
+  () => import('@/components/charts/TerritoryQoQCharts').then((m) => m.TerritoryQoQCharts),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <ChartSkeleton height={440} />
+        <ChartSkeleton height={440} />
+      </div>
+    ),
+  }
+)
 
 type SortKey =
   | 'revenueMTD'

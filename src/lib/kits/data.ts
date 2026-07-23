@@ -1,4 +1,6 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import {
   getSnapshotFreshCutoff,
   loadPickedByPart,
@@ -129,9 +131,7 @@ function median(values: number[]): number | null {
     : Math.round(((sorted[mid - 1] + sorted[mid]) / 2) * 10) / 10
 }
 
-/** Shipped-kit performance over a trailing window. On-time is only known
- *  for kits whose need-by/transit were entered (kit_orders). */
-export async function getKitKpis(windowDays = 90): Promise<KitKpis> {
+async function computeKitKpis(windowDays: number): Promise<KitKpis> {
   const supabase = createAdminClient()
   const since = new Date(Date.now() - windowDays * 86400000).toISOString()
 
@@ -222,7 +222,20 @@ export async function getKitKpis(windowDays = 90): Promise<KitKpis> {
   }
 }
 
-export async function getKitWorkbench(): Promise<KitWorkbench> {
+const getKitKpisCached = unstable_cache(computeKitKpis, ['kit-kpis'], {
+  revalidate: CACHE_TTL.kits,
+  tags: [CACHE_TAGS.kits],
+})
+
+/** Shipped-kit performance over a trailing window. On-time is only known
+ *  for kits whose need-by/transit were entered (kit_orders). Cached per
+ *  window (the window is part of the cache key); the default is normalized
+ *  here so `getKitKpis()` and `getKitKpis(90)` share one entry. */
+export async function getKitKpis(windowDays = 90): Promise<KitKpis> {
+  return getKitKpisCached(windowDays)
+}
+
+async function computeKitWorkbench(): Promise<KitWorkbench> {
   const supabase = createAdminClient()
   const now = new Date()
   const today = now.toISOString().slice(0, 10)
@@ -540,3 +553,15 @@ export async function getKitWorkbench(): Promise<KitWorkbench> {
     },
   }
 }
+
+// The workbench is a long serial pipeline (SO headers, overlay, shipments,
+// batched line items, stock + PO facts) — cache it behind the kits tag.
+// P7/P12/P2 bust the tag on completion; the TTL is the self-heal fallback.
+export const getKitWorkbench = unstable_cache(
+  computeKitWorkbench,
+  ['kit-workbench'],
+  {
+    revalidate: CACHE_TTL.kits,
+    tags: [CACHE_TAGS.kits],
+  }
+)

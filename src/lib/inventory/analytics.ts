@@ -1,4 +1,6 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
+import { CACHE_TAGS, CACHE_TTL } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chicagoTodayIso } from '@/lib/business-days'
 
@@ -170,7 +172,7 @@ export async function getInboundBucketParts(bucket: InboundBucketKey): Promise<S
   return parts
 }
 
-export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
+async function computeInventoryAnalytics(): Promise<InventoryAnalytics> {
   const supabase = createAdminClient()
   const today = chicagoTodayIso()
 
@@ -548,3 +550,17 @@ export async function getInventoryAnalytics(): Promise<InventoryAnalytics> {
     },
   }
 }
+
+// Recomputing this means full page-throughs of inventory_snapshot,
+// reorder_rules, fb_open_po_lines, 180 days of fb_recent_shipments, and
+// batched fb_sales_order_items reads — far too heavy per page mount. The
+// P2/P7/P11/P12 Inngest crons bust these tags on completion; the TTL is a
+// fallback matched to the fastest feeding cadence (P7/P12, 15 min).
+export const getInventoryAnalytics = unstable_cache(
+  computeInventoryAnalytics,
+  ['inventory-analytics'],
+  {
+    revalidate: CACHE_TTL.salesOrders,
+    tags: [CACHE_TAGS.inventory, CACHE_TAGS.orders],
+  }
+)

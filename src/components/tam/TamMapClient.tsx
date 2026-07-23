@@ -182,7 +182,11 @@ export function TamMapClient() {
   }, [loadData])
 
   useEffect(() => {
-    fetchJson<StateFeatureCollection>('/tam/us-states.geojson')
+    // Static asset — let the browser HTTP cache serve repeat mounts instead of
+    // re-downloading the geojson every visit (fetchJson defaults to no-store).
+    fetchJson<StateFeatureCollection>('/tam/us-states.geojson', {
+      cache: 'force-cache',
+    })
       .then(setStateGeojson)
       .catch(() => setStateGeojson(null))
   }, [])

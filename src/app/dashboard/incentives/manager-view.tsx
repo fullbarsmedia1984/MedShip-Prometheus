@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { RefreshCw, Settings2 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { PayoutBlockedCard } from '@/components/incentive/PayoutBlockedCard'
 import { IncentiveLeaderboard } from '@/components/incentive/IncentiveLeaderboard'
-import { GateFeasibilityChart } from '@/components/charts/GateFeasibilityChart'
+import { ChartSkeleton } from '@/components/charts/ChartSkeleton'
 import { WinBackTracker } from '@/components/incentive/WinBackTracker'
 import { ExceptionsPanel } from '@/components/incentive/ExceptionsPanel'
 import { NewAccountFeed } from '@/components/incentive/NewAccountFeed'
@@ -26,6 +27,14 @@ import type {
   OrderIncentiveDetailRow,
   RepIncentiveMonthlyRow,
 } from '@/lib/incentive/types'
+
+// GateFeasibilityChart pulls in recharts — load it lazily so the incentives
+// shell paints without the charting bundle. The fixed-height skeleton keeps
+// the layout from shifting while it mounts.
+const GateFeasibilityChart = dynamic(
+  () => import('@/components/charts/GateFeasibilityChart').then((m) => m.GateFeasibilityChart),
+  { ssr: false, loading: () => <ChartSkeleton height={390} /> }
+)
 
 type IncentiveDashboardResponse = {
   month: string

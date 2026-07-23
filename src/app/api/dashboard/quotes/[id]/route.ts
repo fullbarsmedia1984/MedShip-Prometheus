@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SALES_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
-import { getRepAliases } from '@/lib/reps'
-import { getQuotes } from '@/lib/data'
+import { resolveRepScope } from '@/lib/sales-scope'
+import { getScopedQuoteById } from '@/lib/quotes-payload'
 
 type QuoteDetailContext = {
   params: Promise<{ id: string }>
@@ -13,20 +13,11 @@ export async function GET(_request: NextRequest, context: QuoteDetailContext) {
     if (!auth.authorized) return auth.response
 
     const { id } = await context.params
-    const decodedId = decodeURIComponent(id)
-    // Reps may only open their own quotes (404, not 403, to avoid confirming
-    // that a given quote number exists).
-    const repScope =
-      auth.role === 'sales_rep' && auth.user
-        ? await getRepAliases(auth.user.id)
-        : undefined
-    const result = await getQuotes({
-      search: decodedId,
-      scope: 'all',
-      salespersonIn: repScope,
-      pageSize: 1000,
-    })
-    const quote = result.data.find((item) => item.id === decodedId)
+    // Reps may only open their own quotes — getScopedQuoteById resolves
+    // out-of-scope rows to null so this surfaces 404, not 403 (avoids
+    // confirming that a given quote number exists).
+    const repScope = await resolveRepScope(auth.role, auth.user)
+    const quote = await getScopedQuoteById(id, repScope)
 
     if (!quote) {
       return NextResponse.json({ error: 'Quote not found' }, { status: 404 })

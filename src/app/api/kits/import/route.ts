@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { STAFF_API_AUTH_OPTIONS, requireApiAuth } from '@/lib/auth'
+import { CACHE_TAGS } from '@/lib/cache-tags'
 import {
   buildKitImportPreview,
   extractKitImportOrderNumbers,
@@ -142,6 +144,10 @@ export async function POST(request: Request) {
         `Kit import verification failed: expected ${preview.changes.length} rows, received ${Number(appliedCount)}.`
       )
     }
+
+    // Bulk overlay writes feed the cached workbench/wallboard DALs.
+    revalidateTag(CACHE_TAGS.kits, { expire: 0 })
+    revalidateTag(CACHE_TAGS.wallboard, { expire: 0 })
 
     return NextResponse.json({
       mode,

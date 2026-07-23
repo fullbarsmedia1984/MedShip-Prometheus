@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useCallback, useEffect, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft, ChevronDown, ChevronRight, Star } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
@@ -26,6 +27,16 @@ function money(value: number | null, currency: string) {
     currency,
     minimumFractionDigits: 2,
   })
+}
+
+// Only Supabase Storage mirrors are covered by next.config remotePatterns;
+// hotlinked source images fall back to a plain <img>.
+function isSupabaseHosted(url: string) {
+  try {
+    return new URL(url).hostname.endsWith('.supabase.co')
+  } catch {
+    return false
+  }
 }
 
 function dims(uom: {
@@ -59,6 +70,9 @@ export default function CatalogItemDetailPage({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showRaw, setShowRaw] = useState(false)
+  const [rawPayload, setRawPayload] = useState<CatalogItemDetail['rawPayload'] | null>(null)
+  const [rawLoading, setRawLoading] = useState(false)
+  const [rawError, setRawError] = useState<string | null>(null)
 
   const fetchDetail = useCallback(async () => {
     setLoading(true)
@@ -78,7 +92,30 @@ export default function CatalogItemDetailPage({
 
   useEffect(() => {
     fetchDetail()
+    setShowRaw(false)
+    setRawPayload(null)
+    setRawError(null)
   }, [fetchDetail])
+
+  // The raw Hercules payload is large, so the detail endpoint no longer
+  // inlines it — fetch it once, the first time the toggle is opened.
+  const toggleRaw = useCallback(async () => {
+    const next = !showRaw
+    setShowRaw(next)
+    if (!next || rawPayload !== null || rawLoading) return
+    setRawLoading(true)
+    setRawError(null)
+    try {
+      const data = await fetchJson<{ rawPayload: CatalogItemDetail['rawPayload'] }>(
+        `/api/hercules/catalog/${encodeURIComponent(id)}?raw=1`
+      )
+      setRawPayload(data.rawPayload)
+    } catch (fetchError) {
+      setRawError(fetchError instanceof Error ? fetchError.message : 'Unknown error')
+    } finally {
+      setRawLoading(false)
+    }
+  }, [id, showRaw, rawPayload, rawLoading])
 
   return (
     <div className="flex h-full flex-col">
@@ -190,12 +227,26 @@ export default function CatalogItemDetailPage({
                   <CardContent className="flex items-center justify-center p-4">
                     {/* Prefer our mirrored copy (Supabase Storage);
                         hotlink the source only until P16 catches up. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={detail.storedImages[0]?.url ?? detail.imageUrls[0]}
-                      alt={detail.brand ?? detail.description ?? 'Catalog item'}
-                      className="max-h-56 rounded-md object-contain"
-                    />
+                    {(() => {
+                      const heroUrl = detail.storedImages[0]?.url ?? detail.imageUrls[0]
+                      const heroAlt = detail.brand ?? detail.description ?? 'Catalog item'
+                      return isSupabaseHosted(heroUrl) ? (
+                        <Image
+                          src={heroUrl}
+                          alt={heroAlt}
+                          width={288}
+                          height={224}
+                          className="h-auto max-h-56 w-auto rounded-md object-contain"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={heroUrl}
+                          alt={heroAlt}
+                          className="max-h-56 rounded-md object-contain"
+                        />
+                      )
+                    })()}
                   </CardContent>
                 </Card>
               )}
@@ -396,7 +447,7 @@ export default function CatalogItemDetailPage({
             <Card>
               <CardHeader className="pb-2">
                 <button
-                  onClick={() => setShowRaw((prev) => !prev)}
+                  onClick={toggleRaw}
                   className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
                 >
                   {showRaw ? (
@@ -409,9 +460,19 @@ export default function CatalogItemDetailPage({
               </CardHeader>
               {showRaw && (
                 <CardContent>
-                  <pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs">
-                    {JSON.stringify(detail.rawPayload, null, 2)}
-                  </pre>
+                  {rawLoading ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      Loading payload…
+                    </p>
+                  ) : rawError ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      {rawError}
+                    </p>
+                  ) : (
+                    <pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs">
+                      {JSON.stringify(rawPayload ?? {}, null, 2)}
+                    </pre>
+                  )}
                 </CardContent>
               )}
             </Card>

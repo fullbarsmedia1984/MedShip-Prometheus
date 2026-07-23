@@ -80,12 +80,11 @@ export async function GET() {
     const auth = await requireApiAuth(STAFF_API_AUTH_OPTIONS)
     if (!auth.authorized) return auth.response
 
-    const supabase = createAdminClient()
     const [integrations, connections, relationshipHealth, salesOrderCoverage] = await Promise.all([
       getIntegrationStatus(),
       getConnectionConfigs(),
       getRelationshipHealth(),
-      getSalesOrderCoverage(supabase).catch((error) => {
+      getSalesOrderCoverage().catch((error) => {
         if (isMissingRelationError(error)) return null as FishbowlSalesOrderCoverage
         throw error
       }),
