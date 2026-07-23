@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fetchJson } from '@/lib/client-api'
+import { recommendSheet } from '@/lib/pricing/excel-ingestion/native-engine.mjs'
 
 const CANONICAL_FIELD_OPTIONS = [
   { field: 'price', label: 'Price (cost)', requiredAlways: true },
@@ -114,7 +115,7 @@ export default function WorkbookUploadDetailPage({ params }: PageProps) {
       if (data.upload.profile_id) setSelectedProfileId((current) => current || data.upload.profile_id!)
       const sheets = data.upload.discovery_json?.sheets ?? []
       if (sheets.length > 0) {
-        setSelectedSheet((current) => current || sheets[0].name)
+        setSelectedSheet((current) => current || recommendSheet(sheets) || sheets[0].name)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load upload')
@@ -217,6 +218,7 @@ export default function WorkbookUploadDetailPage({ params }: PageProps) {
   }, [id, selectedProfileId, load])
 
   const sheets = upload?.discovery_json?.sheets ?? []
+  const recommendedSheet = useMemo(() => recommendSheet(sheets), [sheets])
 
   return (
     <>
@@ -308,6 +310,20 @@ export default function WorkbookUploadDetailPage({ params }: PageProps) {
                     </div>
                   </div>
                 </div>
+
+                {sheet && sheet.suggested_mappings.length === 0 && (
+                  <div className="flex flex-wrap items-center gap-3 rounded-md border border-medship-warning/25 bg-medship-warning/5 p-3">
+                    <p className="text-sm text-muted-foreground">
+                      No pricing columns were detected on the sheet &ldquo;{sheet.name}&rdquo; — it may hold terms or
+                      notes rather than the price table. Pick a different sheet from the dropdown above.
+                    </p>
+                    {recommendedSheet && recommendedSheet !== sheet.name && (
+                      <Button variant="outline" size="sm" onClick={() => setSelectedSheet(recommendedSheet)}>
+                        Switch to &ldquo;{recommendedSheet}&rdquo;
+                      </Button>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {CANONICAL_FIELD_OPTIONS.map(({ field, label, requiredAlways }) => (

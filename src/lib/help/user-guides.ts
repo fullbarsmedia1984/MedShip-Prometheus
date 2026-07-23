@@ -94,7 +94,7 @@ const UPLOAD_DETAIL: PageGuide = {
     {
       heading: '1 — Confirm the column mapping',
       steps: [
-        'Pick the sheet that holds the pricing table (usually pre-selected).',
+        'Pick the sheet that holds the pricing table. Zeus pre-selects the sheet that looks most like a price list — if you see "No pricing columns were detected", the selected sheet is probably terms or notes; switch sheets and the suggestions refill automatically.',
         'Check the header row number matches the row with column titles.',
         'For each field, confirm the suggested column or pick the right one. Price is required; map every identifier column the file has (item #, part #, model, UPC).',
         'If the file has no UOM column, type a default (for example EA) in the Default price UOM box.',

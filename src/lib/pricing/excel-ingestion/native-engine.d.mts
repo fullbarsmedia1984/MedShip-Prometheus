@@ -33,6 +33,10 @@ export function suggestColumnMappings(
   headers: Array<{ column_letter: string; header: string }>
 ): MappingSuggestion[]
 
+export function recommendSheet(
+  sheets: Array<{ name: string; row_count: number; suggested_mappings?: Array<{ canonical_field: string }> }>
+): string | null
+
 export function parsePrice(text: unknown): { value: number | null; error: string | null }
 
 export function normalizeUom(
