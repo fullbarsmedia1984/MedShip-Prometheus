@@ -20,6 +20,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-23-expiring-soon-and-search',
+    date: '2026-07-23',
+    title: 'Contract search and expiration warnings',
+    summary:
+      'The Contract Price Manager now has a search box (supplier or contract number), an "Expiring / Expired" counter, and badges that flag contracts within 60 days of expiration. Cost lines past their window show a "Lapsed" badge.',
+    details: [
+      'Expires in Nd = renewal conversation should start now.',
+      'Expired / Lapsed = the negotiated window has passed; Zeus no longer answers with that cost.',
+      'Cost-line tables are searchable by identifier, description, or manufacturer.',
+    ],
+    areas: [{ label: 'Contract Price Manager', href: '/dashboard/pricing/contracts' }],
+  },
+  {
     id: '2026-07-23-contract-price-manager',
     date: '2026-07-23',
     title: 'Manage contract pricing directly in a table',
